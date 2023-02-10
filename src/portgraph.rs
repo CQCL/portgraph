@@ -7,7 +7,7 @@ use std::{
 use crate::graph::Direction;
 use thiserror::Error;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct PortGraph {
     node_meta: Vec<NodeMeta>,
     port_link: Vec<Option<PortIndex>>,
@@ -511,6 +511,80 @@ impl NodeMeta {
     }
 }
 
+impl std::fmt::Debug for PortGraph {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PortGraph")
+            .field("nodes", &debug::NodesDebug(self))
+            .field("ports", &debug::PortsDebug(self))
+            .finish()
+    }
+}
+
+mod debug {
+    use super::*;
+    pub struct NodesDebug<'a>(pub &'a PortGraph);
+
+    impl<'a> std::fmt::Debug for NodesDebug<'a> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.debug_map()
+                .entries(
+                    self.0
+                        .nodes_iter()
+                        .map(|node| (node, NodeDebug(self.0, node))),
+                )
+                .finish()
+        }
+    }
+
+    pub struct NodeDebug<'a>(pub &'a PortGraph, pub NodeIndex);
+
+    impl<'a> std::fmt::Debug for NodeDebug<'a> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let inputs: Vec<_> = self.0.inputs(self.1).collect();
+            let outputs: Vec<_> = self.0.outputs(self.1).collect();
+
+            f.debug_struct("Node")
+                .field("inputs", &inputs)
+                .field("outputs", &outputs)
+                .finish()
+        }
+    }
+
+    pub struct PortsDebug<'a>(pub &'a PortGraph);
+
+    impl<'a> std::fmt::Debug for PortsDebug<'a> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.debug_map()
+                .entries(
+                    self.0
+                        .ports_iter()
+                        .map(|port| (port, PortDebug(self.0, port))),
+                )
+                .finish()
+        }
+    }
+
+    pub struct PortDebug<'a>(pub &'a PortGraph, pub PortIndex);
+
+    impl<'a> std::fmt::Debug for PortDebug<'a> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let direction = self.0.port_direction(self.1).unwrap();
+            let link = self.0.port_link(self.1);
+            let node = self.0.port_node(self.1).unwrap();
+
+            let mut fmt_struct = f.debug_struct("Port");
+            fmt_struct.field("node", &node);
+            fmt_struct.field("direction", &direction);
+
+            if let Some(link) = link {
+                fmt_struct.field("link", &link);
+            }
+
+            fmt_struct.finish()
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 struct PortMeta(u32);
 
@@ -526,7 +600,8 @@ impl PortMeta {
     #[inline]
     pub fn new_node(node: NodeIndex, direction: Direction) -> Self {
         let direction = (direction as u32) << Self::DIRECTION_BIT;
-        Self(node.index() as u32 | direction)
+        let index = node.index() as u32 + 1;
+        Self(index | direction)
     }
 
     #[inline]
@@ -554,7 +629,7 @@ impl PortMeta {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeIndex(NonZeroU32);
 
 impl NodeIndex {
@@ -570,7 +645,14 @@ impl NodeIndex {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+impl std::fmt::Debug for NodeIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // avoid unncessary newlines in alternate mode
+        write!(f, "NodeIndex({})", self.index())
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PortIndex(NonZeroU32);
 
 impl PortIndex {
@@ -583,6 +665,13 @@ impl PortIndex {
     #[inline]
     pub fn index(self) -> usize {
         u32::from(self.0) as usize - 1
+    }
+}
+
+impl std::fmt::Debug for PortIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // avoid unncessary newlines in alternate mode
+        write!(f, "PortIndex({})", self.index())
     }
 }
 

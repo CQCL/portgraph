@@ -7,6 +7,9 @@ use std::iter::FusedIterator;
 use std::{iter, slice};
 use thiserror::Error;
 
+pub use crate::Direction;
+pub use crate::DIRECTIONS;
+
 /// The default integer type for graph indices.
 /// `u32` is the default to reduce the size of the graph's data and improve
 /// performance in the common case.
@@ -158,35 +161,6 @@ impl<E> Edge<E> {
         }
     }
 }
-
-#[cfg_attr(feature = "pyo3", pyclass)]
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Eq, Ord, Hash)]
-pub enum Direction {
-    Incoming = 0,
-    Outgoing = 1,
-}
-
-impl Default for Direction {
-    fn default() -> Self {
-        Direction::Incoming
-    }
-}
-
-impl Direction {
-    pub fn index(self) -> usize {
-        self as usize
-    }
-
-    pub fn reverse(self) -> Direction {
-        match self {
-            Direction::Incoming => Direction::Outgoing,
-            Direction::Outgoing => Direction::Incoming,
-        }
-    }
-}
-
-/// Incoming and outgoing.
-pub const DIRECTIONS: [Direction; 2] = [Direction::Incoming, Direction::Outgoing];
 
 type NodeMap = BTreeMap<NodeIndex, NodeIndex>;
 type EdgeMap = BTreeMap<EdgeIndex, EdgeIndex>;

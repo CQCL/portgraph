@@ -8,6 +8,35 @@ pub mod toposort;
 #[cfg(feature = "pyo3")]
 pub mod py_graph;
 
+#[cfg_attr(feature = "pyo3", pyclass)]
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Eq, Ord, Hash)]
+pub enum Direction {
+    Incoming = 0,
+    Outgoing = 1,
+}
+
+impl Default for Direction {
+    fn default() -> Self {
+        Direction::Incoming
+    }
+}
+
+impl Direction {
+    pub fn index(self) -> usize {
+        self as usize
+    }
+
+    pub fn reverse(self) -> Direction {
+        match self {
+            Direction::Incoming => Direction::Outgoing,
+            Direction::Outgoing => Direction::Incoming,
+        }
+    }
+}
+
+/// Incoming and outgoing.
+pub const DIRECTIONS: [Direction; 2] = [Direction::Incoming, Direction::Outgoing];
+
 #[cfg(test)]
 mod tests {
     use std::collections::{BTreeMap, HashSet};

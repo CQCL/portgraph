@@ -43,6 +43,18 @@ impl PortGraph {
         }
     }
 
+    /// Adds a node to the portgraph with a given number of input and output ports.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use portgraph::portgraph::PortGraph;
+    /// # use portgraph::graph::Direction;
+    /// let mut graph = PortGraph::new();
+    /// let node = graph.add_node(4, 3);
+    /// assert_eq!(graph.node_ports(node, Direction::Incoming).count(), 4);
+    /// assert_eq!(graph.node_ports(node, Direction::Outgoing).count(), 3);
+    /// ```
     pub fn add_node(&mut self, incoming: usize, outgoing: usize) -> NodeIndex {
         let node = self.alloc_node();
 

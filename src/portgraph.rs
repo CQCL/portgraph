@@ -635,8 +635,8 @@ pub struct NodeIndex(NonZeroU32);
 impl NodeIndex {
     #[inline]
     pub fn new(index: usize) -> Self {
-        //assert!(index < u32::MAX as usize);
-        Self(NonZeroU32::new(index as u32 + 1).unwrap())
+        assert!(index < u32::MAX as usize);
+        Self(unsafe { NonZeroU32::new_unchecked(1 + index as u32) })
     }
 
     #[inline]
@@ -659,7 +659,7 @@ impl PortIndex {
     #[inline]
     pub fn new(index: usize) -> Self {
         assert!(index < u32::MAX as usize);
-        Self(NonZeroU32::new(index as u32 + 1).unwrap())
+        Self(unsafe { NonZeroU32::new_unchecked(1 + index as u32) })
     }
 
     #[inline]
@@ -732,22 +732,23 @@ pub struct Nodes<'a> {
     len: usize,
 }
 
+pub fn experiment(index: usize, mut nodes: &mut Nodes<'_>) -> Option<NodeIndex> {
+    Some(NodeIndex::new(index))
+}
+
 impl<'a> Iterator for Nodes<'a> {
     type Item = NodeIndex;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        if self.len == 0 {
-            return None;
-        }
-
-        for (index, node_meta) in &mut self.iter {
+        self.iter.find_map(|(index, node_meta)| {
             if !node_meta.is_free() {
                 self.len -= 1;
-                return Some(NodeIndex::new(index));
+                Some(NodeIndex::new(index))
+            } else {
+                None
             }
-        }
-
-        None
+        })
     }
 
     fn count(self) -> usize {

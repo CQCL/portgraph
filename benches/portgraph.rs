@@ -10,15 +10,13 @@ fn make_line_graph(size: usize) -> PortGraph {
 
     for _ in 1..size {
         let node = graph.add_node(2, 2);
-        let mut prev_ports = graph.node_ports(prev_node, Direction::Outgoing);
-        let port_from0 = prev_ports.next().unwrap();
-        let port_from1 = prev_ports.next().unwrap();
 
-        let mut node_ports = graph.node_ports(node, Direction::Incoming);
-        let port_to0 = node_ports.next().unwrap();
-        let port_to1 = node_ports.next().unwrap();
-        graph.link(port_from0, port_to0).unwrap();
-        graph.link(port_from1, port_to1).unwrap();
+        for i in 0..1 {
+            let port_from = graph.outputs(prev_node).nth(i).unwrap();
+            let port_to = graph.inputs(node).nth(i).unwrap();
+            graph.link_ports(port_from, port_to).unwrap();
+        }
+
         prev_node = node;
     }
 

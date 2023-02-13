@@ -430,7 +430,124 @@ impl PortGraph {
         self.port_count = 0;
     }
 
-    // TODO: Reserve functions
+    /// Returns the capacity of the underlying buffer for nodes.
+    #[inline]
+    pub fn node_capacity(&self) -> usize {
+        self.node_meta.capacity()
+    }
+
+    /// Returns the capacity of the underlying buffer for ports.
+    #[inline]
+    pub fn port_capacity(&self) -> usize {
+        self.port_meta.capacity()
+    }
+
+    /// Reserves enough capacity to insert at least the given number of additional nodes and ports.
+    ///
+    /// This method does not take into account the length of the free list and might overallocate speculatively.
+    pub fn reserve(&mut self, nodes: usize, ports: usize) {
+        self.node_meta.reserve(nodes);
+        self.port_meta.reserve(ports);
+        self.port_link.reserve(ports);
+    }
+
+    /// Compacts the storage of nodes in the portgraph so that all nodes are stored consecutively.
+    ///
+    /// Every time a node is moved, the `rekey` function will be called with its old and new index.
+    pub fn compact_nodes<F>(&mut self, mut rekey: F)
+    where
+        F: FnMut(NodeIndex, NodeIndex),
+    {
+        let mut old_index = 0;
+        let mut new_index = 0;
+        self.node_meta.retain(|node_meta| {
+            if node_meta.is_free() {
+                old_index += 1;
+                return false;
+            }
+
+            let old_node = NodeIndex::new(old_index);
+            let new_node = NodeIndex::new(new_index);
+
+            if let Some(port_list) = node_meta.port_list() {
+                let incoming = node_meta.incoming() as usize;
+                let outgoing = node_meta.outgoing() as usize;
+
+                for port in port_list.index()..port_list.index() + incoming {
+                    self.port_meta[port] = PortMeta::new_node(new_node, Direction::Incoming);
+                }
+
+                for port in port_list.index() + incoming..port_list.index() + outgoing {
+                    self.port_meta[port] = PortMeta::new_node(new_node, Direction::Outgoing);
+                }
+            }
+
+            rekey(old_node, new_node);
+
+            old_index += 1;
+            new_index += 1;
+            true
+        });
+
+        self.node_free = None;
+    }
+
+    /// Compacts the storage of ports in the portgraph so that all ports are stored consecutively.
+    ///
+    /// Every time a port is moved, the `rekey` function will be called with is old and new index.
+    pub fn compact_ports<F>(&mut self, mut rekey: F)
+    where
+        F: FnMut(PortIndex, PortIndex),
+    {
+        let mut old_index = 0;
+
+        self.port_link.retain(|_| {
+            let retain = !self.port_meta[old_index].is_free();
+            old_index += 1;
+            retain
+        });
+
+        let mut new_index = 0;
+        let mut old_index = 0;
+
+        self.port_meta.retain(|port_meta| {
+            if port_meta.is_free() {
+                old_index += 1;
+                return false;
+            }
+
+            let old_port = PortIndex::new(old_index);
+            let new_port = PortIndex::new(new_index);
+
+            // If we are moving the first port in a node's port list, we have to update the node.
+            let node_meta = &mut self.node_meta[port_meta.node().index()];
+
+            if node_meta.port_list() == Some(old_port) {
+                *node_meta =
+                    NodeMeta::new_node(Some(new_port), node_meta.incoming(), node_meta.outgoing());
+            }
+
+            rekey(old_port, new_port);
+
+            old_index += 1;
+            new_index += 1;
+            true
+        });
+
+        self.port_free.clear();
+    }
+
+    /// Shrinks the underlying buffers to the fit the data.
+    ///
+    /// This does not move nodes or ports, which might prevent freeing up more capacity.
+    /// To shrink the buffers as much as possible, call [`PortGraph::compact_nodes`] and
+    /// [`PortGraph::compact_ports`] first.
+    pub fn shrink_to_fit(&mut self) {
+        self.node_meta.shrink_to_fit();
+        self.port_link.shrink_to_fit();
+        self.port_meta.shrink_to_fit();
+        self.port_free.shrink_to_fit();
+    }
 
     #[inline]
     fn node_meta_valid(&self, node: NodeIndex) -> Option<NodeMeta> {

@@ -1,6 +1,9 @@
+use std::num::NonZeroU32;
+
 pub mod dot;
 #[allow(clippy::module_inception)]
 pub mod graph;
+pub mod hierarchy;
 pub mod portgraph;
 pub mod substitute;
 pub mod toposort;
@@ -36,6 +39,52 @@ impl Direction {
 
 /// Incoming and outgoing.
 pub const DIRECTIONS: [Direction; 2] = [Direction::Incoming, Direction::Outgoing];
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct NodeIndex(NonZeroU32);
+
+impl NodeIndex {
+    #[inline]
+    pub fn new(index: usize) -> Self {
+        assert!(index < u32::MAX as usize);
+        Self(unsafe { NonZeroU32::new_unchecked(1 + index as u32) })
+    }
+
+    #[inline]
+    pub fn index(self) -> usize {
+        u32::from(self.0) as usize - 1
+    }
+}
+
+impl std::fmt::Debug for NodeIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // avoid unncessary newlines in alternate mode
+        write!(f, "NodeIndex({})", self.index())
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct PortIndex(NonZeroU32);
+
+impl PortIndex {
+    #[inline]
+    pub fn new(index: usize) -> Self {
+        assert!(index < u32::MAX as usize);
+        Self(unsafe { NonZeroU32::new_unchecked(1 + index as u32) })
+    }
+
+    #[inline]
+    pub fn index(self) -> usize {
+        u32::from(self.0) as usize - 1
+    }
+}
+
+impl std::fmt::Debug for PortIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // avoid unncessary newlines in alternate mode
+        write!(f, "PortIndex({})", self.index())
+    }
+}
 
 #[cfg(test)]
 mod tests {

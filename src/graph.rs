@@ -964,10 +964,6 @@ impl<'a, N, E> Iterator for NodeEdges<'a, N, E> {
 
 impl<'a, N, E> FusedIterator for NodeEdges<'a, N, E> {}
 
-pub fn experiment(mut nodes: &mut NodeIndices<'_, ()>) -> Option<NodeIndex> {
-    nodes.next()
-}
-
 /// Iterator created by [Graph::node_indices].
 #[derive(Debug, Clone)]
 pub struct NodeIndices<'a, N: 'a> {

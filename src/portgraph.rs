@@ -4,7 +4,7 @@ use std::{
     num::NonZeroU32,
 };
 
-use crate::graph::Direction;
+use crate::{graph::Direction, NodeIndex, PortIndex};
 use thiserror::Error;
 
 #[derive(Clone)]
@@ -190,7 +190,7 @@ impl PortGraph {
 
     #[inline]
     fn free_ports(&mut self, ports: PortIndex, size: usize) {
-        if size - 1 >= self.port_free.len() {
+        if size > self.port_free.len() {
             self.port_free.resize(size, None);
         }
 
@@ -223,7 +223,6 @@ impl PortGraph {
     ///  - When `port_from` is not an output port.
     ///  - When `port_to` is not an input port.
     ///  - When `port_from` or `port_to` is already linked.
-    #[must_use]
     pub fn link_ports(
         &mut self,
         port_from: PortIndex,
@@ -629,52 +628,6 @@ impl PortMeta {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct NodeIndex(NonZeroU32);
-
-impl NodeIndex {
-    #[inline]
-    pub fn new(index: usize) -> Self {
-        assert!(index < u32::MAX as usize);
-        Self(unsafe { NonZeroU32::new_unchecked(1 + index as u32) })
-    }
-
-    #[inline]
-    pub fn index(self) -> usize {
-        u32::from(self.0) as usize - 1
-    }
-}
-
-impl std::fmt::Debug for NodeIndex {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // avoid unncessary newlines in alternate mode
-        write!(f, "NodeIndex({})", self.index())
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct PortIndex(NonZeroU32);
-
-impl PortIndex {
-    #[inline]
-    pub fn new(index: usize) -> Self {
-        assert!(index < u32::MAX as usize);
-        Self(unsafe { NonZeroU32::new_unchecked(1 + index as u32) })
-    }
-
-    #[inline]
-    pub fn index(self) -> usize {
-        u32::from(self.0) as usize - 1
-    }
-}
-
-impl std::fmt::Debug for PortIndex {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // avoid unncessary newlines in alternate mode
-        write!(f, "PortIndex({})", self.index())
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct NodePorts {
     index: NonZeroU32,
@@ -730,10 +683,6 @@ impl Default for NodePorts {
 pub struct Nodes<'a> {
     iter: std::iter::Enumerate<std::slice::Iter<'a, NodeMeta>>,
     len: usize,
-}
-
-pub fn experiment(index: usize, mut nodes: &mut Nodes<'_>) -> Option<NodeIndex> {
-    Some(NodeIndex::new(index))
 }
 
 impl<'a> Iterator for Nodes<'a> {

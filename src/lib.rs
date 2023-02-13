@@ -4,7 +4,7 @@ use std::num::NonZeroU32;
 #[allow(clippy::module_inception)]
 pub mod graph;
 pub mod hierarchy;
-//pub mod substitute;
+pub mod substitute;
 pub mod toposort;
 pub mod unweighted;
 pub mod weights;

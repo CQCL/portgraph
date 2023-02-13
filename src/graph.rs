@@ -114,6 +114,19 @@ where
         todo!()
     }
 
+    /// Remove a node from the graph and return its weight.
+    fn remove_node(&mut self, node: NodeIndex) -> Option<N> {
+        self.unweighted_mut()
+            .remove_node(node);
+        self.weights_mut().try_get_node_mut(node).map(|w| std::mem::replace(w, N::default()))
+    }
+
+    /// Disconnect a port in the graph.
+    #[inline(always)]
+    fn disconnect_port(&mut self, _port: PortIndex) {
+        todo!()
+    }
+
     // TODO: Missing methods
 }
 

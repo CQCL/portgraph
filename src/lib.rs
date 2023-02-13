@@ -1,15 +1,20 @@
 use std::num::NonZeroU32;
 
-pub mod dot;
+//pub mod dot;
 #[allow(clippy::module_inception)]
 pub mod graph;
 pub mod hierarchy;
-pub mod portgraph;
-pub mod substitute;
+//pub mod substitute;
 pub mod toposort;
+pub mod unweighted;
+pub mod weights;
 
 #[cfg(feature = "pyo3")]
 pub mod py_graph;
+
+pub use crate::graph::Graph;
+pub use crate::graph::PortGraph;
+pub use crate::unweighted::UnweightedGraph;
 
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Eq, Ord, Hash)]
@@ -19,16 +24,19 @@ pub enum Direction {
 }
 
 impl Default for Direction {
+    #[inline(always)]
     fn default() -> Self {
         Direction::Incoming
     }
 }
 
 impl Direction {
+    #[inline(always)]
     pub fn index(self) -> usize {
         self as usize
     }
 
+    #[inline(always)]
     pub fn reverse(self) -> Direction {
         match self {
             Direction::Incoming => Direction::Outgoing,
@@ -86,14 +94,13 @@ impl std::fmt::Debug for PortIndex {
     }
 }
 
+pub type EdgeIndex = (PortIndex, PortIndex);
+
 #[cfg(test)]
 mod tests {
     use std::collections::{BTreeMap, HashSet};
 
-    use crate::{
-        dot::dot_string,
-        graph::{EdgeIndex, NodeIndex},
-    };
+    use crate::{dot::dot_string, EdgeIndex, NodeIndex};
 
     use super::graph::Graph;
 

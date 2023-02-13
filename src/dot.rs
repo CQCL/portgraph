@@ -1,20 +1,20 @@
 use std::fmt::Display;
 
-use super::graph::{Graph, DIRECTIONS};
+use super::graph::{PortGraph, DIRECTIONS};
 
-pub fn dot_string<N: Display, E: Display>(graph: &Graph<N, E>) -> String {
+pub fn dot_string<N: Display, E: Display>(graph: &PortGraph<N, E>) -> String {
     let mut s = String::new();
 
     s.push_str("digraph {\n");
 
-    for n in graph.node_indices() {
+    for n in graph.nodes_iter() {
         let node = graph.node_weight(n).expect("missing node");
         s.push_str(&format!("{} [label=\"{:}\"]\n", n.index(), node)[..]);
     }
 
     let mut dangle_node_index = 0;
-    for e in graph.edge_indices() {
-        add_edge_str(graph, e, &mut s, &mut dangle_node_index);
+    for p in graph.ports_iter() {
+        add_edge_str(graph, p, &mut s, &mut dangle_node_index);
     }
 
     s.push_str("}\n");
@@ -22,7 +22,7 @@ pub fn dot_string<N: Display, E: Display>(graph: &Graph<N, E>) -> String {
 }
 
 fn add_edge_str<N: Display, E: Display>(
-    graph: &Graph<N, E>,
+    graph: &PortGraph<N, E>,
     e: super::graph::EdgeIndex,
     dot_s: &mut String,
     node_count: &mut usize,

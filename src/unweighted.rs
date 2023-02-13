@@ -8,7 +8,7 @@ use crate::{graph::Direction, NodeIndex, PortIndex};
 use thiserror::Error;
 
 #[derive(Clone)]
-pub struct PortGraph {
+pub struct UnweightedGraph {
     node_meta: Vec<NodeMeta>,
     port_link: Vec<Option<PortIndex>>,
     port_meta: Vec<PortMeta>,
@@ -18,8 +18,8 @@ pub struct PortGraph {
     port_count: usize,
 }
 
-impl PortGraph {
-    /// Create a new empty [`PortGraph`].
+impl UnweightedGraph {
+    /// Create a new empty [`UnweightedGraph`].
     pub fn new() -> Self {
         Self {
             node_meta: Vec::new(),
@@ -32,7 +32,7 @@ impl PortGraph {
         }
     }
 
-    /// Create a new empty [`PortGraph`] with preallocated capacity.
+    /// Create a new empty [`UnweightedGraph`] with preallocated capacity.
     pub fn with_capacity(nodes: usize, ports: usize) -> Self {
         Self {
             node_meta: Vec::with_capacity(nodes),
@@ -50,9 +50,9 @@ impl PortGraph {
     /// # Example
     ///
     /// ```
-    /// # use portgraph::portgraph::PortGraph;
+    /// # use portgraph::portgraph::UnweightedGraph;
     /// # use portgraph::graph::Direction;
-    /// let mut g = PortGraph::new();
+    /// let mut g = UnweightedGraph::new();
     /// let node = g.add_node(4, 3);
     /// assert_eq!(g.inputs(node).count(), 4);
     /// assert_eq!(g.outputs(node).count(), 3);
@@ -133,9 +133,9 @@ impl PortGraph {
     /// # Example
     ///
     /// ```
-    /// # use portgraph::portgraph::PortGraph;
+    /// # use portgraph::portgraph::UnweightedGraph;
     /// # use portgraph::graph::Direction;
-    /// let mut g = PortGraph::new();
+    /// let mut g = UnweightedGraph::new();
     /// let node0 = g.add_node(1, 1);
     /// let node1 = g.add_node(1, 1);
     /// g.link_ports(g.outputs(node0).nth(0).unwrap(), g.inputs(node1).nth(0).unwrap());
@@ -205,9 +205,9 @@ impl PortGraph {
     /// # Example
     ///
     /// ```
-    /// # use portgraph::portgraph::PortGraph;
+    /// # use portgraph::portgraph::UnweightedGraph;
     /// # use portgraph::graph::Direction;
-    /// let mut g = PortGraph::new();
+    /// let mut g = UnweightedGraph::new();
     /// let node0 = g.add_node(0, 1);
     /// let node1 = g.add_node(1, 0);
     /// let node0_output = g.outputs(node0).nth(0).unwrap();
@@ -324,7 +324,7 @@ impl PortGraph {
 
     /// Iterates over all the input ports of the `node`.
     ///
-    /// Shorthand for [`PortGraph::ports`].
+    /// Shorthand for [`UnweightedGraph::ports`].
     #[inline]
     pub fn inputs(&self, node: NodeIndex) -> NodePorts {
         self.ports(node, Direction::Incoming)
@@ -332,7 +332,7 @@ impl PortGraph {
 
     /// Iterates over all the output ports of the `node`.
     ///
-    /// Shorthand for [`PortGraph::ports`].
+    /// Shorthand for [`UnweightedGraph::ports`].
     #[inline]
     pub fn outputs(&self, node: NodeIndex) -> NodePorts {
         self.ports(node, Direction::Outgoing)
@@ -540,8 +540,8 @@ impl PortGraph {
     /// Shrinks the underlying buffers to the fit the data.
     ///
     /// This does not move nodes or ports, which might prevent freeing up more capacity.
-    /// To shrink the buffers as much as possible, call [`PortGraph::compact_nodes`] and
-    /// [`PortGraph::compact_ports`] first.
+    /// To shrink the buffers as much as possible, call [`UnweightedGraph::compact_nodes`] and
+    /// [`UnweightedGraph::compact_ports`] first.
     pub fn shrink_to_fit(&mut self) {
         self.node_meta.shrink_to_fit();
         self.port_link.shrink_to_fit();
@@ -573,7 +573,7 @@ impl PortGraph {
     }
 }
 
-impl Default for PortGraph {
+impl Default for UnweightedGraph {
     fn default() -> Self {
         Self::new()
     }
@@ -627,9 +627,9 @@ impl NodeMeta {
     }
 }
 
-impl std::fmt::Debug for PortGraph {
+impl std::fmt::Debug for UnweightedGraph {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("PortGraph")
+        f.debug_struct("UnweightedGraph")
             .field("nodes", &debug::NodesDebug(self))
             .field("ports", &debug::PortsDebug(self))
             .finish()
@@ -638,7 +638,7 @@ impl std::fmt::Debug for PortGraph {
 
 mod debug {
     use super::*;
-    pub struct NodesDebug<'a>(pub &'a PortGraph);
+    pub struct NodesDebug<'a>(pub &'a UnweightedGraph);
 
     impl<'a> std::fmt::Debug for NodesDebug<'a> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -652,7 +652,7 @@ mod debug {
         }
     }
 
-    pub struct NodeDebug<'a>(pub &'a PortGraph, pub NodeIndex);
+    pub struct NodeDebug<'a>(pub &'a UnweightedGraph, pub NodeIndex);
 
     impl<'a> std::fmt::Debug for NodeDebug<'a> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -666,7 +666,7 @@ mod debug {
         }
     }
 
-    pub struct PortsDebug<'a>(pub &'a PortGraph);
+    pub struct PortsDebug<'a>(pub &'a UnweightedGraph);
 
     impl<'a> std::fmt::Debug for PortsDebug<'a> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -680,7 +680,7 @@ mod debug {
         }
     }
 
-    pub struct PortDebug<'a>(pub &'a PortGraph, pub PortIndex);
+    pub struct PortDebug<'a>(pub &'a UnweightedGraph, pub PortIndex);
 
     impl<'a> std::fmt::Debug for PortDebug<'a> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -925,7 +925,7 @@ mod test {
 
     #[test]
     fn add_nodes() {
-        let mut graph = PortGraph::new();
+        let mut graph = UnweightedGraph::new();
 
         let lengths = [(0, 1), (0, 0), (1, 0), (2, 1), (1, 6)];
 
@@ -939,7 +939,7 @@ mod test {
 
     #[test]
     fn link_ports_errors() {
-        let mut g = PortGraph::new();
+        let mut g = UnweightedGraph::new();
         let node0 = g.add_node(1, 1);
         let node1 = g.add_node(1, 1);
         let node0_input = g.inputs(node0).nth(0).unwrap();

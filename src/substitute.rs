@@ -1,4 +1,4 @@
-use super::graph::{Direction, EdgeIndex, Graph, NodeIndex, DIRECTIONS};
+use super::graph::{Direction, EdgeIndex, PortGraph, NodeIndex, DIRECTIONS};
 use std::collections::{BTreeSet, HashSet};
 use std::fmt::{Debug, Display};
 use thiserror::Error;
@@ -31,7 +31,7 @@ impl BoundedSubgraph {
         Self { subgraph, edges }
     }
 
-    pub fn from_node<N, E>(graph: &Graph<N, E>, node: NodeIndex) -> Self {
+    pub fn from_node<N, E>(graph: &PortGraph<N, E>, node: NodeIndex) -> Self {
         Self {
             subgraph: [node].into_iter().collect(),
             edges: [
@@ -44,12 +44,12 @@ impl BoundedSubgraph {
 
 #[derive(Clone)]
 pub struct OpenGraph<N, E> {
-    pub graph: Graph<N, E>,
+    pub graph: PortGraph<N, E>,
     pub dangling: [Vec<EdgeIndex>; 2],
 }
 
 impl<N, E> OpenGraph<N, E> {
-    pub fn new(graph: Graph<N, E>, in_ports: Vec<EdgeIndex>, out_ports: Vec<EdgeIndex>) -> Self {
+    pub fn new(graph: PortGraph<N, E>, in_ports: Vec<EdgeIndex>, out_ports: Vec<EdgeIndex>) -> Self {
         Self {
             graph,
             dangling: [in_ports, out_ports],
@@ -79,7 +79,7 @@ impl<N, E> Rewrite<N, E> {
     }
 }
 
-impl<N: Default + Debug + Display, E: Debug + Display> Graph<N, E> {
+impl<N: Default + Debug + Display, E: Debug + Display> PortGraph<N, E> {
     /// Remove subgraph formed by subg and return weights of nodes inside subg
     fn remove_subgraph(&mut self, subgraph: &BoundedSubgraph) -> Vec<Option<N>> {
         let boundary_edges =
@@ -168,11 +168,11 @@ mod tests {
 
     use crate::substitute::{BoundedSubgraph, OpenGraph};
 
-    use super::Graph;
+    use super::PortGraph;
 
     #[test]
     fn test_remove_subgraph() -> Result<(), Box<dyn Error>> {
-        let mut g = Graph::<i8, i8>::with_capacity(3, 2);
+        let mut g = PortGraph::<i8, i8>::with_capacity(3, 2);
 
         let e1 = g.add_edge(-1);
         let e2 = g.add_edge(-2);
@@ -215,7 +215,7 @@ mod tests {
     #[test]
     fn test_insert_graph() -> Result<(), Box<dyn Error>> {
         let mut g = {
-            let mut g = Graph::<i8, i8>::with_capacity(3, 2);
+            let mut g = PortGraph::<i8, i8>::with_capacity(3, 2);
 
             let e1 = g.add_edge(-1);
             let e2 = g.add_edge(-2);
@@ -228,7 +228,7 @@ mod tests {
         };
 
         let g2 = {
-            let mut g2 = Graph::<i8, i8>::with_capacity(2, 1);
+            let mut g2 = PortGraph::<i8, i8>::with_capacity(2, 1);
 
             let e3 = g2.add_edge(-3);
 
@@ -257,7 +257,7 @@ mod tests {
 
     #[test]
     fn test_replace_subgraph() -> Result<(), Box<dyn Error>> {
-        let mut g = Graph::<i8, i8>::with_capacity(3, 2);
+        let mut g = PortGraph::<i8, i8>::with_capacity(3, 2);
 
         let e1 = g.add_edge(-1);
         let e2 = g.add_edge(-2);
@@ -267,7 +267,7 @@ mod tests {
         let n1 = g.add_node_with_edges(1, [e1], [e2])?;
         let _ = g.add_node_with_edges(2, [e2, e3], [])?;
 
-        let mut g2 = Graph::<i8, i8>::with_capacity(2, 1);
+        let mut g2 = PortGraph::<i8, i8>::with_capacity(2, 1);
         // node to be inserted
         let e4 = g2.add_edge(-4);
         let e5 = g2.add_edge(-5);

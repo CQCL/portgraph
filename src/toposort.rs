@@ -1,13 +1,13 @@
 use super::{Direction, NodeIndex};
-use crate::{portgraph::PortGraph, PortIndex};
+use crate::{UnweightedGraph, PortIndex};
 use bitvec::prelude::BitVec;
 use std::{collections::VecDeque, iter::FusedIterator};
 
-/// Iterator over a `PortGraph` in topological ordering.
+/// Iterator over a `UnweightedGraph` in topological ordering.
 ///
 /// Implements [Kahn's algorithm](https://en.wikipedia.org/wiki/Topological_sorting#Kahn's_algorithm).
 pub struct TopoSort<'graph> {
-    graph: &'graph PortGraph,
+    graph: &'graph UnweightedGraph,
     remaining_ports: BitVec,
     /// A VecDeque is used for the node list to produce a canonical ordering,
     /// as successors of nodes already have a canonical ordering due to ports.
@@ -22,7 +22,7 @@ impl<'graph> TopoSort<'graph> {
     /// Initialises a new topological sort of a portgraph in a specified direction
     /// starting at a collection of `source` nodes.
     pub fn new(
-        graph: &'graph PortGraph,
+        graph: &'graph UnweightedGraph,
         source: impl IntoIterator<Item = NodeIndex>,
         direction: Direction,
     ) -> Self {

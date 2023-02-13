@@ -7,10 +7,12 @@ pub struct Weights<N, P> {
 }
 
 /// Trait for graphs that encode edges connecting nodes.
-/// 
+///
 /// TODO: Do a proper API design for this, and fill in the todo!s.
 impl<N, P> Weights<N, P>
-where N: Default, P: Default
+where
+    N: Default,
+    P: Default,
 {
     /// Create a new weights component with no nodes or ports.
     pub fn new() -> Self {
@@ -96,8 +98,7 @@ where N: Default, P: Default
     }
 }
 
-impl<N, P> Default for Weights<N, P>
-{
+impl<N, P> Default for Weights<N, P> {
     fn default() -> Self {
         Self {
             nodes: Vec::new(),

@@ -2,8 +2,8 @@ use criterion::{
     black_box, criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion,
     PlotConfiguration,
 };
-use portgraph::{Direction};
 use portgraph::graph::PortGraph;
+use portgraph::Direction;
 
 fn make_line_graph(size: usize) -> PortGraph<usize, (usize, usize, usize)> {
     let mut graph = PortGraph::with_capacity(size, size * 2);

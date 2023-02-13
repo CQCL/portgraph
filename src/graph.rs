@@ -2,9 +2,9 @@
 
 use thiserror::Error;
 
-use crate::{hierarchy::Hierarchy, unweighted};
 use crate::unweighted::UnweightedGraph;
 use crate::weights::Weights;
+use crate::{hierarchy::Hierarchy, unweighted};
 
 pub use crate::{Direction, EdgeIndex, NodeIndex, PortIndex, DIRECTIONS};
 

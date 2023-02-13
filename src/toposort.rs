@@ -1,82 +1,87 @@
-use std::collections::{HashSet, VecDeque};
+use super::{Direction, NodeIndex};
+use crate::{portgraph::PortGraph, PortIndex};
+use bitvec::prelude::BitVec;
+use std::{collections::VecDeque, iter::FusedIterator};
 
-use super::graph::{Direction, EdgeIndex, Graph, NodeIndex};
-
-/*
-Implementation of Kahn's algorithm
-https://en.wikipedia.org/wiki/Topological_sorting#Kahn's_algorithm
-
-For Circuits, the input vertices are already known,
- this iterator starts with them and walks the graph in a topologically sorted order
-Panics if a cycle is detected in the graph.
-A VecDeque is used for the node list to produce a canonical ordering,
- as successors of nodes already have a canonical ordering due to ports.
-
- */
-pub struct TopSortWalker<'graph, N, E> {
-    g: &'graph Graph<N, E>,
-    remaining_edges: HashSet<EdgeIndex>,
+/// Iterator over a `PortGraph` in topological ordering.
+///
+/// Implements [Kahn's algorithm](https://en.wikipedia.org/wiki/Topological_sorting#Kahn's_algorithm).
+pub struct TopoSort<'graph> {
+    graph: &'graph PortGraph,
+    remaining_ports: BitVec,
+    /// A VecDeque is used for the node list to produce a canonical ordering,
+    /// as successors of nodes already have a canonical ordering due to ports.
     candidate_nodes: VecDeque<NodeIndex>,
-    cyclicity_check: bool,
-    reversed: bool,
+    direction: Direction,
+    /// The number of nodes already returned from the iterator.
+    /// This is used to calculate the upper bound for the iterator's `size_hint`.
+    nodes_seen: usize,
 }
 
-impl<'graph, N, E> TopSortWalker<'graph, N, E> {
-    pub fn new(g: &'graph Graph<N, E>, candidate_nodes: VecDeque<NodeIndex>) -> Self {
-        let remaining_edges = g.edge_indices().collect();
+impl<'graph> TopoSort<'graph> {
+    /// Initialises a new topological sort of a portgraph in a specified direction
+    /// starting at a collection of `source` nodes.
+    pub fn new(
+        graph: &'graph PortGraph,
+        source: impl IntoIterator<Item = NodeIndex>,
+        direction: Direction,
+    ) -> Self {
+        let mut remaining_ports = BitVec::with_capacity(graph.port_capacity());
+        remaining_ports.resize(graph.port_capacity(), true);
+
         Self {
-            g,
-            candidate_nodes,
-            remaining_edges,
-            cyclicity_check: false,
-            reversed: false,
+            graph,
+            remaining_ports,
+            candidate_nodes: source.into_iter().collect(),
+            direction,
+            nodes_seen: 0,
         }
     }
 
-    pub fn with_cyclicity_check(mut self) -> Self {
-        self.cyclicity_check = true;
-        self
-    }
-
-    pub fn reversed(mut self) -> Self {
-        self.reversed = true;
-        self
-    }
-
-    pub fn edges_remaining(&self) -> &HashSet<EdgeIndex> {
-        &self.remaining_edges
+    /// Returns whether there are ports that have not been visited yet.
+    /// If the iterator has seen all nodes this implies that there is a cycle.
+    pub fn ports_remaining(&self) -> impl ExactSizeIterator<Item = PortIndex> + '_ {
+        self.remaining_ports.iter_ones().map(PortIndex::new)
     }
 }
 
-impl<'graph, N, E> Iterator for TopSortWalker<'graph, N, E> {
+impl<'graph> Iterator for TopoSort<'graph> {
     type Item = NodeIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (forward, backward) = if self.reversed {
-            (Direction::Incoming, Direction::Outgoing)
-        } else {
-            (Direction::Outgoing, Direction::Incoming)
+        let Some(node) = self.candidate_nodes.pop_front() else {
+            return None;
         };
 
-        if let Some(n) = self.candidate_nodes.pop_front() {
-            for e in self.g.node_edges(n, forward) {
-                let m = self.g.edge_endpoint(e, backward).unwrap();
-                self.remaining_edges.remove(&e);
-                if !self
-                    .g
-                    .node_edges(m, backward)
-                    .any(|e2| self.remaining_edges.contains(&e2))
-                {
-                    self.candidate_nodes.push_back(m);
+        for port in self.graph.ports(node, self.direction) {
+            self.remaining_ports.set(port.index(), false);
+
+            if let Some(link) = self.graph.port_link(port) {
+                self.remaining_ports.set(port.index(), false);
+                let target = self.graph.port_node(link).unwrap();
+
+                let target_ready = self
+                    .graph
+                    .ports(node, self.direction.reverse())
+                    .all(|p| !self.remaining_ports[p.index()]);
+
+                if target_ready {
+                    self.candidate_nodes.push_back(target);
                 }
             }
-            Some(n)
-        } else {
-            assert!(
-                (!self.cyclicity_check || self.remaining_edges.is_empty()),
-                "Edges remaining, graph may contain cycle."
-            );
-            None
         }
+
+        self.nodes_seen += 1;
+        Some(node)
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (
+            self.candidate_nodes.len(),
+            Some(self.graph.node_count() - self.nodes_seen),
+        )
     }
 }
+
+impl<'graph> FusedIterator for TopoSort<'graph> {}

@@ -14,6 +14,7 @@ thiserror = "1.0.28"
 pyo3 = { version = "0.16.5", optional = true, features = [
     "multiple-pymethods",
 ] }
+bitvec = "1.0.1"
 
 [features]
 pyo3 = ["dep:pyo3"]

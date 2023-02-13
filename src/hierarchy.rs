@@ -306,11 +306,54 @@ impl Hierarchy {
         self.get(node).children_count as usize
     }
 
-    // TODO: API to ensure that there is enough capacity
+    /// Changes the index of a node from `old` to `new`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the index `new` is not a root without any children.
+    pub fn rekey(&mut self, old: NodeIndex, new: NodeIndex) {
+        if self.get(new) != &NodeData::default() {
+            panic!("can not rekey into an occupied slot");
+        }
+
+        let node_data = take(self.get_mut(old));
+
+        if let Some(parent) = node_data.parent {
+            match node_data.siblings[0] {
+                Some(prev) => self.get_mut(prev).siblings[1] = Some(new),
+                None => self.get_mut(parent).children[0] = Some(new),
+            }
+
+            match node_data.siblings[1] {
+                Some(next) => self.get_mut(next).siblings[0] = Some(new),
+                None => self.get_mut(parent).children[1] = Some(new),
+            }
+        }
+
+        let mut next_child = node_data.children[0];
+
+        while let Some(child) = next_child {
+            let child_data = self.get_mut(child);
+            child_data.parent = Some(new);
+            next_child = child_data.siblings[1];
+        }
+
+        *self.get_mut(new) = node_data;
+    }
+
+    /// Reserves enough capacity to fit a maximum node index without reallocating.
+    /// Does nothing if there already is enough capacity.
+    pub fn ensure_capacity(&mut self, capacity: usize) {
+        if let Some(additional) = self.data.capacity().checked_sub(capacity) {
+            // Should we fill with defaults instead of just reserving?
+            self.data.reserve(additional);
+        }
+    }
+
     // TODO: API to shrink
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct NodeData {
     /// The first and last child of the node, if any.
     children: [Option<NodeIndex>; 2],

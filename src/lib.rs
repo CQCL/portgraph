@@ -93,3 +93,6 @@ impl std::fmt::Debug for PortIndex {
         write!(f, "PortIndex({})", self.index())
     }
 }
+
+#[deprecated]
+pub type EdgeIndex = (PortIndex, PortIndex);

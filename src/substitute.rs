@@ -1,4 +1,5 @@
 use crate::PortIndex;
+use crate::graph::LinkError;
 
 use super::graph::{Graph, NodeIndex};
 use bitvec::bitvec;
@@ -35,10 +36,10 @@ where
 
 #[derive(Debug, Error)]
 pub enum RewriteError {
-    #[error("cannot replace empty subgraph")]
-    EmptySubgraph,
     #[error("boundary size mismatch")]
     BoundarySize,
+    #[error("Connect Error")]
+    Link(LinkError),
 }
 
 /// A subgraph defined as a subset of the nodes in a graph.
@@ -223,10 +224,6 @@ where
         self,
         graph: &mut Other,
     ) -> Result<Vec<Option<N>>, RewriteError> {
-        if self.subgraph.is_empty() {
-            return Err(RewriteError::EmptySubgraph);
-        }
-
         // TODO type check.
         if self.subgraph.incoming.len() != self.replacement.dangling_inputs.len()
             || self.subgraph.outgoing.len() != self.replacement.dangling_outputs.len()
@@ -238,13 +235,9 @@ where
 
         // insert new graph and update edge references accordingly
         let mut port_map = HashMap::new();
-        graph.insert_graph(
-            self.replacement.graph,
-            |_, _| {},
-            |old, new| {
-                port_map.insert(old, new);
-            },
-        );
+        graph.insert_graph(self.replacement.graph, |_,_| {}, |old, new| {
+            port_map.insert(old, new);
+        });
 
         for (repl_port, graph_port) in self
             .replacement
@@ -253,9 +246,10 @@ where
             .zip(self.subgraph.incoming)
         {
             let repl_port = port_map[repl_port];
+            graph.unlink_port(graph_port);
             graph
                 .link_ports(graph_port, repl_port)
-                .expect("Failed to link ports after rewrite");
+                .map_err(|e| RewriteError::Link(e))?;
         }
 
         for (repl_port, graph_port) in self
@@ -265,9 +259,10 @@ where
             .zip(self.subgraph.outgoing)
         {
             let repl_port = port_map[repl_port];
+            graph.unlink_port(graph_port);
             graph
                 .link_ports(repl_port, graph_port)
-                .expect("Failed to link ports after rewrite");
+                .map_err(|e| RewriteError::Link(e))?;
         }
 
         Ok(removed)
@@ -280,8 +275,7 @@ mod tests {
     use std::error::Error;
 
     use crate::substitute::{BoundedSubgraph, OpenGraph};
-
-    use super::PortGraph;
+    use crate::{PortGraph, Graph};
 
     #[test]
     fn test_remove_subgraph() -> Result<(), Box<dyn Error>> {

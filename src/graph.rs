@@ -1,7 +1,5 @@
 //! Main graph data structure, with components for adjacency, weights, and hierarchical structures.
 
-use std::collections::HashMap;
-
 use thiserror::Error;
 
 use crate::weights::Weights;
@@ -9,12 +7,6 @@ use crate::{hierarchy::Hierarchy, unweighted};
 
 pub use crate::unweighted::{LinkError, UnweightedGraph};
 pub use crate::{Direction, NodeIndex, PortIndex, DIRECTIONS};
-
-/// Renaming map for nodes, returned by [`Graph::insert_graph`].
-pub type NodeMap = HashMap<NodeIndex, NodeIndex>;
-
-/// Renaming map for ports, returned by [`Graph::insert_graph`].
-pub type PortMap = HashMap<PortIndex, PortIndex>;
 
 /// Error returned by [Graph::merge_edges].
 #[derive(Debug, Error)]
@@ -50,23 +42,33 @@ where
     #[must_use]
     fn unweighted(&self) -> &UnweightedGraph;
 
-    /// Returns a mutable reference to the underlying unweighted graph.
-    #[must_use]
-    fn unweighted_mut(&mut self) -> &mut UnweightedGraph;
-
     /// Returns a reference to the weight component.
     #[must_use]
     fn weights(&self) -> &Weights<N, P>;
-
-    /// Returns a mutable reference to the weight component.
-    #[must_use]
-    fn weights_mut(&mut self) -> &mut Weights<N, P>;
 
     /// Returns a reference to the hierarchy component.
     #[must_use]
     fn hierarchy(&self) -> &Hierarchy;
 
+    /// Returns mutable references to the underlying components.
+    #[must_use]
+    fn components_mut(&mut self) -> (&mut UnweightedGraph, &mut Weights<N, P>, &mut Hierarchy);
+
+    /// Returns a mutable reference to the underlying unweighted graph.
+    ///
+    /// TODO: Default implementation without polluting everything with lifetimes.
+    #[must_use]
+    fn unweighted_mut(&mut self) -> &mut UnweightedGraph;
+
+    /// Returns a mutable reference to the weight component.
+    ///
+    /// TODO: Default implementation without polluting everything with lifetimes.
+    #[must_use]
+    fn weights_mut(&mut self) -> &mut Weights<N, P>;
+
     /// Returns a mutable reference to the hierarchy component.
+    ///
+    /// TODO: Default implementation without polluting everything with lifetimes.
     #[must_use]
     fn hierarchy_mut(&mut self) -> &mut Hierarchy;
 
@@ -82,6 +84,14 @@ where
     #[must_use]
     fn port_count(&self) -> usize {
         self.unweighted().port_count()
+    }
+
+    /// Returns the number of edges in the graph, corresponding to the number of
+    /// links between ports.
+    #[inline(always)]
+    #[must_use]
+    fn edge_count(&self) -> usize {
+        todo!()
     }
 
     /// Check whether the graph has a node with a given index.
@@ -124,6 +134,32 @@ where
     #[must_use]
     fn ports_iter(&self) -> unweighted::Ports {
         self.unweighted().ports_iter()
+    }
+
+    /// Get the port index of a given node, direction, and offset.
+    #[inline(always)]
+    #[must_use]
+    fn port_index(
+        &self,
+        node: NodeIndex,
+        offset: usize,
+        direction: Direction,
+    ) -> Option<PortIndex> {
+        self.ports(node, direction).nth(offset)
+    }
+
+    /// Get the input port index of a given node and offset.
+    #[inline(always)]
+    #[must_use]
+    fn input_index(&self, node: NodeIndex, offset: usize) -> Option<PortIndex> {
+        self.port_index(node, offset, Direction::Incoming)
+    }
+
+    /// Get the output port index of a given node and offset.
+    #[inline(always)]
+    #[must_use]
+    fn output_index(&self, node: NodeIndex, offset: usize) -> Option<PortIndex> {
+        self.port_index(node, offset, Direction::Outgoing)
     }
 
     /// Iterate over all the ports of a given node.
@@ -193,22 +229,37 @@ where
         todo!()
     }
 
-    /// Get the weight of a given node.
+    /// Check whether two nodes are connected. Return the port indices of the first edge found.
+    #[must_use]
+    fn connected(&self, from: NodeIndex, to: NodeIndex) -> Option<(PortIndex, PortIndex)> {
+        self.outputs(from)
+            .filter_map(|from_port| {
+                self.port_link(from_port)
+                    .filter(|to_port| self.port_node(*to_port) == Some(to))
+                    .map(|to_port| (from_port, to_port))
+            })
+            .next()
+    }
+
+    /// Get the node of a given port.
     #[inline(always)]
     #[must_use]
-    fn node_weight(&'a self, node: NodeIndex) -> &'a N {
-        self.weights()
-            .try_get_node(node)
-            .expect("Node weight was not set")
+    fn port_node(&self, port: PortIndex) -> Option<NodeIndex> {
+        self.unweighted().port_node(port)
     }
 
     /// Get the weight of a given node.
     #[inline(always)]
     #[must_use]
-    fn node_weight_mut(&'a mut self, node: NodeIndex) -> &'a mut N {
-        self.weights_mut()
-            .try_get_node_mut(node)
-            .expect("Node weight was not set")
+    fn node_weight(&'a self, node: NodeIndex) -> Option<&'a N> {
+        self.weights().try_get_node(node)
+    }
+
+    /// Get the weight of a given node.
+    #[inline(always)]
+    #[must_use]
+    fn node_weight_mut(&'a mut self, node: NodeIndex) -> Option<&'a mut N> {
+        self.weights_mut().try_get_node_mut(node)
     }
 
     /// Set the weight of a given node.
@@ -220,19 +271,15 @@ where
     /// Get the weight of a given port.
     #[inline(always)]
     #[must_use]
-    fn port_weight(&'a self, port: PortIndex) -> &'a P {
-        self.weights()
-            .try_get_port(port)
-            .expect("Port weight was not set")
+    fn port_weight(&'a self, port: PortIndex) -> Option<&'a P> {
+        self.weights().try_get_port(port)
     }
 
     /// Get the weight of a given port.
     #[inline(always)]
     #[must_use]
-    fn port_weight_mut(&'a mut self, port: PortIndex) -> &'a mut P {
-        self.weights_mut()
-            .try_get_port_mut(port)
-            .expect("Port weight was not set")
+    fn port_weight_mut(&'a mut self, port: PortIndex) -> Option<&'a mut P> {
+        self.weights_mut().try_get_port_mut(port)
     }
 
     /// Set the weight of a given port.
@@ -310,6 +357,13 @@ where
         self.weights_mut().remove_node(node)
     }
 
+    /// Get the port linked to the given port. Returns `None` if the port is not linked.
+    #[inline(always)]
+    #[must_use]
+    fn port_link(&self, port: PortIndex) -> Option<PortIndex> {
+        self.unweighted().port_link(port)
+    }
+
     /// Disconnect a port in the graph.
     #[inline(always)]
     fn link_ports(&mut self, from: PortIndex, to: PortIndex) -> Result<(), LinkError> {
@@ -324,12 +378,40 @@ where
     }
 
     /// Insert another graph into this graph.
-    /// 
-    /// TODO: Use a callback instead of constructing explicit maps?
-    fn insert_graph<G>(&mut self, mut _other: G) -> (NodeMap, PortMap) where G: Graph<'a, N, P> + Sized {
-        let mut _node_map = NodeMap::new();
-        let mut _port_map = PortMap::new();
+    ///
+    /// Every time a node or port is inserted, the rekey function will be called with its old and new index.
+    fn insert_graph<G, FN, FP>(&mut self, mut _other: G, mut _rekey_nodes: FN, mut _rekey_ports: FP)
+    where
+        G: Graph<'a, N, P> + Sized,
+        FN: FnMut(NodeIndex, NodeIndex),
+        FP: FnMut(PortIndex, PortIndex),
+    {
         todo!("Insert graph in unweighted, with a callback to rekey the weights and hierarchy")
+    }
+
+    /// Compacts the storage of nodes in the graph so that all nodes are stored consecutively.
+    ///
+    /// Every time a node is moved, the `rekey` function will be called with its old and new index.
+    #[inline(always)]
+    fn compact_nodes<F>(&mut self, mut rekey: impl FnMut(NodeIndex, NodeIndex)) {
+        let (unweighted, weights, hierarchy) = self.components_mut();
+        unweighted.compact_nodes(|old, new| {
+            rekey(old, new);
+            weights.rekey_node(old, new);
+            hierarchy.rekey(old, new);
+        });
+    }
+
+    /// Compacts the storage of ports in the graph so that all ports are stored consecutively.
+    ///
+    /// Every time a port is moved, the `rekey` function will be called with its old and new index.
+    #[inline(always)]
+    fn compact_ports<F>(&mut self, mut rekey: impl FnMut(PortIndex, PortIndex)) {
+        let (unweighted, weights, _) = self.components_mut();
+        unweighted.compact_ports(|old, new| {
+            rekey(old, new);
+            weights.rekey_port(old, new);
+        });
     }
 
     // TODO: Missing methods
@@ -360,20 +442,30 @@ where
         &self.unweighted
     }
 
-    fn unweighted_mut(&mut self) -> &mut UnweightedGraph {
-        &mut self.unweighted
-    }
-
     fn weights(&self) -> &Weights<N, P> {
         &self.weights
     }
 
-    fn weights_mut(&mut self) -> &mut Weights<N, P> {
-        &mut self.weights
-    }
-
     fn hierarchy(&self) -> &Hierarchy {
         &self.hierarchy
+    }
+
+    fn components_mut<'b>(
+        &'b mut self,
+    ) -> (
+        &'b mut UnweightedGraph,
+        &'b mut Weights<N, P>,
+        &'b mut Hierarchy,
+    ) {
+        (&mut self.unweighted, &mut self.weights, &mut self.hierarchy)
+    }
+
+    fn unweighted_mut(&mut self) -> &mut UnweightedGraph {
+        &mut self.unweighted
+    }
+
+    fn weights_mut(&mut self) -> &mut Weights<N, P> {
+        &mut self.weights
     }
 
     fn hierarchy_mut(&mut self) -> &mut Hierarchy {
@@ -383,12 +475,148 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
 
     #[test]
     fn empty() {
-        let mut graph: PortGraph<usize, usize, usize> = PortGraph::new();
+        let mut graph: PortGraph<usize, usize> = PortGraph::new();
         assert_eq!(graph.node_count(), 0);
-        assert_eq!(graph.edge_count(), 0);
+        assert_eq!(graph.port_count(), 0);
+        assert!(graph.nodes_iter().next().is_none());
+        assert!(graph.ports_iter().next().is_none());
+    }
+
+    #[test]
+    fn test_insert_graph() {
+        let mut g = PortGraph::<i8, i8>::with_capacity(3, 2);
+
+        let n0 = g.add_node(0, 0, 1);
+        let n1 = g.add_node_with_ports(1, vec![-1], vec![-2]);
+        let n2 = g.add_node(2, 1, 0);
+
+        let p0out = g.output_index(n0, 0).unwrap();
+        let p1in = g.input_index(n1, 0).unwrap();
+        let p1out = g.output_index(n1, 0).unwrap();
+        let p2in = g.input_index(n2, 0).unwrap();
+
+        g.link_ports(p0out, p1in).unwrap();
+        g.link_ports(p1out, p2in).unwrap();
+
+        let mut g2 = PortGraph::<i8, i8>::with_capacity(2, 1);
+
+        let n3 = g2.add_node(3, 0, 1);
+        let n4 = g2.add_node_with_ports(4, vec![-3], vec![]);
+
+        let p3out = g2.outputs(n3).next().unwrap();
+        let p4in = g2.inputs(n4).next().unwrap();
+        g.link_ports(p3out, p4in).unwrap();
+
+        let mut node_map = HashMap::new();
+        let mut port_map = HashMap::new();
+        g.insert_graph(
+            g2,
+            |old, new| {
+                node_map.insert(old, new);
+            },
+            |old, new| {
+                port_map.insert(old, new);
+            },
+        );
+
+        assert_eq!(g.node_count(), 5);
+        assert_eq!(g.port_count(), 6);
+        assert_eq!(g.edge_count(), 3);
+
+        // Check nodes and node weights
+        for (weight, n) in [n0, n1, n2].iter().enumerate() {
+            assert!(!node_map.contains_key(n));
+            assert!(g.contains_node(*n));
+            assert_eq!(g.node_weight(*n), Some(&(weight as i8)));
+        }
+        for (weight, n) in [n3, n4].iter().enumerate() {
+            let weight = weight + 3;
+            assert!(node_map.contains_key(n));
+            let n = node_map[n];
+            assert!(g.contains_node(n));
+            assert_eq!(g.node_weight(n), Some(&(weight as i8)));
+        }
+
+        // Check ports and port weights
+        for p in [p0out, p1in, p1out, p2in] {
+            assert!(!port_map.contains_key(&p));
+            assert!(g.contains_port(p));
+        }
+        for p in [p3out, p4in] {
+            assert!(port_map.contains_key(&p));
+            let p = port_map[&p];
+            assert!(g.contains_port(p));
+        }
+        assert_eq!(g.port_weight(p1in), Some(&-1));
+        assert_eq!(g.port_weight(p1out), Some(&-2));
+        assert_eq!(g.port_weight(port_map[&p4in]), Some(&-3));
+
+        // Check links
+        assert_eq!(g.port_link(p0out), Some(p1in));
+        assert_eq!(g.port_link(p1out), Some(p2in));
+        assert_eq!(g.port_link(port_map[&p3out]), Some(port_map[&p4in]));
+    }
+
+    #[test]
+    fn test_compact() {
+        let mut g = PortGraph::<i8, i8>::with_capacity(3, 2);
+
+        let n0 = g.add_node(0, 0, 2);
+        let n1 = g.add_node(1, 1, 1);
+        let n2 = g.add_node(2, 2, 1);
+
+        g.link_ports(
+            g.output_index(n0, 0).unwrap(),
+            g.input_index(n1, 0).unwrap(),
+        )
+        .unwrap();
+
+        g.link_ports(
+            g.output_index(n1, 0).unwrap(),
+            g.input_index(n2, 0).unwrap(),
+        )
+        .unwrap();
+
+        let p0 = g.output_index(n0, 1).unwrap();
+        let p2 = g.input_index(n2, 1).unwrap();
+        g.link_ports(p0, p2).unwrap();
+
+        assert_eq!(g.node_count(), 3);
+        assert_eq!(g.port_count(), 6);
+        assert_eq!(g.edge_count(), 3);
+
+        assert_eq!(g.remove_node(n1), Some(1));
+
+        assert_eq!(g.node_count(), 2);
+        assert_eq!(g.port_count(), 2);
+        assert_eq!(g.edge_count(), 1);
+
+        let mut node_map = HashMap::new();
+        let mut port_map = HashMap::new();
+        g.compact_nodes(|old, new| {
+            node_map.insert(old, new);
+        });
+        g.compact_ports(|old, new| {
+            port_map.insert(old, new);
+        });
+
+        assert_eq!(g.node_count(), 2);
+        assert_eq!(g.port_count(), 2);
+        assert_eq!(g.edge_count(), 1);
+
+        assert!(!node_map.contains_key(&n1));
+        assert_eq!(g.node_weight(node_map[&n0]), Some(&0));
+        assert_eq!(g.node_weight(node_map[&n2]), Some(&2));
+
+        assert_eq!(
+            g.connected(node_map[&n0], node_map[&n2]),
+            Some((port_map[&p0], port_map[&p2]))
+        );
     }
 }

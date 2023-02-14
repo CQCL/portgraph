@@ -3,6 +3,7 @@ use crate::PortIndex;
 use super::graph::{Graph, NodeIndex};
 use bitvec::bitvec;
 use bitvec::prelude::BitVec;
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use thiserror::Error;
@@ -236,7 +237,14 @@ where
         let removed = self.subgraph.remove_subgraph(graph);
 
         // insert new graph and update edge references accordingly
-        let (_, port_map) = graph.insert_graph(self.replacement.graph);
+        let mut port_map = HashMap::new();
+        graph.insert_graph(
+            self.replacement.graph,
+            |_, _| {},
+            |old, new| {
+                port_map.insert(old, new);
+            },
+        );
 
         for (repl_port, graph_port) in self
             .replacement

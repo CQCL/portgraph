@@ -1,13 +1,20 @@
 //! Main graph data structure, with components for adjacency, weights, and hierarchical structures.
 
+use std::collections::HashMap;
+
 use thiserror::Error;
 
-use crate::unweighted::{UnweightedGraph};
 use crate::weights::Weights;
 use crate::{hierarchy::Hierarchy, unweighted};
 
-pub use crate::unweighted::LinkError;
+pub use crate::unweighted::{LinkError, UnweightedGraph};
 pub use crate::{Direction, NodeIndex, PortIndex, DIRECTIONS};
+
+/// Renaming map for nodes, returned by [`Graph::insert_graph`].
+pub type NodeMap = HashMap<NodeIndex, NodeIndex>;
+
+/// Renaming map for ports, returned by [`Graph::insert_graph`].
+pub type PortMap = HashMap<PortIndex, PortIndex>;
 
 /// Error returned by [Graph::merge_edges].
 #[derive(Debug, Error)]
@@ -138,6 +145,45 @@ where
     #[must_use]
     fn outputs(&self, node: NodeIndex) -> unweighted::NodePorts {
         self.unweighted().ports(node, Direction::Outgoing)
+    }
+
+    /// Slice of all the links of the `node` in the given `direction`. When the
+    /// corresponding node port is linked to another one, the Option contains
+    /// the index of the other port.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use graph::PortGraph;
+    ///
+    /// let mut graph = PortGraph::new();
+    ///
+    /// let node_a = graph.add_node((), 0, 2);
+    /// let node_b = graph.add_node((), 1, 0);
+    ///
+    /// let port_a = graph.outputs(node_a).next().unwrap();
+    /// let port_b = graph.inputs(node_b).next().unwrap().;
+    ///
+    /// graph.link_ports(port_a, port_b).unwrap();
+    ///
+    /// assert_eq!(graph.links(node_a, graph::Direction::Outgoing), &[Some(port_b), None]);
+    /// assert_eq!(graph.links(node_b, graph::Direction::Incoming), &[Some(port_a)]);
+    /// ```
+    #[inline]
+    fn links(&self, node: NodeIndex, direction: Direction) -> &[Option<PortIndex>] {
+        self.unweighted().links(node, direction)
+    }
+
+    /// Slice of all the input links of the `node`. Shorthand for [`Graph::links`].
+    #[inline]
+    fn input_links(&self, node: NodeIndex) -> &[Option<PortIndex>] {
+        self.unweighted().input_links(node)
+    }
+
+    /// Slice of all the output links of the `node`. Shorthand for [`Graph::links`].
+    #[inline]
+    fn output_links(&self, node: NodeIndex) -> &[Option<PortIndex>] {
+        self.unweighted().output_links(node)
     }
 
     /// Iterate over all the edges connected to a given node.
@@ -275,6 +321,15 @@ where
     #[inline(always)]
     fn unlink_port(&mut self, port: PortIndex) -> Option<PortIndex> {
         self.unweighted_mut().unlink_port(port)
+    }
+
+    /// Insert another graph into this graph.
+    /// 
+    /// TODO: Use a callback instead of constructing explicit maps?
+    fn insert_graph<G>(&mut self, mut _other: G) -> (NodeMap, PortMap) where G: Graph<'a, N, P> + Sized {
+        let mut _node_map = NodeMap::new();
+        let mut _port_map = PortMap::new();
+        todo!("Insert graph in unweighted, with a callback to rekey the weights and hierarchy")
     }
 
     // TODO: Missing methods

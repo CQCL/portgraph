@@ -338,6 +338,29 @@ impl UnweightedGraph {
         self.ports(node, Direction::Outgoing)
     }
 
+    /// Slice of all the links of the `node` in the given `direction`. When the
+    /// corresponding node port is linked to another one, the Option contains
+    /// the index of the other port.
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use unweighted::UnweightedGraph;
+    /// 
+    /// let mut graph = UnweightedGraph::new();
+    /// 
+    /// let node_a = graph.add_node(0, 2);
+    /// let node_b = graph.add_node(1, 0);
+    /// 
+    /// let port_a = graph.outputs(node_a).next().unwrap();
+    /// let port_b = graph.inputs(node_b).next().unwrap().;
+    /// 
+    /// graph.link_ports(port_a, port_b).unwrap();
+    /// 
+    /// assert_eq!(graph.links(node_a, graph::Direction::Outgoing), &[Some(port_b), None]);
+    /// assert_eq!(graph.links(node_b, graph::Direction::Incoming), &[Some(port_a)]);
+    /// ```
+    #[inline]
     pub fn links(&self, node: NodeIndex, direction: Direction) -> &[Option<PortIndex>] {
         let Some(node_meta) = self.node_meta_valid(node) else {
             return &[];
@@ -361,11 +384,13 @@ impl UnweightedGraph {
         }
     }
 
+    /// Slice of all the input links of the `node`. Shorthand for [`UnweightedGraph::links`].
     #[inline]
     pub fn input_links(&self, node: NodeIndex) -> &[Option<PortIndex>] {
         self.links(node, Direction::Incoming)
     }
 
+    /// Slice of all the output links of the `node`. Shorthand for [`UnweightedGraph::links`].
     #[inline]
     pub fn output_links(&self, node: NodeIndex) -> &[Option<PortIndex>] {
         self.links(node, Direction::Outgoing)

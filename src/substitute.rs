@@ -1,182 +1,35 @@
 use crate::PortIndex;
 
-use super::graph::{Direction, Graph, NodeIndex, PortGraph, DIRECTIONS};
+use super::graph::{Graph, NodeIndex};
+use bitvec::bitvec;
 use bitvec::prelude::BitVec;
-use std::collections::BTreeSet;
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
+use std::marker::PhantomData;
 use thiserror::Error;
 
-#[derive(Debug, Clone)]
-pub struct SubgraphRef {
-    pub nodes: BitVec,
-}
-
-impl SubgraphRef {
-    pub fn new(nodes: BitVec) -> Self {
-        Self { nodes }
-    }
-}
-
-impl FromIterator<NodeIndex> for SubgraphRef {
-    fn from_iter<T: IntoIterator<Item = NodeIndex>>(iter: T) -> Self {
-        let mut nodes = BitVec::new();
-        for node in iter {
-            if nodes.len() <= node.index() {
-                nodes.resize(node.index() + 1, false);
-            }
-            nodes.set(node.index(), true);
-        }
-        Self::new(nodes)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct BoundedSubgraph {
-    pub subgraph: SubgraphRef,
-    pub ports: [Vec<PortIndex>; 2],
-}
-
-impl BoundedSubgraph {
-    pub fn new(subgraph: SubgraphRef, ports: [Vec<PortIndex>; 2]) -> Self {
-        Self { subgraph, ports }
-    }
-
-    pub fn from_node<N, P>(graph: &PortGraph<N, P>, node: NodeIndex) -> Self
-    where
-        N: Clone,
-        P: Clone,
-    {
-        Self {
-            subgraph: [node].into_iter().collect(),
-            ports: [
-                graph.ports(node, Direction::Incoming).collect(),
-                graph.ports(node, Direction::Outgoing).collect(),
-            ],
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct OpenGraph<N, P> {
-    pub graph: PortGraph<N, P>,
-    pub dangling: [Vec<PortIndex>; 2],
-}
-
-impl<N, P> OpenGraph<N, P> {
-    pub fn new(
-        graph: PortGraph<N, P>,
-        in_ports: Vec<PortIndex>,
-        out_ports: Vec<PortIndex>,
-    ) -> Self {
-        Self {
-            graph,
-            dangling: [in_ports, out_ports],
-        }
-    }
-}
-
-impl<N: Debug, P: Debug> Debug for OpenGraph<N, P> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("OpenGraph")
-            .field("graph", &self.graph)
-            .field("in_edges", &self.dangling[0])
-            .field("out_edges", &self.dangling[1])
-            .finish()
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Rewrite<N, P> {
-    pub subg: BoundedSubgraph,
-    pub replacement: OpenGraph<N, P>,
-}
-
-impl<N, P> Rewrite<N, P> {
-    pub fn new(subg: BoundedSubgraph, replacement: OpenGraph<N, P>) -> Self {
-        Self { subg, replacement }
-    }
-}
-
-impl<N, P> PortGraph<N, P>
+pub trait Substitute<'a, N, P>: Graph<'a, N, P> + Sized
 where
-    N: Clone + Debug + Display,
-    P: Clone + Debug + Display,
+    N: 'a + Clone,
+    P: 'a + Clone,
 {
-    /// Remove subgraph formed by subg and return weights of nodes inside subg
-    #[allow(dead_code)] // TODO remove this
-    fn remove_subgraph(&mut self, subgraph: &BoundedSubgraph) -> Vec<Option<N>> {
-        let boundary_ports =
-            BTreeSet::from_iter(subgraph.ports.iter().flat_map(|x| x.iter().copied()));
-        subgraph
-            .subgraph
-            .nodes
-            .iter_ones()
-            .map(|n| {
-                let n = NodeIndex::new(n);
-                let ports: Vec<_> = DIRECTIONS
-                    .iter()
-                    .flat_map(|d| self.ports(n, *d))
-                    .filter(|e| !boundary_ports.contains(e))
-                    .collect();
-
-                for port in ports {
-                    self.unlink_port(port);
-                }
-
-                self.remove_node(n)
-            })
-            .collect()
-    }
-
-    /* TODO: Implement this for the new graph structure
-    fn replace_subgraph(
+    fn apply_rewrite<Other: Graph<'a, N, P> + Sized>(
         &mut self,
-        subgraph: BoundedSubgraph,
-        replacement: OpenGraph<N, P>,
-    ) -> Result<Vec<Option<N>>, RewriteError> {
-        if subgraph.subgraph.nodes.is_empty() {
-            return Err(RewriteError::EmptySubgraph);
-        }
+        rewrite: Rewrite<'a, Other, N, P>,
+    ) -> Result<(), RewriteError>;
+}
 
-        // TODO type check.
-        for direction in DIRECTIONS {
-            let subgraph_ports = &subgraph.ports[direction.index()];
-            let ports = &replacement.dangling[direction.index()];
-
-            if subgraph_ports.len() != ports.len() {
-                return Err(RewriteError::BoundarySize);
-            }
-        }
-
-        let removed = self.remove_subgraph(&subgraph);
-
-        // insert new graph and update edge references accordingly
-        let (_, mut edge_map) = self.insert_graph(replacement.graph);
-
-        for direction in DIRECTIONS {
-            let subg_ports = &subgraph.ports[direction.index()];
-            let repl_ports = &replacement.dangling[direction.index()];
-
-            for (sub_port, repl_port) in subg_ports.iter().zip(repl_ports) {
-                // TODO: There should be a check to make sure this can not fail
-                // before we merge the first edge to avoid leaving the graph in an
-                // invalid state.
-                self.merge_edges(port_map[repl_edge], *sub_port).unwrap();
-                // Update edge_map to point to new merged edge
-                if let Some(e) = port_map.get_mut(repl_port) {
-                    *e = *sub_port;
-                }
-            }
-        }
-
-        Ok(removed)
+impl<'a, G, N, P> Substitute<'a, N, P> for G
+where
+    G: Graph<'a, N, P>,
+    N: 'a + Clone,
+    P: 'a + Clone,
+{
+    fn apply_rewrite<Other: Graph<'a, N, P> + Sized>(
+        &mut self,
+        rewrite: Rewrite<'a, Other, N, P>,
+    ) -> Result<(), RewriteError> {
+        rewrite.replace_subgraph(self).map(|_| ())
     }
-
-    pub fn apply_rewrite(&mut self, rewrite: Rewrite<N, P>) -> Result<(), RewriteError> {
-        self.replace_subgraph(rewrite.subg, rewrite.replacement)?;
-        Ok(())
-    }
-    */
 }
 
 #[derive(Debug, Error)]
@@ -185,6 +38,232 @@ pub enum RewriteError {
     EmptySubgraph,
     #[error("boundary size mismatch")]
     BoundarySize,
+}
+
+/// A subgraph defined as a subset of the nodes in a graph.
+#[derive(Debug, Clone)]
+pub struct SubgraphRef {
+    nodes: BitVec,
+}
+
+impl SubgraphRef {
+    /// Creates a new subgraph from a bit mask of nodes.
+    pub fn new(nodes: BitVec) -> Self {
+        Self { nodes }
+    }
+
+    /// Creates a new subgraph from a set of node indices.
+    /// Optionally, the number of nodes in the graph can be specified to pre-allocate space.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the number of nodes is specified and the indices are out of bounds.
+    pub fn new_from_indices(
+        indices: impl IntoIterator<Item = NodeIndex>,
+        num_nodes: Option<usize>,
+    ) -> Self {
+        let mut nodes = if let Some(capacity) = num_nodes {
+            bitvec![0; capacity]
+        } else {
+            BitVec::new()
+        };
+        for node in indices {
+            if num_nodes.is_none() {
+                if nodes.len() <= node.index() {
+                    nodes.resize(node.index() + 1, false);
+                }
+            } else {
+                debug_assert!(nodes.len() > node.index());
+            }
+            nodes.set(node.index(), true);
+        }
+        Self::new(nodes)
+    }
+
+    /// Returns the indices of the nodes in the subgraph.
+    pub fn nodes(&self) -> impl Iterator<Item = NodeIndex> + '_ {
+        self.nodes
+            .iter_ones()
+            .map(|index| NodeIndex::new(index as usize))
+    }
+}
+
+impl FromIterator<NodeIndex> for SubgraphRef {
+    fn from_iter<T: IntoIterator<Item = NodeIndex>>(iter: T) -> Self {
+        Self::new_from_indices(iter, None)
+    }
+}
+
+/// A subgraph defined as a subset of the nodes in a graph, and the ports outside of it that are connected to the subgraph.
+#[derive(Debug, Clone)]
+pub struct BoundedSubgraph {
+    pub subgraph: SubgraphRef,
+    pub incoming: Vec<PortIndex>,
+    pub outgoing: Vec<PortIndex>,
+}
+
+impl BoundedSubgraph {
+    /// Creates a new bounded subgraph from a subgraph and a set of ports.
+    pub fn new(subgraph: SubgraphRef, incoming: Vec<PortIndex>, outgoing: Vec<PortIndex>) -> Self {
+        Self {
+            subgraph,
+            incoming,
+            outgoing,
+        }
+    }
+
+    /// Creates a single-node bounded subgraph.
+    pub fn from_node<'a, N, P>(graph: &impl Graph<'a, N, P>, node: NodeIndex) -> Self
+    where
+        N: 'a + Clone,
+        P: 'a + Clone,
+    {
+        Self {
+            subgraph: [node].into_iter().collect(),
+            incoming: graph
+                .input_links(node)
+                .iter()
+                .filter_map(|link| *link)
+                .collect(),
+            outgoing: graph
+                .output_links(node)
+                .iter()
+                .filter_map(|link| *link)
+                .collect(),
+        }
+    }
+
+    /// Returns the indices of the nodes in the subgraph.
+    pub fn nodes(&self) -> impl Iterator<Item = NodeIndex> + '_ {
+        self.subgraph.nodes()
+    }
+
+    /// Checks if the subgraph is empty.
+    pub fn is_empty(&self) -> bool {
+        self.nodes().next().is_none()
+    }
+
+    /// Remove this subgraph from `graph` and return weights of the nodes.
+    fn remove_subgraph<'a, G, N, P>(&self, graph: &mut G) -> Vec<Option<N>>
+    where
+        G: Graph<'a, N, P>,
+        N: 'a + Clone,
+        P: 'a + Clone,
+    {
+        self.subgraph
+            .nodes()
+            .map(|n| graph.remove_node(n))
+            .collect()
+    }
+}
+
+/// A graph with explicit input and output ports.
+#[derive(Clone)]
+pub struct OpenGraph<'a, G, N, P> {
+    pub graph: G,
+    pub dangling_inputs: Vec<PortIndex>,
+    pub dangling_outputs: Vec<PortIndex>,
+    phantom: PhantomData<(&'a N, &'a P)>,
+}
+
+impl<'a, G, N, P> OpenGraph<'a, G, N, P>
+where
+    G: Graph<'a, N, P>,
+    N: Clone,
+    P: Clone,
+{
+    pub fn new(
+        graph: G,
+        dangling_inputs: Vec<PortIndex>,
+        dangling_outputs: Vec<PortIndex>,
+    ) -> Self {
+        Self {
+            graph,
+            dangling_inputs,
+            dangling_outputs,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<'a, G: Debug, N, P> Debug for OpenGraph<'a, G, N, P> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OpenGraph")
+            .field("graph", &self.graph)
+            .field("in_edges", &self.dangling_inputs)
+            .field("out_edges", &self.dangling_outputs)
+            .finish()
+    }
+}
+
+/// A rewrite operation that replaces a subgraph with another graph.
+#[derive(Debug, Clone)]
+pub struct Rewrite<'a, G, N, P> {
+    pub subgraph: BoundedSubgraph,
+    pub replacement: OpenGraph<'a, G, N, P>,
+}
+
+impl<'a, G, N, P> Rewrite<'a, G, N, P>
+where
+    G: Graph<'a, N, P>,
+    N: 'a + Clone,
+    P: 'a + Clone,
+{
+    pub fn new(subgraph: BoundedSubgraph, replacement: OpenGraph<'a, G, N, P>) -> Self {
+        Self {
+            subgraph,
+            replacement,
+        }
+    }
+
+    /// Replace a subgraph inside `graph` with a new graph.
+    /// Returns the weights of the nodes that were removed.
+    pub fn replace_subgraph<Other: Graph<'a, N, P> + Sized>(
+        self,
+        graph: &mut Other,
+    ) -> Result<Vec<Option<N>>, RewriteError> {
+        if self.subgraph.is_empty() {
+            return Err(RewriteError::EmptySubgraph);
+        }
+
+        // TODO type check.
+        if self.subgraph.incoming.len() != self.replacement.dangling_inputs.len()
+            || self.subgraph.outgoing.len() != self.replacement.dangling_outputs.len()
+        {
+            return Err(RewriteError::BoundarySize);
+        }
+
+        let removed = self.subgraph.remove_subgraph(graph);
+
+        // insert new graph and update edge references accordingly
+        let (_, port_map) = graph.insert_graph(self.replacement.graph);
+
+        for (repl_port, graph_port) in self
+            .replacement
+            .dangling_inputs
+            .iter()
+            .zip(self.subgraph.incoming)
+        {
+            let repl_port = port_map[repl_port];
+            graph
+                .link_ports(graph_port, repl_port)
+                .expect("Failed to link ports after rewrite");
+        }
+
+        for (repl_port, graph_port) in self
+            .replacement
+            .dangling_outputs
+            .iter()
+            .zip(self.subgraph.outgoing)
+        {
+            let repl_port = port_map[repl_port];
+            graph
+                .link_ports(repl_port, graph_port)
+                .expect("Failed to link ports after rewrite");
+        }
+
+        Ok(removed)
+    }
 }
 
 #[cfg(test)]

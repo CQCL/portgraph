@@ -1,6 +1,6 @@
 use crate::PortIndex;
 
-use super::graph::{Direction, EdgeIndex, Graph, NodeIndex, PortGraph, DIRECTIONS};
+use super::graph::{Direction, Graph, NodeIndex, PortGraph, DIRECTIONS};
 use bitvec::prelude::BitVec;
 use std::collections::BTreeSet;
 use std::fmt::{Debug, Display};
@@ -43,8 +43,8 @@ impl BoundedSubgraph {
 
     pub fn from_node<N, P>(graph: &PortGraph<N, P>, node: NodeIndex) -> Self
     where
-        N: Default,
-        P: Default,
+        N: Clone,
+        P: Clone,
     {
         Self {
             subgraph: [node].into_iter().collect(),
@@ -59,14 +59,14 @@ impl BoundedSubgraph {
 #[derive(Clone)]
 pub struct OpenGraph<N, P> {
     pub graph: PortGraph<N, P>,
-    pub dangling: [Vec<EdgeIndex>; 2],
+    pub dangling: [Vec<PortIndex>; 2],
 }
 
 impl<N, P> OpenGraph<N, P> {
     pub fn new(
         graph: PortGraph<N, P>,
-        in_ports: Vec<EdgeIndex>,
-        out_ports: Vec<EdgeIndex>,
+        in_ports: Vec<PortIndex>,
+        out_ports: Vec<PortIndex>,
     ) -> Self {
         Self {
             graph,
@@ -97,7 +97,11 @@ impl<N, P> Rewrite<N, P> {
     }
 }
 
-impl<N: Default + Debug + Display, P: Default + Debug + Display> PortGraph<N, P> {
+impl<N, P> PortGraph<N, P>
+where
+    N: Clone + Debug + Display,
+    P: Clone + Debug + Display,
+{
     /// Remove subgraph formed by subg and return weights of nodes inside subg
     #[allow(dead_code)] // TODO remove this
     fn remove_subgraph(&mut self, subgraph: &BoundedSubgraph) -> Vec<Option<N>> {
@@ -116,7 +120,7 @@ impl<N: Default + Debug + Display, P: Default + Debug + Display> PortGraph<N, P>
                     .collect();
 
                 for port in ports {
-                    self.disconnect_port(port);
+                    self.unlink_port(port);
                 }
 
                 self.remove_node(n)

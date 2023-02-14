@@ -94,6 +94,7 @@ impl std::fmt::Debug for PortIndex {
     }
 }
 
+#[deprecated]
 pub type EdgeIndex = (PortIndex, PortIndex);
 
 #[cfg(test)]

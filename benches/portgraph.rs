@@ -4,6 +4,10 @@ use criterion::{
 };
 use portgraph::graph::{Graph, GraphMut, PortGraph};
 
+/// Create line graph, connected with two parallel edges at each step.
+///
+/// o -2-> o -2-> o -2-> o -2-> o   ...
+///
 fn make_line_graph(size: usize) -> PortGraph<usize, isize> {
     let mut graph = PortGraph::with_capacity(size, size * 2);
     let mut prev_node = graph.add_node_with_ports(0, vec![], vec![-1, -2]);

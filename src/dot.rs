@@ -1,8 +1,14 @@
 use std::fmt::Display;
 
-use super::graph::{PortGraph, DIRECTIONS};
+use crate::PortIndex;
 
-pub fn dot_string<N: Display, E: Display>(graph: &PortGraph<N, E>) -> String {
+use super::graph::Graph;
+
+pub fn dot_string<'a, N, P>(graph: &'a impl Graph<'a, N, P>) -> String
+where
+    N: 'a + Display + Clone,
+    P: 'a + Display + Clone,
+{
     let mut s = String::new();
 
     s.push_str("digraph {\n");
@@ -10,47 +16,32 @@ pub fn dot_string<N: Display, E: Display>(graph: &PortGraph<N, E>) -> String {
     for n in graph.nodes_iter() {
         let node = graph.node_weight(n).expect("missing node");
         s.push_str(&format!("{} [label=\"{:}\"]\n", n.index(), node)[..]);
+        // TODO: Port weights
     }
 
-    let mut dangle_node_index = 0;
-    for p in graph.ports_iter() {
-        add_edge_str(graph, p, &mut s, &mut dangle_node_index);
+    for from in graph.ports_iter() {
+        let Some(to) = graph.port_link(from) else {continue};
+        add_edge_str(graph, from, to, &mut s);
     }
 
     s.push_str("}\n");
     s
 }
 
-fn add_edge_str<N: Display, E: Display>(
-    graph: &PortGraph<N, E>,
-    e: super::graph::EdgeIndex,
+fn add_edge_str<'a, N, P>(
+    graph: &impl Graph<'a, N, P>,
+    from: PortIndex,
+    to: PortIndex,
     dot_s: &mut String,
-    node_count: &mut usize,
-) {
-    let [(b, bp), (a, ap)] = DIRECTIONS.map(|dir| {
-        if let Some(n) = graph.edge_endpoint(e, dir) {
-            (
-                format!("{}", n.index()),
-                format!(
-                    "{}",
-                    graph
-                        .node_edges(n, dir)
-                        .enumerate()
-                        .find(|(_, oe)| *oe == e)
-                        .expect("missing edge")
-                        .0
-                ),
-            )
-        } else {
-            *node_count += 1;
-            let node_id = format!("_{}", *node_count - 1);
-            dot_s.push_str(&format!("{} [shape=point label=\"\"]\n", &node_id)[..]);
+) where
+    N: 'a + Display + Clone,
+    P: 'a + Display + Clone,
+{
+    let from_node = graph.port_node(from).expect("missing node").index();
+    let to_node = graph.port_node(to).expect("missing node").index();
+    let from_offset = graph.port_offset(from).expect("missing offset");
+    let to_offset = graph.port_offset(to).expect("missing offset");
 
-            (node_id, "".into())
-        }
-    });
-
-    let edge = graph.edge_weight(e).expect("missing edge");
-    let edge_s = format!("{a} -> {b} [label=\"({ap}, {bp}); {edge}\"]\n");
+    let edge_s = format!("{from_node} -> {to_node} [label=\"({from_offset}, {to_offset})\"]\n");
     dot_s.push_str(&edge_s[..])
 }

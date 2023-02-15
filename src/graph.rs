@@ -4,6 +4,7 @@ use std::iter;
 
 use thiserror::Error;
 
+use crate::hierarchy;
 use crate::weights::Weights;
 use crate::{hierarchy::Hierarchy, unweighted};
 
@@ -128,6 +129,16 @@ where
         self.ports(node, direction).nth(offset)
     }
 
+    /// Get the port offset in the corresponding node.
+    #[inline(always)]
+    #[must_use]
+    fn port_offset(
+        &self,
+        port: PortIndex,
+    ) -> Option<usize> {
+        self.unweighted().port_index(port)
+    }
+
     /// Get the input port index of a given node and offset.
     #[inline(always)]
     #[must_use]
@@ -177,8 +188,8 @@ where
     /// let node_a = graph.add_node((), 0, 2);
     /// let node_b = graph.add_node((), 1, 0);
     ///
-    /// let port_a = graph.outputs(node_a).next().unwrap();
-    /// let port_b = graph.inputs(node_b).next().unwrap().;
+    /// let port_a = graph.output(node_a, 0).unwrap();
+    /// let port_b = graph.input(node_b, 0).unwrap().;
     ///
     /// graph.link_ports(port_a, port_b).unwrap();
     ///
@@ -241,12 +252,6 @@ where
         todo!()
     }
 
-    /// Iterate over the node weights of a graph.
-    #[must_use]
-    fn node_weights_mut(&'a mut self) -> iter::Empty<(NodeIndex, &'a mut N)> {
-        todo!()
-    }
-
     /// Get the weight of a given port.
     #[inline(always)]
     #[must_use]
@@ -260,17 +265,67 @@ where
         todo!()
     }
 
-    /// Iterate over the port weights of a graph.
-    #[must_use]
-    fn port_weights_mut(&'a mut self) -> iter::Empty<(PortIndex, &'a mut N)> {
-        todo!()
-    }
-
     /// Get the port linked to the given port. Returns `None` if the port is not linked.
     #[inline(always)]
     #[must_use]
     fn port_link(&self, port: PortIndex) -> Option<PortIndex> {
         self.unweighted().port_link(port)
+    }
+
+    /// Whether the port is linked to the another port.
+    #[inline(always)]
+    #[must_use]
+    fn is_linked(&self, port: PortIndex) -> bool {
+        self.port_link(port).is_some()
+    }
+
+    /// Returns the number of children of a node in the hierarchy.
+    #[inline(always)]
+    #[must_use]
+    fn node_child_count(&self, node: NodeIndex) -> usize {
+        self.hierarchy().child_count(node)
+    }
+
+    /// Get the parent of a node in the hierarchy.
+    #[inline(always)]
+    #[must_use]
+    fn node_parent(&self, node: NodeIndex) -> Option<NodeIndex> {
+        self.hierarchy().parent(node)
+    }
+
+    /// Get the first child of a node in the hierarchy.
+    #[inline(always)]
+    #[must_use]
+    fn node_first_child(&self, node: NodeIndex) -> Option<NodeIndex> {
+        self.hierarchy().first(node)
+    }
+
+    /// Get the last child of a node in the hierarchy.
+    #[inline(always)]
+    #[must_use]
+    fn node_last_child(&self, node: NodeIndex) -> Option<NodeIndex> {
+        self.hierarchy().last(node)
+    }
+
+    /// Iterate over the children of a node in the hierarchy.
+    #[inline(always)]
+    #[must_use]
+    fn node_children(&self, node: NodeIndex) -> hierarchy::Children<'_> {
+        self.hierarchy().children(node)
+    }
+
+    /// Get the next sibling of a node in the hierarchy.
+    #[inline(always)]
+    #[must_use]
+    fn node_next_sibling(&self, node: NodeIndex) -> Option<NodeIndex> {
+        self.hierarchy().next(node)
+    }
+
+    /// Get the previous sibling of a node in the hierarchy.
+    #[inline(always)]
+    #[must_use]
+    fn node_prev_sibling(&self, node: NodeIndex) -> Option<NodeIndex> {
+        self.hierarchy().prev(node)
     }
 }
 
@@ -464,6 +519,18 @@ where
             rekey(old, new);
             weights.rekey_port(old, new);
         });
+    }
+
+    /// Iterate over the node weights of a graph.
+    #[must_use]
+    fn node_weights_mut(&'a mut self) -> iter::Empty<(NodeIndex, &'a mut N)> {
+        todo!()
+    }
+
+    /// Iterate over the port weights of a graph.
+    #[must_use]
+    fn port_weights_mut(&'a mut self) -> iter::Empty<(PortIndex, &'a mut N)> {
+        todo!()
     }
 }
 

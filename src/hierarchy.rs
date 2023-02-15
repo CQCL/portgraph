@@ -280,12 +280,12 @@ impl Hierarchy {
         self.get(node).siblings[1]
     }
 
-    /// Returns the previous sibiling in the node's parent, if any.
+    /// Returns the previous sibling in the node's parent, if any.
     ///
     /// Also returns `None` if the node is a root.
     #[inline]
     pub fn prev(&self, node: NodeIndex) -> Option<NodeIndex> {
-        self.get(node).siblings[1]
+        self.get(node).siblings[0]
     }
 
     /// Iterates over the node's children.

@@ -1,6 +1,6 @@
 use std::num::NonZeroU32;
 
-//pub mod dot;
+pub mod dot;
 #[allow(clippy::module_inception)]
 pub mod graph;
 pub mod hierarchy;
@@ -66,7 +66,7 @@ impl NodeIndex {
 
 impl std::fmt::Debug for NodeIndex {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // avoid unncessary newlines in alternate mode
+        // avoid unnecessary newlines in alternate mode
         write!(f, "NodeIndex({})", self.index())
     }
 }
@@ -93,6 +93,3 @@ impl std::fmt::Debug for PortIndex {
         write!(f, "PortIndex({})", self.index())
     }
 }
-
-#[deprecated]
-pub type EdgeIndex = (PortIndex, PortIndex);

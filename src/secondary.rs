@@ -153,7 +153,7 @@ where
 impl<K, V> Default for SecondaryMap<K, V>
 where
     K: Into<usize> + Copy,
-    V: Clone,
+    V: Clone + Default,
 {
     fn default() -> Self {
         Self::new()

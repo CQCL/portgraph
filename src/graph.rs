@@ -171,45 +171,6 @@ where
         self.unweighted().ports(node, Direction::Outgoing)
     }
 
-    /// Slice of all the links of the `node` in the given `direction`. When the
-    /// corresponding node port is linked to another one, the Option contains
-    /// the index of the other port.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use graph::PortGraph;
-    ///
-    /// let mut graph = PortGraph::new();
-    ///
-    /// let node_a = graph.add_node((), 0, 2);
-    /// let node_b = graph.add_node((), 1, 0);
-    ///
-    /// let port_a = graph.output(node_a, 0).unwrap();
-    /// let port_b = graph.input(node_b, 0).unwrap().;
-    ///
-    /// graph.link_ports(port_a, port_b).unwrap();
-    ///
-    /// assert_eq!(graph.links(node_a, graph::Direction::Outgoing), &[Some(port_b), None]);
-    /// assert_eq!(graph.links(node_b, graph::Direction::Incoming), &[Some(port_a)]);
-    /// ```
-    #[inline]
-    fn links(&self, node: NodeIndex, direction: Direction) -> &[Option<PortIndex>] {
-        self.unweighted().links(node, direction)
-    }
-
-    /// Slice of all the input links of the `node`. Shorthand for [`Graph::links`].
-    #[inline]
-    fn input_links(&self, node: NodeIndex) -> &[Option<PortIndex>] {
-        self.unweighted().input_links(node)
-    }
-
-    /// Slice of all the output links of the `node`. Shorthand for [`Graph::links`].
-    #[inline]
-    fn output_links(&self, node: NodeIndex) -> &[Option<PortIndex>] {
-        self.unweighted().output_links(node)
-    }
-
     /// Iterate over all the edges connected to a given node.
     #[inline(always)]
     #[must_use]
@@ -222,8 +183,11 @@ where
     fn connected(&self, from: NodeIndex, to: NodeIndex) -> Option<(PortIndex, PortIndex)> {
         self.outputs(from)
             .filter_map(|from_port| {
-                self.port_link(from_port)
-                    .filter(|to_port| self.port_node(*to_port) == Some(to))
+                self.port_links(from_port)
+                    .find(|to_port| {
+                        self.port_node(*to_port) == Some(to)
+                            && self.port_direction(*to_port) == Some(Direction::Outgoing)
+                    })
                     .map(|to_port| (from_port, to_port))
             })
             .next()
@@ -234,6 +198,13 @@ where
     #[must_use]
     fn port_node(&self, port: PortIndex) -> Option<NodeIndex> {
         self.unweighted().port_node(port)
+    }
+
+    /// Get the direction of a given port.
+    #[inline(always)]
+    #[must_use]
+    fn port_direction(&self, port: PortIndex) -> Option<Direction> {
+        self.unweighted().port_direction(port)
     }
 
     /// Get the weight of a given node.
@@ -262,18 +233,18 @@ where
         todo!()
     }
 
-    /// Get the port linked to the given port. Returns `None` if the port is not linked.
+    /// Get the ports linked to the given port.
     #[inline(always)]
     #[must_use]
-    fn port_link(&self, port: PortIndex) -> Option<PortIndex> {
-        self.unweighted().port_link(port)
+    fn port_links(&self, port: PortIndex) -> unweighted::PortLinks<'_> {
+        self.unweighted().port_links(port)
     }
 
-    /// Whether the port is linked to the another port.
+    /// Whether the port is linked to another port.
     #[inline(always)]
     #[must_use]
     fn is_linked(&self, port: PortIndex) -> bool {
-        self.port_link(port).is_some()
+        self.port_links(port).next().is_some()
     }
 
     /// Returns the number of children of a node in the hierarchy.
@@ -482,10 +453,9 @@ where
         Ok((from_port, to_port))
     }
 
-    /// Unlinks the `port` and returns the port it was linked to. Returns `None`
-    /// when the port was not linked.
+    /// Unlinks the `port`.    
     #[inline(always)]
-    fn unlink_port(&mut self, port: PortIndex) -> Option<PortIndex> {
+    fn unlink_port(&mut self, port: PortIndex) {
         self.unweighted_mut().unlink_port(port)
     }
 
@@ -677,9 +647,9 @@ mod tests {
         assert_eq!(g.port_weight(port_map[&p4in]), Some(&-3));
 
         // Check links
-        assert_eq!(g.port_link(p0out), Some(p1in));
-        assert_eq!(g.port_link(p1out), Some(p2in));
-        assert_eq!(g.port_link(port_map[&p3out]), Some(port_map[&p4in]));
+        assert!(g.port_links(p0out).eq([p1in]));
+        assert!(g.port_links(p1out).eq([p2in]));
+        assert!(g.port_links(port_map[&p3out]).eq([port_map[&p4in]]));
     }
 
     #[test]

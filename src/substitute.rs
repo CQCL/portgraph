@@ -1,5 +1,5 @@
 use crate::graph::LinkError;
-use crate::PortIndex;
+use crate::{Direction, PortIndex};
 
 use super::graph::{Graph, GraphMut, NodeIndex};
 use bitvec::bitvec;
@@ -122,14 +122,14 @@ impl BoundedSubgraph {
         Self {
             subgraph: [node].into_iter().collect(),
             incoming: graph
-                .input_links(node)
-                .iter()
-                .filter_map(|link| *link)
+                .inputs(node)
+                .flat_map(|port| graph.port_links(port))
+                .filter(|link| graph.port_direction(*link) == Some(Direction::Outgoing))
                 .collect(),
             outgoing: graph
-                .output_links(node)
-                .iter()
-                .filter_map(|link| *link)
+                .outputs(node)
+                .flat_map(|port| graph.port_links(port))
+                .filter(|link| graph.port_direction(*link) == Some(Direction::Incoming))
                 .collect(),
         }
     }

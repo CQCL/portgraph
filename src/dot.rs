@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::PortIndex;
+use crate::{Direction, PortIndex};
 
 use super::graph::Graph;
 
@@ -17,11 +17,15 @@ where
         let node = graph.node_weight(n).expect("missing node");
         s.push_str(&format!("{} [label=\"{:}\"]\n", n.index(), node)[..]);
         // TODO: Port weights
-    }
+        // TODO: Render hyperedges properly
 
-    for from in graph.ports_iter() {
-        let Some(to) = graph.port_link(from) else {continue};
-        add_edge_str(graph, from, to, &mut s);
+        for from in graph.ports(n, Direction::Outgoing) {
+            for to in graph.port_links(from) {
+                if graph.port_direction(to) == Some(Direction::Incoming) {
+                    add_edge_str(graph, from, to, &mut s);
+                }
+            }
+        }
     }
 
     s.push_str("}\n");

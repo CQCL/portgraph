@@ -1,10 +1,10 @@
 use std::{
     iter::FusedIterator,
-    mem::{replace, take},
+    mem::{replace, swap, take},
     num::NonZeroU32,
 };
 
-use crate::{graph::Direction, NodeIndex, PortIndex};
+use crate::{Direction, NodeIndex, PortIndex, DIRECTIONS};
 use thiserror::Error;
 
 #[derive(Clone)]
@@ -50,8 +50,8 @@ impl UnweightedGraph {
     /// # Example
     ///
     /// ```
-    /// # use portgraph::portgraph::UnweightedGraph;
-    /// # use portgraph::graph::Direction;
+    /// # use portgraph::unweighted::UnweightedGraph;
+    /// # use portgraph::Direction;
     /// let mut g = UnweightedGraph::new();
     /// let node = g.add_node(4, 3);
     /// assert_eq!(g.inputs(node).count(), 4);
@@ -108,7 +108,13 @@ impl UnweightedGraph {
                 let i = port.index();
                 self.port_meta[(i + incoming..i + size)].fill(meta_outgoing);
                 self.port_meta[(i..i + incoming)].fill(meta_incoming);
-                self.port_link[(i..i + size)].fill(None);
+
+                self.port_link
+                    .iter_mut()
+                    .enumerate()
+                    .skip(i)
+                    .take(size)
+                    .for_each(|(port_index, target)| *target = Some(PortIndex::new(port_index)));
 
                 port
             }
@@ -120,7 +126,10 @@ impl UnweightedGraph {
                 self.port_meta.reserve(size);
                 self.port_meta.resize(old_len + incoming, meta_incoming);
                 self.port_meta.resize(old_len + size, meta_outgoing);
-                self.port_link.resize(old_len + size, None);
+
+                self.port_link.extend(
+                    (old_len..old_len + size).map(|port_index| Some(PortIndex::new(port_index))),
+                );
 
                 port
             }
@@ -133,8 +142,8 @@ impl UnweightedGraph {
     /// # Example
     ///
     /// ```
-    /// # use portgraph::portgraph::UnweightedGraph;
-    /// # use portgraph::graph::Direction;
+    /// # use portgraph::unweighted::UnweightedGraph;
+    /// # use portgraph::Direction;
     /// let mut g = UnweightedGraph::new();
     /// let node0 = g.add_node(1, 1);
     /// let node1 = g.add_node(1, 1);
@@ -142,8 +151,8 @@ impl UnweightedGraph {
     /// g.link_ports(g.outputs(node1).nth(0).unwrap(), g.inputs(node0).nth(0).unwrap());
     /// g.remove_node(node0);
     /// assert!(!g.contains_node(node0));
-    /// assert!(g.port_link(g.outputs(node1).nth(0).unwrap()).is_none());
-    /// assert!(g.port_link(g.inputs(node1).nth(0).unwrap()).is_none());
+    /// assert_eq!(g.port_links(g.outputs(node1).nth(0).unwrap()).count(), 0);
+    /// assert_eq!(g.port_links(g.inputs(node1).nth(0).unwrap()).count(), 0);
     /// ```
     pub fn remove_node(&mut self, node: NodeIndex) {
         let Some(node_meta) = self.node_meta.get(node.index()).copied() else {
@@ -154,6 +163,12 @@ impl UnweightedGraph {
             return;
         }
 
+        for direction in DIRECTIONS {
+            for port in self.ports(node, direction) {
+                self.unlink_port(port);
+            }
+        }
+
         self.free_node(node);
 
         self.node_count -= 1;
@@ -161,18 +176,6 @@ impl UnweightedGraph {
         if let Some(port_list) = node_meta.port_list() {
             let size = node_meta.incoming() as usize + node_meta.outgoing() as usize;
             self.port_count -= size;
-
-            assert!(port_list.index() + size <= self.port_link.len());
-            assert!(port_list.index() + size <= self.port_meta.len());
-
-            for i in port_list.index()..port_list.index() + size {
-                self.port_meta[i] = PortMeta::new_free();
-
-                if let Some(link) = self.port_link[i] {
-                    self.port_link[link.index()] = None;
-                }
-            }
-
             self.free_ports(port_list, size);
         }
     }
@@ -196,71 +199,82 @@ impl UnweightedGraph {
 
         let ports_free = &mut self.port_free[size - 1];
 
-        self.port_meta[ports.index()] = PortMeta::new_free();
+        for port_index in ports.index()..ports.index() + size {
+            self.port_meta[port_index] = PortMeta::new_free();
+        }
+
         self.port_link[ports.index()] = replace(ports_free, Some(ports));
     }
 
-    /// Link an output port to an input port.
+    /// Link two node ports together.
+    ///
+    /// When the ports are already linked, a hyperedge is formed.
     ///
     /// # Example
     ///
     /// ```
-    /// # use portgraph::portgraph::UnweightedGraph;
-    /// # use portgraph::graph::Direction;
+    /// # use portgraph::unweighted::UnweightedGraph;
+    /// # use portgraph::Direction;
     /// let mut g = UnweightedGraph::new();
     /// let node0 = g.add_node(0, 1);
     /// let node1 = g.add_node(1, 0);
     /// let node0_output = g.outputs(node0).nth(0).unwrap();
     /// let node1_input = g.inputs(node1).nth(0).unwrap();
     /// g.link_ports(node0_output, node1_input).unwrap();
-    /// assert_eq!(g.port_link(node0_output), Some(node1_input));
-    /// assert_eq!(g.port_link(node1_input), Some(node0_output));
+    /// assert!(g.port_links(node0_output).eq([node1_input]));
+    /// assert!(g.port_links(node1_input).eq([node0_output]));
     /// ```
     ///
     /// # Errors
     ///
-    ///  - When `port_from` or `port_to` does not exist.
-    ///  - When `port_from` is not an output port.
-    ///  - When `port_to` is not an input port.
-    ///  - When `port_from` or `port_to` is already linked.
+    ///  Fails when `port_from` or `port_to` does not exist.
     pub fn link_ports(
         &mut self,
         port_from: PortIndex,
         port_to: PortIndex,
     ) -> Result<(), LinkError> {
-        let Some(meta_from) = self.port_meta_valid(port_from) else {
+        if self.port_meta_valid(port_from).is_none() {
             return Err(LinkError::UnknownPort(port_from));
         };
 
-        let Some(meta_to) = self.port_meta_valid(port_to) else {
-            return Err(LinkError::UnknownPort(port_from));
+        if self.port_meta_valid(port_to).is_none() {
+            return Err(LinkError::UnknownPort(port_to));
         };
 
-        if meta_from.direction() != Direction::Outgoing {
-            return Err(LinkError::UnexpectedDirection(port_from));
-        } else if meta_to.direction() != Direction::Incoming {
-            return Err(LinkError::UnexpectedDirection(port_to));
+        // if meta_from.direction() != Direction::Outgoing {
+        //     return Err(LinkError::UnexpectedDirection(port_from));
+        // } else if meta_to.direction() != Direction::Incoming {
+        //     return Err(LinkError::UnexpectedDirection(port_to));
+        // }
+
+        // if self.port_link[port_from.index()].is_some() {
+        //     return Err(LinkError::AlreadyLinked(port_from));
+        // } else if self.port_link[port_to.index()].is_some() {
+        //     return Err(LinkError::AlreadyLinked(port_to));
+        // }
+
+        if self.port_links(port_from).any(|p| p == port_to) {
+            return Ok(());
         }
 
-        if self.port_link[port_from.index()].is_some() {
-            return Err(LinkError::AlreadyLinked(port_from));
-        } else if self.port_link[port_to.index()].is_some() {
-            return Err(LinkError::AlreadyLinked(port_to));
-        }
-
-        self.port_link[port_from.index()] = Some(port_to);
-        self.port_link[port_to.index()] = Some(port_from);
+        self.port_link.swap(port_from.index(), port_to.index());
 
         Ok(())
     }
 
-    /// Unlinks the `port` and returns the port it was linked to. Returns `None`
-    /// when the port was not linked.
-    pub fn unlink_port(&mut self, port: PortIndex) -> Option<PortIndex> {
-        self.port_meta_valid(port)?;
-        let linked = take(&mut self.port_link[port.index()])?;
-        self.port_link[linked.index()] = None;
-        Some(linked)
+    /// Unlinks the `port`.
+    pub fn unlink_port(&mut self, port: PortIndex) {
+        if self.port_meta_valid(port).is_none() {
+            return;
+        };
+
+        // Find the predecessor
+        let Some(prev) = self.port_links(port).last() else {
+            return;
+        };
+
+        self.port_link[prev.index()] = self.port_link[port.index()];
+        self.port_link[port.index()] = Some(port);
     }
 
     /// Returns the direction of the `port`.
@@ -293,11 +307,22 @@ impl UnweightedGraph {
         Some(port_index)
     }
 
-    /// Returns the port that the given `port` is linked to.
+    /// Returns the ports that the given `port` is linked to.
     #[inline]
-    pub fn port_link(&self, port: PortIndex) -> Option<PortIndex> {
-        self.port_meta_valid(port)?;
-        self.port_link[port.index()]
+    pub fn port_links(&self, port: PortIndex) -> PortLinks<'_> {
+        if self.port_meta_valid(port).is_none() {
+            return PortLinks {
+                graph: self,
+                next: None,
+                first: None,
+            };
+        }
+
+        PortLinks {
+            graph: self,
+            next: self.port_link[port.index()],
+            first: Some(port),
+        }
     }
 
     /// Iterates over all the ports of the `node` in the given `direction`.
@@ -336,64 +361,6 @@ impl UnweightedGraph {
     #[inline]
     pub fn outputs(&self, node: NodeIndex) -> NodePorts {
         self.ports(node, Direction::Outgoing)
-    }
-
-    /// Slice of all the links of the `node` in the given `direction`. When the
-    /// corresponding node port is linked to another one, the Option contains
-    /// the index of the other port.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use unweighted::UnweightedGraph;
-    ///
-    /// let mut graph = UnweightedGraph::new();
-    ///
-    /// let node_a = graph.add_node(0, 2);
-    /// let node_b = graph.add_node(1, 0);
-    ///
-    /// let port_a = graph.outputs(node_a).next().unwrap();
-    /// let port_b = graph.inputs(node_b).next().unwrap().;
-    ///
-    /// graph.link_ports(port_a, port_b).unwrap();
-    ///
-    /// assert_eq!(graph.links(node_a, graph::Direction::Outgoing), &[Some(port_b), None]);
-    /// assert_eq!(graph.links(node_b, graph::Direction::Incoming), &[Some(port_a)]);
-    /// ```
-    #[inline]
-    pub fn links(&self, node: NodeIndex, direction: Direction) -> &[Option<PortIndex>] {
-        let Some(node_meta) = self.node_meta_valid(node) else {
-            return &[];
-        };
-
-        let Some(port_list) = node_meta.port_list() else {
-            return &[];
-        };
-
-        match direction {
-            Direction::Incoming => {
-                let start = port_list.index();
-                let stop = start + node_meta.incoming() as usize;
-                &self.port_link[start..stop]
-            }
-            Direction::Outgoing => {
-                let start = port_list.index() + node_meta.incoming() as usize;
-                let stop = start + node_meta.outgoing() as usize;
-                &self.port_link[start..stop]
-            }
-        }
-    }
-
-    /// Slice of all the input links of the `node`. Shorthand for [`UnweightedGraph::links`].
-    #[inline]
-    pub fn input_links(&self, node: NodeIndex) -> &[Option<PortIndex>] {
-        self.links(node, Direction::Incoming)
-    }
-
-    /// Slice of all the output links of the `node`. Shorthand for [`UnweightedGraph::links`].
-    #[inline]
-    pub fn output_links(&self, node: NodeIndex) -> &[Option<PortIndex>] {
-        self.links(node, Direction::Outgoing)
     }
 
     /// Returns whether the port graph contains the `node`.
@@ -524,18 +491,14 @@ impl UnweightedGraph {
     where
         F: FnMut(PortIndex, PortIndex),
     {
-        let mut old_index = 0;
-
-        self.port_link.retain(|_| {
-            let retain = !self.port_meta[old_index].is_free();
-            old_index += 1;
-            retain
-        });
-
+        // NOTE: Is there a way to do this without allocating the additional vector?
         let mut new_index = 0;
         let mut old_index = 0;
+        let mut old_to_new = Vec::with_capacity(self.port_meta.len());
 
         self.port_meta.retain(|port_meta| {
+            old_to_new.push(new_index);
+
             if port_meta.is_free() {
                 old_index += 1;
                 return false;
@@ -553,10 +516,22 @@ impl UnweightedGraph {
             }
 
             rekey(old_port, new_port);
-
             old_index += 1;
             new_index += 1;
             true
+        });
+
+        let mut old_index = 0;
+
+        self.port_link.retain_mut(|link| {
+            let retain = !self.port_meta[old_index].is_free();
+            old_index += 1;
+
+            if retain {
+                *link = Some(PortIndex::new(old_to_new[link.unwrap().index()]));
+            }
+
+            retain
         });
 
         self.port_free.clear();
@@ -710,7 +685,7 @@ mod debug {
     impl<'a> std::fmt::Debug for PortDebug<'a> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let direction = self.0.port_direction(self.1).unwrap();
-            let link = self.0.port_link(self.1);
+            let link = self.0.port_links(self.1).next();
             let node = self.0.port_node(self.1).unwrap();
 
             let mut fmt_struct = f.debug_struct("Port");
@@ -934,14 +909,37 @@ impl<'a> DoubleEndedIterator for Ports<'a> {
 
 impl<'a> FusedIterator for Ports<'a> {}
 
+pub struct PortLinks<'a> {
+    graph: &'a UnweightedGraph,
+    next: Option<PortIndex>,
+    first: Option<PortIndex>,
+}
+
+impl<'a> Iterator for PortLinks<'a> {
+    type Item = PortIndex;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.next == self.first {
+            return None;
+        }
+
+        let next = self.next?;
+        self.next = self.graph.port_link[next.index()];
+
+        Some(next)
+    }
+}
+
+impl<'a> FusedIterator for PortLinks<'a> {}
+
 #[derive(Debug, Clone, Error)]
 pub enum LinkError {
-    #[error("port is already linked")]
-    AlreadyLinked(PortIndex),
+    // #[error("port is already linked")]
+    // AlreadyLinked(PortIndex),
     #[error("unknown port")]
     UnknownPort(PortIndex),
-    #[error("unexpected port direction")]
-    UnexpectedDirection(PortIndex),
+    // #[error("unexpected port direction")]
+    // UnexpectedDirection(PortIndex),
 }
 
 #[cfg(test)]
@@ -969,12 +967,9 @@ mod test {
         let node1 = g.add_node(1, 1);
         let node0_input = g.inputs(node0).nth(0).unwrap();
         let node0_output = g.outputs(node0).nth(0).unwrap();
-        let node1_input = g.inputs(node1).nth(0).unwrap();
+        //let node1_input = g.inputs(node1).nth(0).unwrap();
         let node1_output = g.outputs(node1).nth(0).unwrap();
-        assert!(g.link_ports(node0_input, node1_input).is_err());
-        assert!(g.link_ports(node0_output, node1_output).is_err());
         g.link_ports(node0_output, node0_input).unwrap();
-        assert!(g.link_ports(node0_output, node1_input).is_err());
         g.unlink_port(node0_output);
         g.remove_node(node1);
         assert!(g.link_ports(node1_output, node0_input).is_err());

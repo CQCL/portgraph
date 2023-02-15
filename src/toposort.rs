@@ -56,8 +56,12 @@ impl<'graph> Iterator for TopoSort<'graph> {
         for port in self.graph.ports(node, self.direction) {
             self.remaining_ports.set(port.index(), false);
 
-            if let Some(link) = self.graph.port_link(port) {
-                self.remaining_ports.set(port.index(), false);
+            for link in self.graph.port_links(port) {
+                if self.graph.port_direction(link) == Some(self.direction) {
+                    continue;
+                }
+
+                self.remaining_ports.set(link.index(), false);
                 let target = self.graph.port_node(link).unwrap();
 
                 let target_ready = self

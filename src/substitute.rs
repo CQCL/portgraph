@@ -30,7 +30,7 @@ where
         &mut self,
         rewrite: Rewrite<'a, Other, N, P>,
     ) -> Result<(), RewriteError> {
-        rewrite.replace_subgraph(self).map(|_| ())
+        rewrite.apply(self).map(|_| ())
     }
 }
 
@@ -220,7 +220,7 @@ where
 
     /// Replace a subgraph inside `graph` with a new graph.
     /// Returns the weights of the nodes that were removed.
-    pub fn replace_subgraph<Other: Graph<'a, N, P> + Sized>(
+    pub fn apply<Other: Graph<'a, N, P> + Sized>(
         self,
         graph: &mut Other,
     ) -> Result<Vec<Option<N>>, RewriteError> {
@@ -271,50 +271,48 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
+    use std::collections::{HashSet, HashMap};
     use std::error::Error;
 
-    use crate::substitute::{BoundedSubgraph, OpenGraph};
-    use crate::{PortGraph, Graph};
+    use crate::substitute::{BoundedSubgraph, OpenGraph, Rewrite};
+    use crate::{PortGraph, Graph, NodeIndex};
 
     #[test]
     fn test_remove_subgraph() -> Result<(), Box<dyn Error>> {
         let mut g = PortGraph::<i8, i8>::with_capacity(3, 2);
 
-        let e1 = g.add_edge(-1);
-        let e2 = g.add_edge(-2);
-        let e3 = g.add_edge(-3);
+        let n0 = g.add_node(0, 0, 2);
+        let n1 = g.add_node(1, 1, 1);
+        let n2 = g.add_node(2, 2, 0);
 
-        let _ = g.add_node_with_edges(0, [], [e1, e3])?;
-        let n1 = g.add_node_with_edges(1, [e1], [e2])?;
-        let _ = g.add_node_with_edges(2, [e2, e3], [])?;
+        g.link_nodes(n0, 0, n1, 0)?;
+        g.link_nodes(n1, 0, n2, 0)?;
+        g.link_nodes(n0, 1, n2, 1)?;
 
         assert_eq!(g.node_count(), 3);
+        assert_eq!(g.port_count(), 6);
         assert_eq!(g.edge_count(), 3);
+
+        let p0 = g.output(n0, 0).unwrap();
+        let p1 = g.input(n2, 0).unwrap();
 
         let mut new_g = g.clone();
 
-        let rem_nodes = new_g.remove_subgraph(&BoundedSubgraph::new(
+        let rem_nodes = BoundedSubgraph::new(
             [n1].into_iter().collect(),
-            [vec![e1], vec![e2]],
-        ));
+            vec![p0], vec![p1],
+        ).remove_subgraph(&mut new_g);
 
         assert_eq!(rem_nodes, vec![Some(1)]);
 
-        let correct_weights: HashSet<_> = HashSet::from_iter([0, 2]);
+        let correct_weights: HashMap<NodeIndex, &i8> = HashMap::from_iter([(n0, &0), (n2, &2)]);
         assert_eq!(
-            HashSet::from_iter(new_g.node_weights().copied()),
+            HashMap::from_iter(new_g.node_weights()),
             correct_weights
         );
 
-        let correct_weights: HashSet<_> = HashSet::from_iter([-1, -2, -3]);
-        assert_eq!(
-            HashSet::from_iter(new_g.edge_weights().copied()),
-            correct_weights
-        );
-
-        assert_eq!(new_g.edge_count(), 3);
         assert_eq!(new_g.node_count(), 2);
+        assert_eq!(new_g.edge_count(), 1);
 
         Ok(())
     }
@@ -324,12 +322,12 @@ mod tests {
         let mut g = {
             let mut g = PortGraph::<i8, i8>::with_capacity(3, 2);
 
-            let e1 = g.add_edge(-1);
-            let e2 = g.add_edge(-2);
+            let n0 = g.add_node(0, 0, 1);
+            let n1 = g.add_node(1, 1, 1);
+            let n2 = g.add_node(2, 1, 0);
 
-            let _ = g.add_node_with_edges(0, [], [e1])?;
-            let _ = g.add_node_with_edges(1, [e1], [e2])?;
-            let _ = g.add_node_with_edges(2, [e2], [])?;
+            g.link_nodes(n0, 0, n1, 0)?;
+            g.link_nodes(n1, 0, n2, 0)?;
 
             g
         };
@@ -337,27 +335,24 @@ mod tests {
         let g2 = {
             let mut g2 = PortGraph::<i8, i8>::with_capacity(2, 1);
 
-            let e3 = g2.add_edge(-3);
+            let n3 = g2.add_node(3, 0, 1);
+            let n4 = g2.add_node(4, 1, 0);
 
-            let _ = g2.add_node_with_edges(3, [], [e3])?;
-            let _ = g2.add_node_with_edges(4, [e3], [])?;
+            g2.link_nodes(n3, 0, n4, 0)?;
 
             g2
         };
 
-        g.insert_graph(g2);
+        g.insert_graph(g2, |_, _| {}, |_, _| {});
 
         let correct_weights: HashSet<_> = HashSet::from_iter([0, 1, 2, 3, 4].into_iter());
         assert_eq!(
-            HashSet::from_iter(g.node_weights().copied()),
+            HashSet::from_iter(g.node_weights().map(|(_, w)| *w)),
             correct_weights
         );
 
-        let correct_weights: HashSet<_> = HashSet::from_iter([-1, -2, -3].into_iter());
-        assert_eq!(
-            HashSet::from_iter(g.edge_weights().copied()),
-            correct_weights
-        );
+        assert_eq!(g.node_count(), 5);
+        assert_eq!(g.edge_count(), 3);
 
         Ok(())
     }
@@ -366,40 +361,39 @@ mod tests {
     fn test_replace_subgraph() -> Result<(), Box<dyn Error>> {
         let mut g = PortGraph::<i8, i8>::with_capacity(3, 2);
 
-        let e1 = g.add_edge(-1);
-        let e2 = g.add_edge(-2);
-        let e3 = g.add_edge(-3);
+        let n0 = g.add_node(0, 0, 2);
+        let n1 = g.add_node(1, 1, 1);
+        let n2 = g.add_node(2, 2, 0);
 
-        let _ = g.add_node_with_edges(0, [], [e1, e3])?;
-        let n1 = g.add_node_with_edges(1, [e1], [e2])?;
-        let _ = g.add_node_with_edges(2, [e2, e3], [])?;
+        g.link_nodes(n0, 0, n1, 0)?;
+        g.link_nodes(n1, 0, n2, 0)?;
+
+        let p0 = g.output(n0, 0).unwrap();
+        let p1 = g.input(n2, 0).unwrap();
 
         let mut g2 = PortGraph::<i8, i8>::with_capacity(2, 1);
         // node to be inserted
-        let e4 = g2.add_edge(-4);
-        let e5 = g2.add_edge(-5);
-        let _ = g2.add_node_with_edges(3, [e4], [e5])?;
+        let n3 = g2.add_node(3, 1, 1);
+        let p2 = g2.input(n3, 0).unwrap();
+        let p3 = g2.output(n3, 0).unwrap();
 
-        let rem_nodes = g
-            .replace_subgraph(
-                BoundedSubgraph::new([n1].into_iter().collect(), [vec![e1], vec![e2]]),
-                OpenGraph::new(g2, vec![e4], vec![e5]),
-            )
-            .unwrap();
+        let rewrite = Rewrite::new(
+                BoundedSubgraph::new([n1].into_iter().collect(), vec![p0], vec![p1]),
+                OpenGraph::new(g2, vec![p2], vec![p3]),
+            );
+
+        let rem_nodes = rewrite.apply(&mut g)?;
 
         assert_eq!(rem_nodes, vec![Some(1)]);
 
         let correct_weights: HashSet<_> = HashSet::from_iter([0, 2, 3]);
         assert_eq!(
-            HashSet::from_iter(g.node_weights().copied()),
+            HashSet::from_iter(g.node_weights().map(|(_, w)| *w)),
             correct_weights
         );
 
-        let correct_weights: HashSet<_> = HashSet::from_iter([-1, -2, -3]);
-        assert_eq!(
-            HashSet::from_iter(g.edge_weights().copied()),
-            correct_weights
-        );
+        assert_eq!(g.node_count(), 3);
+        assert_eq!(g.edge_count(), 2);
 
         Ok(())
     }

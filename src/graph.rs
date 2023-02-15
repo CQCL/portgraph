@@ -1,5 +1,7 @@
 //! Main graph data structure, with components for adjacency, weights, and hierarchical structures.
 
+use std::iter;
+
 use thiserror::Error;
 
 use crate::weights::Weights;
@@ -151,14 +153,14 @@ where
     /// Get the input port index of a given node and offset.
     #[inline(always)]
     #[must_use]
-    fn input_index(&self, node: NodeIndex, offset: usize) -> Option<PortIndex> {
+    fn input(&self, node: NodeIndex, offset: usize) -> Option<PortIndex> {
         self.port_index(node, offset, Direction::Incoming)
     }
 
     /// Get the output port index of a given node and offset.
     #[inline(always)]
     #[must_use]
-    fn output_index(&self, node: NodeIndex, offset: usize) -> Option<PortIndex> {
+    fn output(&self, node: NodeIndex, offset: usize) -> Option<PortIndex> {
         self.port_index(node, offset, Direction::Outgoing)
     }
 
@@ -268,6 +270,18 @@ where
         self.weights_mut().set_node(node, weight);
     }
 
+    /// Iterate over the node weights of a graph.
+    #[must_use]
+    fn node_weights(&'a self) -> iter::Empty<(NodeIndex, &'a N)> {
+        todo!()
+    }
+
+    /// Iterate over the node weights of a graph.
+    #[must_use]
+    fn node_weights_mut(&'a mut self) -> iter::Empty<(NodeIndex, &'a mut N)> {
+        todo!()
+    }
+
     /// Get the weight of a given port.
     #[inline(always)]
     #[must_use]
@@ -286,6 +300,18 @@ where
     #[inline(always)]
     fn set_port_weight(&mut self, port: PortIndex, weight: P) {
         self.weights_mut().set_port(port, weight);
+    }
+
+    /// Iterate over the port weights of a graph.
+    #[must_use]
+    fn port_weights(&'a self) -> iter::Empty<(PortIndex, &'a N)> {
+        todo!()
+    }
+
+    /// Iterate over the port weights of a graph.
+    #[must_use]
+    fn port_weights_mut(&'a mut self) -> iter::Empty<(PortIndex, &'a mut N)> {
+        todo!()
     }
 
     /// Adds a node to the portgraph with a given number of input and output ports.
@@ -370,6 +396,15 @@ where
         self.unweighted_mut().link_ports(from, to)
     }
 
+    /// Link two nodes at an input and output port offset.
+    fn link_nodes(&mut self, from: NodeIndex, from_offset: usize, to: NodeIndex, to_offset: usize) -> Result<(PortIndex, PortIndex), LinkError> {
+        // TODO: The LinkError thrown when the offset is invalid requires a PortIndex, so we are forced to create (an invalid) one from the offset.
+        let from_port = self.output(from, from_offset).ok_or(LinkError::UnknownPort(PortIndex::new(from_offset)))?;
+        let to_port = self.input(to, to_offset).ok_or(LinkError::UnknownPort(PortIndex::new(to_offset)))?;
+        self.unweighted_mut().link_ports(from_port, to_port)?;
+        Ok((from_port, to_port))
+    }
+
     /// Unlinks the `port` and returns the port it was linked to. Returns `None`
     /// when the port was not linked.
     #[inline(always)]
@@ -393,7 +428,7 @@ where
     ///
     /// Every time a node is moved, the `rekey` function will be called with its old and new index.
     #[inline(always)]
-    fn compact_nodes<F>(&mut self, mut rekey: impl FnMut(NodeIndex, NodeIndex)) {
+    fn compact_nodes(&mut self, mut rekey: impl FnMut(NodeIndex, NodeIndex)) {
         let (unweighted, weights, hierarchy) = self.components_mut();
         unweighted.compact_nodes(|old, new| {
             rekey(old, new);
@@ -406,7 +441,7 @@ where
     ///
     /// Every time a port is moved, the `rekey` function will be called with its old and new index.
     #[inline(always)]
-    fn compact_ports<F>(&mut self, mut rekey: impl FnMut(PortIndex, PortIndex)) {
+    fn compact_ports(&mut self, mut rekey: impl FnMut(PortIndex, PortIndex)) {
         let (unweighted, weights, _) = self.components_mut();
         unweighted.compact_ports(|old, new| {
             rekey(old, new);
@@ -481,7 +516,7 @@ mod tests {
 
     #[test]
     fn empty() {
-        let mut graph: PortGraph<usize, usize> = PortGraph::new();
+        let graph: PortGraph<usize, usize> = PortGraph::new();
         assert_eq!(graph.node_count(), 0);
         assert_eq!(graph.port_count(), 0);
         assert!(graph.nodes_iter().next().is_none());
@@ -496,10 +531,10 @@ mod tests {
         let n1 = g.add_node_with_ports(1, vec![-1], vec![-2]);
         let n2 = g.add_node(2, 1, 0);
 
-        let p0out = g.output_index(n0, 0).unwrap();
-        let p1in = g.input_index(n1, 0).unwrap();
-        let p1out = g.output_index(n1, 0).unwrap();
-        let p2in = g.input_index(n2, 0).unwrap();
+        let p0out = g.output(n0, 0).unwrap();
+        let p1in = g.input(n1, 0).unwrap();
+        let p1out = g.output(n1, 0).unwrap();
+        let p2in = g.input(n2, 0).unwrap();
 
         g.link_ports(p0out, p1in).unwrap();
         g.link_ports(p1out, p2in).unwrap();
@@ -511,7 +546,7 @@ mod tests {
 
         let p3out = g2.outputs(n3).next().unwrap();
         let p4in = g2.inputs(n4).next().unwrap();
-        g.link_ports(p3out, p4in).unwrap();
+        g2.link_ports(p3out, p4in).unwrap();
 
         let mut node_map = HashMap::new();
         let mut port_map = HashMap::new();
@@ -569,22 +604,26 @@ mod tests {
 
         let n0 = g.add_node(0, 0, 2);
         let n1 = g.add_node(1, 1, 1);
-        let n2 = g.add_node(2, 2, 1);
+        let n2 = g.add_node(2, 2, 0);
+
+        assert_eq!(g.node_count(), 3);
+        assert_eq!(g.port_count(), 6);
+        assert_eq!(g.edge_count(), 0);
 
         g.link_ports(
-            g.output_index(n0, 0).unwrap(),
-            g.input_index(n1, 0).unwrap(),
+            g.output(n0, 0).unwrap(),
+            g.input(n1, 0).unwrap(),
         )
         .unwrap();
 
         g.link_ports(
-            g.output_index(n1, 0).unwrap(),
-            g.input_index(n2, 0).unwrap(),
+            g.output(n1, 0).unwrap(),
+            g.input(n2, 0).unwrap(),
         )
         .unwrap();
 
-        let p0 = g.output_index(n0, 1).unwrap();
-        let p2 = g.input_index(n2, 1).unwrap();
+        let p0 = g.output(n0, 1).unwrap();
+        let p2 = g.input(n2, 1).unwrap();
         g.link_ports(p0, p2).unwrap();
 
         assert_eq!(g.node_count(), 3);
@@ -597,9 +636,9 @@ mod tests {
         assert_eq!(g.port_count(), 2);
         assert_eq!(g.edge_count(), 1);
 
-        let mut node_map = HashMap::new();
-        let mut port_map = HashMap::new();
-        g.compact_nodes(|old, new| {
+        let mut node_map: HashMap<NodeIndex, NodeIndex> = HashMap::new();
+        let mut port_map: HashMap<PortIndex, PortIndex> = HashMap::new();
+        g.compact_nodes(|old: NodeIndex, new: NodeIndex| {
             node_map.insert(old, new);
         });
         g.compact_ports(|old, new| {

@@ -2,26 +2,18 @@ use criterion::{
     black_box, criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion,
     PlotConfiguration,
 };
-use portgraph::graph::PortGraph;
-use portgraph::Direction;
+use portgraph::graph::{Graph, GraphMut, PortGraph};
 
-fn make_line_graph(size: usize) -> PortGraph<usize, (usize, usize, usize)> {
+fn make_line_graph(size: usize) -> PortGraph<usize, isize> {
     let mut graph = PortGraph::with_capacity(size, size * 2);
-    let edge0 = graph.add_edge((0, 0, 1));
-    let edge1 = graph.add_edge((0, 0, 1));
-    let mut prev_node = graph.add_node_with_edges(0, [], [edge0, edge1]).unwrap();
+    let mut prev_node = graph.add_node_with_ports(0, vec![], vec![-1, -2]);
 
     for i in 1..size {
-        let mut node_edges = graph.node_edges(prev_node, Direction::Outgoing);
-        let edge_in0 = node_edges.next().unwrap();
-        let edge_in1 = node_edges.next().unwrap();
-        drop(node_edges);
-        let edge_out0 = graph.add_edge((i, i, i + 1));
-        let edge_out1 = graph.add_edge((i, i, i + 1));
-        let node = graph
-            .add_node_with_edges(i, [edge_in0, edge_in1], [edge_out0, edge_out1])
-            .unwrap();
-        prev_node = node;
+        let w = i as isize;
+        let new_node = graph.add_node_with_ports(i, vec![w, w + 1], vec![-w, -w - 1]);
+        graph.link_nodes(prev_node, 0, new_node, 0).unwrap();
+        graph.link_nodes(prev_node, 1, new_node, 1).unwrap();
+        prev_node = new_node;
     }
 
     graph
@@ -34,55 +26,44 @@ fn make_line_graph(size: usize) -> PortGraph<usize, (usize, usize, usize)> {
 /// v                    v
 /// o ---> o ---> o ---> o ---> o   ...
 ///
-fn make_two_track_dag(layers: usize) -> PortGraph<usize, usize, usize> {
-    let mut graph = PortGraph::with_capacity(layers, layers + layers / 3);
+fn make_two_track_dag(layers: usize) -> PortGraph<usize, isize> {
+    let mut graph = PortGraph::with_capacity(2 * layers, 6 * layers);
     if layers == 0 {
         return graph;
     } else if layers == 1 {
-        graph.add_node(0);
-        graph.add_node(1);
+        graph.add_node(0, 1, 1);
+        graph.add_node(1, 1, 1);
         return graph;
     }
 
-    let mut prev_edges = [graph.add_edge(0), graph.add_edge(1)];
-    graph.add_node_with_edges(0, [], [prev_edges[0]]).unwrap();
-    graph.add_node_with_edges(1, [], [prev_edges[1]]).unwrap();
+    let mut prev_nodes = [
+        graph.add_node_with_ports(0, vec![-1], vec![-1]),
+        graph.add_node_with_ports(0, vec![-2], vec![-2]),
+    ];
 
-    for layer in 1..(layers - 1) {
+    for layer in 1..layers {
         let i = layer * 2;
-        let new_edges = [graph.add_edge(i), graph.add_edge(i + 1)];
-        let node0 = graph
-            .add_node_with_edges(i, [prev_edges[0]], [new_edges[0]])
-            .unwrap();
-        let node1 = graph
-            .add_node_with_edges(i + 1, [prev_edges[1]], [new_edges[1]])
-            .unwrap();
+        let w = i as isize;
+        let new_nodes = [
+            graph.add_node_with_ports(i, vec![-w], vec![-w, w]),
+            graph.add_node_with_ports(i + 1, vec![-w - 1, w], vec![-w - 1]),
+        ];
+        graph.link_nodes(prev_nodes[0], 0, new_nodes[0], 0).unwrap();
+        graph.link_nodes(prev_nodes[1], 0, new_nodes[1], 0).unwrap();
         // Add an edge connecting both nodes every third layer
         if layer % 3 == 0 {
-            let edge = graph.add_edge(0);
-            graph
-                .connect(node0, edge, portgraph::Insert::Last, Direction::Outgoing)
-                .unwrap();
-            graph
-                .connect(node1, edge, portgraph::Insert::Last, Direction::Incoming)
-                .unwrap();
+            graph.link_nodes(new_nodes[0], 1, new_nodes[1], 1).unwrap();
         }
-        prev_edges = new_edges;
+        prev_nodes = new_nodes;
     }
-    graph
-        .add_node_with_edges(layers * 2 - 2, [prev_edges[0]], [])
-        .unwrap();
-    graph
-        .add_node_with_edges(layers * 2 - 1, [prev_edges[1]], [])
-        .unwrap();
 
     graph
 }
 
 /// Remove one every five nodes from the graph.
-fn remove_every_five(graph: &mut PortGraph<usize, usize, usize>) {
+fn remove_every_five<'a>(graph: &mut impl GraphMut<'a, usize, isize>) {
     let mut to_remove = Vec::new();
-    for (i, v) in graph.node_indices().enumerate() {
+    for (i, v) in graph.nodes_iter().enumerate() {
         if i % 5 == 0 {
             to_remove.push(v);
         }
@@ -93,13 +74,13 @@ fn remove_every_five(graph: &mut PortGraph<usize, usize, usize>) {
 }
 
 /// Remove nodes from the graph in an unordered way until it is empty.
-fn remove_all_unordered(graph: &mut PortGraph<usize, usize, usize>) {
+fn remove_all_unordered<'a>(graph: &mut impl GraphMut<'a, usize, isize>) {
     while graph.node_count() > 5 {
         remove_every_five(graph);
     }
     // Remove all remaining nodes
     while graph.node_count() > 0 {
-        graph.remove_node(graph.node_indices().next().unwrap());
+        graph.remove_node(graph.nodes_iter().next().unwrap());
     }
 }
 

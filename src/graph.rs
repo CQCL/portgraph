@@ -272,11 +272,10 @@ where
     fn port_link(&self, port: PortIndex) -> Option<PortIndex> {
         self.unweighted().port_link(port)
     }
-
 }
 
 /// Main weighted graph interface, mutable operations.
-pub trait GraphMut<'a, N = (), P = ()> : Graph<'a, N, P>
+pub trait GraphMut<'a, N = (), P = ()>: Graph<'a, N, P>
 where
     N: 'a + Clone,
     P: 'a + Clone,
@@ -405,10 +404,20 @@ where
     }
 
     /// Link two nodes at an input and output port offset.
-    fn link_nodes(&mut self, from: NodeIndex, from_offset: usize, to: NodeIndex, to_offset: usize) -> Result<(PortIndex, PortIndex), LinkError> {
+    fn link_nodes(
+        &mut self,
+        from: NodeIndex,
+        from_offset: usize,
+        to: NodeIndex,
+        to_offset: usize,
+    ) -> Result<(PortIndex, PortIndex), LinkError> {
         // TODO: The LinkError thrown when the offset is invalid requires a PortIndex, so we are forced to create (an invalid) one from the offset.
-        let from_port = self.output(from, from_offset).ok_or(LinkError::UnknownPort(PortIndex::new(from_offset)))?;
-        let to_port = self.input(to, to_offset).ok_or(LinkError::UnknownPort(PortIndex::new(to_offset)))?;
+        let from_port = self
+            .output(from, from_offset)
+            .ok_or(LinkError::UnknownPort(PortIndex::new(from_offset)))?;
+        let to_port = self
+            .input(to, to_offset)
+            .ok_or(LinkError::UnknownPort(PortIndex::new(to_offset)))?;
         self.unweighted_mut().link_ports(from_port, to_port)?;
         Ok((from_port, to_port))
     }
@@ -456,7 +465,6 @@ where
             weights.rekey_port(old, new);
         });
     }
-
 }
 
 impl<'a, N, P> Graph<'a, N, P> for PortGraph<N, P>
@@ -623,17 +631,11 @@ mod tests {
         assert_eq!(g.port_count(), 6);
         assert_eq!(g.edge_count(), 0);
 
-        g.link_ports(
-            g.output(n0, 0).unwrap(),
-            g.input(n1, 0).unwrap(),
-        )
-        .unwrap();
+        g.link_ports(g.output(n0, 0).unwrap(), g.input(n1, 0).unwrap())
+            .unwrap();
 
-        g.link_ports(
-            g.output(n1, 0).unwrap(),
-            g.input(n2, 0).unwrap(),
-        )
-        .unwrap();
+        g.link_ports(g.output(n1, 0).unwrap(), g.input(n2, 0).unwrap())
+            .unwrap();
 
         let p0 = g.output(n0, 1).unwrap();
         let p2 = g.input(n2, 1).unwrap();

@@ -1,5 +1,5 @@
-use crate::PortIndex;
 use crate::graph::LinkError;
+use crate::PortIndex;
 
 use super::graph::{Graph, GraphMut, NodeIndex};
 use bitvec::bitvec;
@@ -235,9 +235,13 @@ where
 
         // insert new graph and update edge references accordingly
         let mut port_map = HashMap::new();
-        graph.insert_graph(self.replacement.graph, |_,_| {}, |old, new| {
-            port_map.insert(old, new);
-        });
+        graph.insert_graph(
+            self.replacement.graph,
+            |_, _| {},
+            |old, new| {
+                port_map.insert(old, new);
+            },
+        );
 
         for (repl_port, graph_port) in self
             .replacement
@@ -271,11 +275,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{HashSet, HashMap};
+    use std::collections::{HashMap, HashSet};
     use std::error::Error;
 
     use crate::substitute::{BoundedSubgraph, OpenGraph, Rewrite};
-    use crate::{PortGraph, Graph, GraphMut, NodeIndex};
+    use crate::{Graph, GraphMut, NodeIndex, PortGraph};
 
     #[test]
     fn test_remove_subgraph() -> Result<(), Box<dyn Error>> {
@@ -298,18 +302,13 @@ mod tests {
 
         let mut new_g = g.clone();
 
-        let rem_nodes = BoundedSubgraph::new(
-            [n1].into_iter().collect(),
-            vec![p0], vec![p1],
-        ).remove_subgraph(&mut new_g);
+        let rem_nodes = BoundedSubgraph::new([n1].into_iter().collect(), vec![p0], vec![p1])
+            .remove_subgraph(&mut new_g);
 
         assert_eq!(rem_nodes, vec![Some(1)]);
 
         let correct_weights: HashMap<NodeIndex, &i8> = HashMap::from_iter([(n0, &0), (n2, &2)]);
-        assert_eq!(
-            HashMap::from_iter(new_g.node_weights()),
-            correct_weights
-        );
+        assert_eq!(HashMap::from_iter(new_g.node_weights()), correct_weights);
 
         assert_eq!(new_g.node_count(), 2);
         assert_eq!(new_g.edge_count(), 1);
@@ -378,9 +377,9 @@ mod tests {
         let p3 = g2.output(n3, 0).unwrap();
 
         let rewrite = Rewrite::new(
-                BoundedSubgraph::new([n1].into_iter().collect(), vec![p0], vec![p1]),
-                OpenGraph::new(g2, vec![p2], vec![p3]),
-            );
+            BoundedSubgraph::new([n1].into_iter().collect(), vec![p0], vec![p1]),
+            OpenGraph::new(g2, vec![p2], vec![p3]),
+        );
 
         let rem_nodes = rewrite.apply(&mut g)?;
 

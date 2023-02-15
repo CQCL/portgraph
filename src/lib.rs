@@ -1,9 +1,11 @@
 use std::num::NonZeroU32;
+use thiserror::Error;
 
 pub mod dot;
 #[allow(clippy::module_inception)]
 pub mod graph;
 pub mod hierarchy;
+pub mod secondary;
 pub mod substitute;
 pub mod toposort;
 pub mod unweighted;
@@ -54,13 +56,32 @@ pub struct NodeIndex(NonZeroU32);
 impl NodeIndex {
     #[inline]
     pub fn new(index: usize) -> Self {
-        assert!(index < u32::MAX as usize);
-        Self(unsafe { NonZeroU32::new_unchecked(1 + index as u32) })
+        index.try_into().unwrap()
     }
 
     #[inline]
     pub fn index(self) -> usize {
-        u32::from(self.0) as usize - 1
+        self.into()
+    }
+}
+
+impl From<NodeIndex> for usize {
+    #[inline]
+    fn from(index: NodeIndex) -> Self {
+        u32::from(index.0) as usize - 1
+    }
+}
+
+impl TryFrom<usize> for NodeIndex {
+    type Error = IndexError;
+
+    #[inline]
+    fn try_from(index: usize) -> Result<Self, Self::Error> {
+        if index >= (u32::MAX / 2) as usize {
+            Err(IndexError)
+        } else {
+            Ok(Self(unsafe { NonZeroU32::new_unchecked(1 + index as u32) }))
+        }
     }
 }
 
@@ -77,13 +98,32 @@ pub struct PortIndex(NonZeroU32);
 impl PortIndex {
     #[inline]
     pub fn new(index: usize) -> Self {
-        assert!(index < u32::MAX as usize);
-        Self(unsafe { NonZeroU32::new_unchecked(1 + index as u32) })
+        index.try_into().unwrap()
     }
 
     #[inline]
     pub fn index(self) -> usize {
-        u32::from(self.0) as usize - 1
+        self.into()
+    }
+}
+
+impl From<PortIndex> for usize {
+    #[inline]
+    fn from(index: PortIndex) -> Self {
+        u32::from(index.0) as usize - 1
+    }
+}
+
+impl TryFrom<usize> for PortIndex {
+    type Error = IndexError;
+
+    #[inline]
+    fn try_from(index: usize) -> Result<Self, Self::Error> {
+        if index >= (u32::MAX / 2) as usize {
+            Err(IndexError)
+        } else {
+            Ok(Self(unsafe { NonZeroU32::new_unchecked(1 + index as u32) }))
+        }
     }
 }
 
@@ -93,3 +133,7 @@ impl std::fmt::Debug for PortIndex {
         write!(f, "PortIndex({})", self.index())
     }
 }
+
+#[derive(Debug, Clone, Error)]
+#[error("Index too large.")]
+pub struct IndexError;

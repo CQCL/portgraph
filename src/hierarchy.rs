@@ -2,6 +2,7 @@ use std::iter::FusedIterator;
 use std::mem::{replace, take};
 use thiserror::Error;
 
+use crate::secondary::SecondaryMap;
 use crate::NodeIndex;
 
 /// A forest of nodes using doubly linked lists.
@@ -10,13 +11,15 @@ use crate::NodeIndex;
 /// supports efficient insertion and removal at any point in the list.
 #[derive(Debug, Clone)]
 pub struct Hierarchy {
-    data: Vec<NodeData>,
+    data: SecondaryMap<NodeIndex, NodeData>,
 }
 
 impl Hierarchy {
     /// Creates a new empty layout.
     pub fn new() -> Self {
-        Self { data: Vec::new() }
+        Self {
+            data: SecondaryMap::new(),
+        }
     }
 }
 
@@ -29,21 +32,17 @@ impl Default for Hierarchy {
 impl Hierarchy {
     #[inline]
     fn get_mut(&mut self, node: NodeIndex) -> &mut NodeData {
-        if node.index() >= self.data.len() {
-            self.data.resize(node.index() + 1, NodeData::default());
-        }
-
-        &mut self.data[node.index()]
+        self.data.get_mut(node)
     }
 
     #[inline]
     fn try_get_mut(&mut self, node: NodeIndex) -> Option<&mut NodeData> {
-        self.data.get_mut(node.index())
+        self.data.try_get_mut(node)
     }
 
     #[inline]
     fn get(&self, node: NodeIndex) -> &NodeData {
-        self.data.get(node.index()).unwrap_or(&NodeData::DEFAULT)
+        self.data.get(node)
     }
 
     /// Attaches a node as the last child of a parent node.
@@ -344,10 +343,7 @@ impl Hierarchy {
     /// Reserves enough capacity to fit a maximum node index without reallocating.
     /// Does nothing if there already is enough capacity.
     pub fn ensure_capacity(&mut self, capacity: usize) {
-        if let Some(additional) = self.data.capacity().checked_sub(capacity) {
-            // Should we fill with defaults instead of just reserving?
-            self.data.reserve(additional);
-        }
+        self.data.ensure_capacity(capacity);
     }
 
     // TODO: API to shrink
@@ -363,10 +359,6 @@ struct NodeData {
     parent: Option<NodeIndex>,
     /// The sibilings of a node, if any.
     siblings: [Option<NodeIndex>; 2],
-}
-
-impl NodeData {
-    const DEFAULT: NodeData = Self::new();
 }
 
 impl NodeData {

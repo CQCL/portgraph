@@ -4,6 +4,7 @@ use std::{
     ops::{Index, IndexMut},
 };
 
+#[derive(Debug, Clone)]
 pub struct SecondaryMap<K, V> {
     data: Vec<V>,
     phantom: PhantomData<K>,
@@ -83,6 +84,14 @@ where
         &mut self.data[index]
     }
 
+    /// Mutably borrows the value at a `key`.
+    ///
+    /// Returns `None` when the `key` is beyond the capacity of the secondary map.
+    #[inline]
+    pub fn try_get_mut(&mut self, key: K) -> Option<&mut V> {
+        self.data.get_mut(key.into())
+    }
+
     /// Mutably borrows the values of a disjoint list of keys.
     ///
     /// Returns `None` when two keys coincide.
@@ -138,6 +147,16 @@ where
         }
 
         self.data.swap(index0, index1);
+    }
+}
+
+impl<K, V> Default for SecondaryMap<K, V>
+where
+    K: Into<usize> + Copy,
+    V: Clone,
+{
+    fn default() -> Self {
+        Self::new()
     }
 }
 

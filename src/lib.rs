@@ -12,7 +12,7 @@ pub mod weights;
 #[cfg(feature = "pyo3")]
 pub mod py_graph;
 
-pub use crate::graph::Graph;
+pub use crate::graph::{Graph, GraphMut};
 pub use crate::graph::PortGraph;
 pub use crate::unweighted::UnweightedGraph;
 

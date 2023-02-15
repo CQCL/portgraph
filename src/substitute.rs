@@ -1,7 +1,7 @@
 use crate::PortIndex;
 use crate::graph::LinkError;
 
-use super::graph::{Graph, NodeIndex};
+use super::graph::{Graph, GraphMut, NodeIndex};
 use bitvec::bitvec;
 use bitvec::prelude::BitVec;
 use std::collections::HashMap;
@@ -9,7 +9,7 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use thiserror::Error;
 
-pub trait Substitute<'a, N, P>: Graph<'a, N, P> + Sized
+pub trait Substitute<'a, N, P>: GraphMut<'a, N, P> + Sized
 where
     N: 'a + Clone,
     P: 'a + Clone,
@@ -22,7 +22,7 @@ where
 
 impl<'a, G, N, P> Substitute<'a, N, P> for G
 where
-    G: Graph<'a, N, P>,
+    G: GraphMut<'a, N, P>,
     N: 'a + Clone,
     P: 'a + Clone,
 {
@@ -148,7 +148,7 @@ impl BoundedSubgraph {
     /// Remove this subgraph from `graph` and return weights of the nodes.
     fn remove_subgraph<'a, G, N, P>(&self, graph: &mut G) -> Vec<Option<N>>
     where
-        G: Graph<'a, N, P>,
+        G: GraphMut<'a, N, P>,
         N: 'a + Clone,
         P: 'a + Clone,
     {
@@ -220,7 +220,7 @@ where
 
     /// Replace a subgraph inside `graph` with a new graph.
     /// Returns the weights of the nodes that were removed.
-    pub fn apply<Other: Graph<'a, N, P> + Sized>(
+    pub fn apply<Other: GraphMut<'a, N, P> + Sized>(
         self,
         graph: &mut Other,
     ) -> Result<Vec<Option<N>>, RewriteError> {
@@ -275,7 +275,7 @@ mod tests {
     use std::error::Error;
 
     use crate::substitute::{BoundedSubgraph, OpenGraph, Rewrite};
-    use crate::{PortGraph, Graph, NodeIndex};
+    use crate::{PortGraph, Graph, GraphMut, NodeIndex};
 
     #[test]
     fn test_remove_subgraph() -> Result<(), Box<dyn Error>> {

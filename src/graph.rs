@@ -26,7 +26,7 @@ pub struct PortGraph<N = (), P = ()> {
     hierarchy: Hierarchy,
 }
 
-/// Main weighted portgraph structure.
+/// Main weighted graph interface, non-mutable operations.
 pub trait Graph<'a, N = (), P = ()>
 where
     N: 'a + Clone,
@@ -51,28 +51,6 @@ where
     /// Returns a reference to the hierarchy component.
     #[must_use]
     fn hierarchy(&self) -> &Hierarchy;
-
-    /// Returns mutable references to the underlying components.
-    #[must_use]
-    fn components_mut(&mut self) -> (&mut UnweightedGraph, &mut Weights<N, P>, &mut Hierarchy);
-
-    /// Returns a mutable reference to the underlying unweighted graph.
-    ///
-    /// TODO: Default implementation without polluting everything with lifetimes.
-    #[must_use]
-    fn unweighted_mut(&mut self) -> &mut UnweightedGraph;
-
-    /// Returns a mutable reference to the weight component.
-    ///
-    /// TODO: Default implementation without polluting everything with lifetimes.
-    #[must_use]
-    fn weights_mut(&mut self) -> &mut Weights<N, P>;
-
-    /// Returns a mutable reference to the hierarchy component.
-    ///
-    /// TODO: Default implementation without polluting everything with lifetimes.
-    #[must_use]
-    fn hierarchy_mut(&mut self) -> &mut Hierarchy;
 
     /// Returns the number of nodes in the graph.
     #[inline(always)]
@@ -257,19 +235,6 @@ where
         self.weights().try_get_node(node)
     }
 
-    /// Get the weight of a given node.
-    #[inline(always)]
-    #[must_use]
-    fn node_weight_mut(&'a mut self, node: NodeIndex) -> Option<&'a mut N> {
-        self.weights_mut().try_get_node_mut(node)
-    }
-
-    /// Set the weight of a given node.
-    #[inline(always)]
-    fn set_node_weight(&mut self, node: NodeIndex, weight: N) {
-        self.weights_mut().set_node(node, weight);
-    }
-
     /// Iterate over the node weights of a graph.
     #[must_use]
     fn node_weights(&'a self) -> iter::Empty<(NodeIndex, &'a N)> {
@@ -289,6 +254,68 @@ where
         self.weights().try_get_port(port)
     }
 
+    /// Iterate over the port weights of a graph.
+    #[must_use]
+    fn port_weights(&'a self) -> iter::Empty<(PortIndex, &'a N)> {
+        todo!()
+    }
+
+    /// Iterate over the port weights of a graph.
+    #[must_use]
+    fn port_weights_mut(&'a mut self) -> iter::Empty<(PortIndex, &'a mut N)> {
+        todo!()
+    }
+
+    /// Get the port linked to the given port. Returns `None` if the port is not linked.
+    #[inline(always)]
+    #[must_use]
+    fn port_link(&self, port: PortIndex) -> Option<PortIndex> {
+        self.unweighted().port_link(port)
+    }
+
+}
+
+/// Main weighted graph interface, mutable operations.
+pub trait GraphMut<'a, N = (), P = ()> : Graph<'a, N, P>
+where
+    N: 'a + Clone,
+    P: 'a + Clone,
+{
+    /// Returns mutable references to the underlying components.
+    #[must_use]
+    fn components_mut(&mut self) -> (&mut UnweightedGraph, &mut Weights<N, P>, &mut Hierarchy);
+
+    /// Returns a mutable reference to the underlying unweighted graph.
+    ///
+    /// TODO: Default implementation without polluting everything with lifetimes.
+    #[must_use]
+    fn unweighted_mut(&mut self) -> &mut UnweightedGraph;
+
+    /// Returns a mutable reference to the weight component.
+    ///
+    /// TODO: Default implementation without polluting everything with lifetimes.
+    #[must_use]
+    fn weights_mut(&mut self) -> &mut Weights<N, P>;
+
+    /// Returns a mutable reference to the hierarchy component.
+    ///
+    /// TODO: Default implementation without polluting everything with lifetimes.
+    #[must_use]
+    fn hierarchy_mut(&mut self) -> &mut Hierarchy;
+
+    /// Get the weight of a given node.
+    #[inline(always)]
+    #[must_use]
+    fn node_weight_mut(&'a mut self, node: NodeIndex) -> Option<&'a mut N> {
+        self.weights_mut().try_get_node_mut(node)
+    }
+
+    /// Set the weight of a given node.
+    #[inline(always)]
+    fn set_node_weight(&mut self, node: NodeIndex, weight: N) {
+        self.weights_mut().set_node(node, weight);
+    }
+
     /// Get the weight of a given port.
     #[inline(always)]
     #[must_use]
@@ -300,18 +327,6 @@ where
     #[inline(always)]
     fn set_port_weight(&mut self, port: PortIndex, weight: P) {
         self.weights_mut().set_port(port, weight);
-    }
-
-    /// Iterate over the port weights of a graph.
-    #[must_use]
-    fn port_weights(&'a self) -> iter::Empty<(PortIndex, &'a N)> {
-        todo!()
-    }
-
-    /// Iterate over the port weights of a graph.
-    #[must_use]
-    fn port_weights_mut(&'a mut self) -> iter::Empty<(PortIndex, &'a mut N)> {
-        todo!()
     }
 
     /// Adds a node to the portgraph with a given number of input and output ports.
@@ -383,13 +398,6 @@ where
         self.weights_mut().remove_node(node)
     }
 
-    /// Get the port linked to the given port. Returns `None` if the port is not linked.
-    #[inline(always)]
-    #[must_use]
-    fn port_link(&self, port: PortIndex) -> Option<PortIndex> {
-        self.unweighted().port_link(port)
-    }
-
     /// Disconnect a port in the graph.
     #[inline(always)]
     fn link_ports(&mut self, from: PortIndex, to: PortIndex) -> Result<(), LinkError> {
@@ -449,7 +457,6 @@ where
         });
     }
 
-    // TODO: Missing methods
 }
 
 impl<'a, N, P> Graph<'a, N, P> for PortGraph<N, P>
@@ -484,7 +491,13 @@ where
     fn hierarchy(&self) -> &Hierarchy {
         &self.hierarchy
     }
+}
 
+impl<'a, N, P> GraphMut<'a, N, P> for PortGraph<N, P>
+where
+    N: 'a + Clone,
+    P: 'a + Clone,
+{
     fn components_mut<'b>(
         &'b mut self,
     ) -> (

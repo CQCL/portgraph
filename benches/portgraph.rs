@@ -3,6 +3,7 @@ use criterion::{
     PlotConfiguration,
 };
 use portgraph::graph::{Graph, GraphMut, PortGraph};
+use portgraph::substitute::{BoundedSubgraph, OpenGraph, Rewrite, Substitute};
 
 /// Create line graph, connected with two parallel edges at each step.
 ///
@@ -136,10 +137,49 @@ fn bench_remove_unordered(c: &mut Criterion) {
     g.finish();
 }
 
+fn generate_rewrite() -> (PortGraph<i8, i8>, Rewrite<PortGraph<i8, i8>, i8, i8>) {
+    let mut g = PortGraph::<i8, i8>::with_capacity(3, 2);
+
+    let n0 = g.add_node(0, 0, 2);
+    let n1 = g.add_node(1, 1, 1);
+    let n2 = g.add_node(2, 2, 0);
+
+    g.link_nodes(n0, 0, n1, 0).unwrap();
+    g.link_nodes(n1, 0, n2, 0).unwrap();
+
+    let p0 = g.output(n0, 0).unwrap();
+    let p1 = g.input(n2, 0).unwrap();
+
+    let mut g2 = PortGraph::<i8, i8>::with_capacity(2, 1);
+    // node to be inserted
+    let n3 = g2.add_node(3, 1, 1);
+    let p2 = g2.input(n3, 0).unwrap();
+    let p3 = g2.output(n3, 0).unwrap();
+
+    let rewrite = Rewrite::new(
+        BoundedSubgraph::new([n1].into_iter().collect(), vec![p0], vec![p1]),
+        OpenGraph::new(g2, vec![p2], vec![p3]),
+    );
+
+    (g, rewrite)
+}
+
+fn bench_apply_rewrite(c: &mut Criterion) {
+    let mut g = c.benchmark_group("run a rewrite operation");
+    g.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
+
+    g.bench_function("apply_rewrite", |b| {
+        let (graph, rewrite) = generate_rewrite();
+        b.iter(|| black_box(graph.clone().apply_rewrite(rewrite.clone())))
+    });
+    g.finish();
+}
+
 criterion_group!(
     benches,
     bench_make_portgraph,
     bench_clone_portgraph,
-    bench_remove_unordered
+    bench_remove_unordered,
+    bench_apply_rewrite,
 );
 criterion_main!(benches);

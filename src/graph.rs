@@ -132,10 +132,7 @@ where
     /// Get the port offset in the corresponding node.
     #[inline(always)]
     #[must_use]
-    fn port_offset(
-        &self,
-        port: PortIndex,
-    ) -> Option<usize> {
+    fn port_offset(&self, port: PortIndex) -> Option<usize> {
         self.unweighted().port_index(port)
     }
 
@@ -337,25 +334,39 @@ where
 {
     /// Returns mutable references to the underlying components.
     #[must_use]
-    fn components_mut(&mut self) -> (&mut UnweightedGraph, &mut Weights<N, P>, &mut Hierarchy);
+    fn components_mut<'b, 'u, 'w, 'h>(
+        &'b mut self,
+    ) -> (
+        &'u mut UnweightedGraph,
+        &'w mut Weights<N, P>,
+        &'h mut Hierarchy,
+    )
+    where
+        'b: 'u + 'w + 'h;
 
     /// Returns a mutable reference to the underlying unweighted graph.
     ///
     /// TODO: Default implementation without polluting everything with lifetimes.
     #[must_use]
-    fn unweighted_mut(&mut self) -> &mut UnweightedGraph;
+    fn unweighted_mut(&mut self) -> &mut UnweightedGraph {
+        self.components_mut().0
+    }
 
     /// Returns a mutable reference to the weight component.
     ///
     /// TODO: Default implementation without polluting everything with lifetimes.
     #[must_use]
-    fn weights_mut(&mut self) -> &mut Weights<N, P>;
+    fn weights_mut(&mut self) -> &mut Weights<N, P> {
+        self.components_mut().1
+    }
 
     /// Returns a mutable reference to the hierarchy component.
     ///
     /// TODO: Default implementation without polluting everything with lifetimes.
     #[must_use]
-    fn hierarchy_mut(&mut self) -> &mut Hierarchy;
+    fn hierarchy_mut(&mut self) -> &mut Hierarchy {
+        self.components_mut().2
+    }
 
     /// Get the weight of a given node.
     #[inline(always)]
@@ -573,26 +584,17 @@ where
     N: 'a + Clone,
     P: 'a + Clone,
 {
-    fn components_mut<'b>(
+    fn components_mut<'b, 'u, 'w, 'h>(
         &'b mut self,
     ) -> (
-        &'b mut UnweightedGraph,
-        &'b mut Weights<N, P>,
-        &'b mut Hierarchy,
-    ) {
+        &'u mut UnweightedGraph,
+        &'w mut Weights<N, P>,
+        &'h mut Hierarchy,
+    )
+    where
+        'b: 'u + 'w + 'h,
+    {
         (&mut self.unweighted, &mut self.weights, &mut self.hierarchy)
-    }
-
-    fn unweighted_mut(&mut self) -> &mut UnweightedGraph {
-        &mut self.unweighted
-    }
-
-    fn weights_mut(&mut self) -> &mut Weights<N, P> {
-        &mut self.weights
-    }
-
-    fn hierarchy_mut(&mut self) -> &mut Hierarchy {
-        &mut self.hierarchy
     }
 }
 

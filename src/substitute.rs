@@ -14,10 +14,9 @@ where
     N: 'a + Clone,
     P: 'a + Clone,
 {
-    fn apply_rewrite<Other: Graph<'a, N, P> + Sized>(
-        &mut self,
-        rewrite: Rewrite<'a, Other, N, P>,
-    ) -> Result<(), RewriteError>;
+    fn apply_rewrite<Other>(&mut self, rewrite: Rewrite<Other, N, P>) -> Result<(), RewriteError>
+    where
+        for<'other> Other: Graph<'other, N, P> + Sized;
 }
 
 impl<'a, G, N, P> Substitute<'a, N, P> for G
@@ -26,10 +25,10 @@ where
     N: 'a + Clone,
     P: 'a + Clone,
 {
-    fn apply_rewrite<Other: Graph<'a, N, P> + Sized>(
-        &mut self,
-        rewrite: Rewrite<'a, Other, N, P>,
-    ) -> Result<(), RewriteError> {
+    fn apply_rewrite<Other>(&mut self, rewrite: Rewrite<Other, N, P>) -> Result<(), RewriteError>
+    where
+        for<'other> Other: Graph<'other, N, P> + Sized,
+    {
         rewrite.apply(self).map(|_| ())
     }
 }
@@ -146,7 +145,7 @@ impl BoundedSubgraph {
     }
 
     /// Remove this subgraph from `graph` and return weights of the nodes.
-    fn remove_subgraph<'a, G, N, P>(&self, graph: &mut G) -> Vec<Option<N>>
+    fn remove_from<'a, G, N, P>(&self, graph: &mut G) -> Vec<Option<N>>
     where
         G: GraphMut<'a, N, P>,
         N: 'a + Clone,
@@ -161,16 +160,16 @@ impl BoundedSubgraph {
 
 /// A graph with explicit input and output ports.
 #[derive(Clone)]
-pub struct OpenGraph<'a, G, N, P> {
+pub struct OpenGraph<G, N, P> {
     pub graph: G,
     pub dangling_inputs: Vec<PortIndex>,
     pub dangling_outputs: Vec<PortIndex>,
-    phantom: PhantomData<(&'a N, &'a P)>,
+    phantom: PhantomData<(N, P)>,
 }
 
-impl<'a, G, N, P> OpenGraph<'a, G, N, P>
+impl<G, N, P> OpenGraph<G, N, P>
 where
-    G: Graph<'a, N, P>,
+    for<'a> G: Graph<'a, N, P>,
     N: Clone,
     P: Clone,
 {
@@ -188,7 +187,7 @@ where
     }
 }
 
-impl<'a, G: Debug, N, P> Debug for OpenGraph<'a, G, N, P> {
+impl<G: Debug, N, P> Debug for OpenGraph<G, N, P> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("OpenGraph")
             .field("graph", &self.graph)
@@ -200,18 +199,18 @@ impl<'a, G: Debug, N, P> Debug for OpenGraph<'a, G, N, P> {
 
 /// A rewrite operation that replaces a subgraph with another graph.
 #[derive(Debug, Clone)]
-pub struct Rewrite<'a, G, N, P> {
+pub struct Rewrite<G, N, P> {
     pub subgraph: BoundedSubgraph,
-    pub replacement: OpenGraph<'a, G, N, P>,
+    pub replacement: OpenGraph<G, N, P>,
 }
 
-impl<'a, G, N, P> Rewrite<'a, G, N, P>
+impl<G, N, P> Rewrite<G, N, P>
 where
-    G: Graph<'a, N, P>,
-    N: 'a + Clone,
-    P: 'a + Clone,
+    for<'a> G: Graph<'a, N, P>,
+    N: Clone,
+    P: Clone,
 {
-    pub fn new(subgraph: BoundedSubgraph, replacement: OpenGraph<'a, G, N, P>) -> Self {
+    pub fn new(subgraph: BoundedSubgraph, replacement: OpenGraph<G, N, P>) -> Self {
         Self {
             subgraph,
             replacement,
@@ -220,10 +219,12 @@ where
 
     /// Replace a subgraph inside `graph` with a new graph.
     /// Returns the weights of the nodes that were removed.
-    pub fn apply<Other: GraphMut<'a, N, P> + Sized>(
-        self,
-        graph: &mut Other,
-    ) -> Result<Vec<Option<N>>, RewriteError> {
+    pub fn apply<'other, Other>(self, graph: &mut Other) -> Result<Vec<Option<N>>, RewriteError>
+    where
+        Other: GraphMut<'other, N, P> + Sized,
+        N: 'other,
+        P: 'other,
+    {
         // TODO type check.
         if self.subgraph.incoming.len() != self.replacement.dangling_inputs.len()
             || self.subgraph.outgoing.len() != self.replacement.dangling_outputs.len()
@@ -231,7 +232,7 @@ where
             return Err(RewriteError::BoundarySize);
         }
 
-        let removed = self.subgraph.remove_subgraph(graph);
+        let removed = self.subgraph.remove_from(graph);
 
         // insert new graph and update edge references accordingly
         let mut port_map = HashMap::new();
@@ -303,7 +304,7 @@ mod tests {
         let mut new_g = g.clone();
 
         let rem_nodes = BoundedSubgraph::new([n1].into_iter().collect(), vec![p0], vec![p1])
-            .remove_subgraph(&mut new_g);
+            .remove_from(&mut new_g);
 
         assert_eq!(rem_nodes, vec![Some(1)]);
 

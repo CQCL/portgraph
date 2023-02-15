@@ -345,24 +345,18 @@ where
         'b: 'u + 'w + 'h;
 
     /// Returns a mutable reference to the underlying unweighted graph.
-    ///
-    /// TODO: Default implementation without polluting everything with lifetimes.
     #[must_use]
     fn unweighted_mut(&mut self) -> &mut UnweightedGraph {
         self.components_mut().0
     }
 
     /// Returns a mutable reference to the weight component.
-    ///
-    /// TODO: Default implementation without polluting everything with lifetimes.
     #[must_use]
     fn weights_mut(&mut self) -> &mut Weights<N, P> {
         self.components_mut().1
     }
 
     /// Returns a mutable reference to the hierarchy component.
-    ///
-    /// TODO: Default implementation without polluting everything with lifetimes.
     #[must_use]
     fn hierarchy_mut(&mut self) -> &mut Hierarchy {
         self.components_mut().2

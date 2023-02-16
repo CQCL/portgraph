@@ -83,9 +83,7 @@ impl SubgraphRef {
 
     /// Returns the indices of the nodes in the subgraph.
     pub fn nodes(&self) -> impl Iterator<Item = NodeIndex> + '_ {
-        self.nodes
-            .iter_ones()
-            .map(NodeIndex::new)
+        self.nodes.iter_ones().map(NodeIndex::new)
     }
 }
 

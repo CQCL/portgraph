@@ -35,7 +35,7 @@ where
 }
 
 fn add_edge_str<'a, N, P>(
-    graph: &impl Graph<'a, N, P>,
+    graph: &'a impl Graph<'a, N, P>,
     from: PortIndex,
     to: PortIndex,
     dot_s: &mut String,

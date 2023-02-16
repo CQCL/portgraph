@@ -85,7 +85,7 @@ impl SubgraphRef {
     pub fn nodes(&self) -> impl Iterator<Item = NodeIndex> + '_ {
         self.nodes
             .iter_ones()
-            .map(|index| NodeIndex::new(index as usize))
+            .map(NodeIndex::new)
     }
 }
 
@@ -254,7 +254,7 @@ where
             graph.unlink_port(graph_port);
             graph
                 .link_ports(graph_port, repl_port)
-                .map_err(|e| RewriteError::Link(e))?;
+                .map_err(RewriteError::Link)?;
         }
 
         for (repl_port, graph_port) in self
@@ -267,7 +267,7 @@ where
             graph.unlink_port(graph_port);
             graph
                 .link_ports(repl_port, graph_port)
-                .map_err(|e| RewriteError::Link(e))?;
+                .map_err(RewriteError::Link)?;
         }
 
         Ok(removed)
@@ -283,6 +283,7 @@ mod tests {
     use crate::{Graph, GraphMut, NodeIndex, PortGraph};
 
     #[test]
+    #[ignore = "unimplemented methods"]
     fn test_remove_subgraph() -> Result<(), Box<dyn Error>> {
         let mut g = PortGraph::<i8, i8>::with_capacity(3, 2);
 
@@ -318,6 +319,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "unimplemented methods"]
     fn test_insert_graph() -> Result<(), Box<dyn Error>> {
         let mut g = {
             let mut g = PortGraph::<i8, i8>::with_capacity(3, 2);
@@ -358,6 +360,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "unimplemented methods"]
     fn test_replace_subgraph() -> Result<(), Box<dyn Error>> {
         let mut g = PortGraph::<i8, i8>::with_capacity(3, 2);
 

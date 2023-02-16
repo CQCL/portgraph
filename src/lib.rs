@@ -16,7 +16,7 @@ pub mod py_graph;
 
 pub use crate::graph::PortGraph;
 pub use crate::graph::{Graph, GraphMut};
-pub use crate::unweighted::UnweightedGraph;
+pub use crate::unweighted::{LinkError, UnweightedGraph};
 
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Eq, Ord, Hash)]

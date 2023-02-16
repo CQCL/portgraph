@@ -50,8 +50,8 @@ impl UnweightedGraph {
     /// # Example
     ///
     /// ```
-    /// # use portgraph::portgraph::UnweightedGraph;
-    /// # use portgraph::graph::Direction;
+    /// # use portgraph::UnweightedGraph;
+    /// # use portgraph::Direction;
     /// let mut g = UnweightedGraph::new();
     /// let node = g.add_node(4, 3);
     /// assert_eq!(g.inputs(node).count(), 4);
@@ -133,8 +133,8 @@ impl UnweightedGraph {
     /// # Example
     ///
     /// ```
-    /// # use portgraph::portgraph::UnweightedGraph;
-    /// # use portgraph::graph::Direction;
+    /// # use portgraph::UnweightedGraph;
+    /// # use portgraph::Direction;
     /// let mut g = UnweightedGraph::new();
     /// let node0 = g.add_node(1, 1);
     /// let node1 = g.add_node(1, 1);
@@ -205,13 +205,13 @@ impl UnweightedGraph {
     /// # Example
     ///
     /// ```
-    /// # use portgraph::portgraph::UnweightedGraph;
-    /// # use portgraph::graph::Direction;
+    /// # use portgraph::UnweightedGraph;
+    /// # use portgraph::Direction;
     /// let mut g = UnweightedGraph::new();
     /// let node0 = g.add_node(0, 1);
     /// let node1 = g.add_node(1, 0);
-    /// let node0_output = g.outputs(node0).nth(0).unwrap();
-    /// let node1_input = g.inputs(node1).nth(0).unwrap();
+    /// let node0_output = g.output(node0, 0).unwrap();
+    /// let node1_input = g.input(node1, 0).unwrap();
     /// g.link_ports(node0_output, node1_input).unwrap();
     /// assert_eq!(g.port_link(node0_output), Some(node1_input));
     /// assert_eq!(g.port_link(node1_input), Some(node0_output));
@@ -322,6 +322,41 @@ impl UnweightedGraph {
         }
     }
 
+    /// Returns the port at the given offset in the `node`.
+    ///
+    /// This is equivalent to `ports(node, direction).nth(offset)`
+    pub fn port(&self, node: NodeIndex, offset: usize, direction: Direction) -> Option<PortIndex> {
+        let node_meta = self.node_meta_valid(node)?;
+        let mut offset: u16 = offset.try_into().ok()?;
+        let bounds_check = if direction == Direction::Outgoing {
+            offset += node_meta.incoming();
+            offset < node_meta.incoming() + node_meta.outgoing()
+        } else {
+            offset < node_meta.incoming()
+        };
+        if !bounds_check {
+            return None;
+        }
+        let index = node_meta.port_list()?.0;
+        Some(PortIndex(index.saturating_add(offset as u32)))
+    }
+
+    /// Returns the input port at the given offset in the `node`.
+    ///
+    /// Shorthand for [`UnweightedGraph::port`].
+    #[inline]
+    pub fn input(&self, node: NodeIndex, offset: usize) -> Option<PortIndex> {
+        self.port(node, offset, Direction::Incoming)
+    }
+
+    /// Returns the output port at the given offset in the `node`.
+    ///
+    /// Shorthand for [`UnweightedGraph::ports`].
+    #[inline]
+    pub fn output(&self, node: NodeIndex, offset: usize) -> Option<PortIndex> {
+        self.port(node, offset, Direction::Outgoing)
+    }
+
     /// Iterates over all the input ports of the `node`.
     ///
     /// Shorthand for [`UnweightedGraph::ports`].
@@ -345,7 +380,8 @@ impl UnweightedGraph {
     /// # Examples
     ///
     /// ```
-    /// use unweighted::UnweightedGraph;
+    /// # use portgraph::unweighted::UnweightedGraph;
+    /// # use portgraph::Direction;
     ///
     /// let mut graph = UnweightedGraph::new();
     ///
@@ -353,12 +389,12 @@ impl UnweightedGraph {
     /// let node_b = graph.add_node(1, 0);
     ///
     /// let port_a = graph.outputs(node_a).next().unwrap();
-    /// let port_b = graph.inputs(node_b).next().unwrap().;
+    /// let port_b = graph.inputs(node_b).next().unwrap();
     ///
     /// graph.link_ports(port_a, port_b).unwrap();
     ///
-    /// assert_eq!(graph.links(node_a, graph::Direction::Outgoing), &[Some(port_b), None]);
-    /// assert_eq!(graph.links(node_b, graph::Direction::Incoming), &[Some(port_a)]);
+    /// assert_eq!(graph.links(node_a, Direction::Outgoing), &[Some(port_b), None]);
+    /// assert_eq!(graph.links(node_b, Direction::Incoming), &[Some(port_a)]);
     /// ```
     #[inline]
     pub fn links(&self, node: NodeIndex, direction: Direction) -> &[Option<PortIndex>] {

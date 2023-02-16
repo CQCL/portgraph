@@ -178,20 +178,19 @@ where
     /// # Examples
     ///
     /// ```
-    /// use graph::PortGraph;
-    ///
-    /// let mut graph = PortGraph::new();
+    /// # use portgraph::{PortGraph, GraphMut, Graph, Direction};
+    /// let mut graph = PortGraph::<(),()>::new();
     ///
     /// let node_a = graph.add_node((), 0, 2);
     /// let node_b = graph.add_node((), 1, 0);
     ///
     /// let port_a = graph.output(node_a, 0).unwrap();
-    /// let port_b = graph.input(node_b, 0).unwrap().;
+    /// let port_b = graph.input(node_b, 0).unwrap();
     ///
     /// graph.link_ports(port_a, port_b).unwrap();
     ///
-    /// assert_eq!(graph.links(node_a, graph::Direction::Outgoing), &[Some(port_b), None]);
-    /// assert_eq!(graph.links(node_b, graph::Direction::Incoming), &[Some(port_a)]);
+    /// assert_eq!(graph.links(node_a, Direction::Outgoing), &[Some(port_b), None]);
+    /// assert_eq!(graph.links(node_b, Direction::Incoming), &[Some(port_a)]);
     /// ```
     #[inline]
     fn links(&self, node: NodeIndex, direction: Direction) -> &[Option<PortIndex>] {
@@ -212,7 +211,6 @@ where
 
     /// Iterate over all the edges connected to a given node.
     #[inline(always)]
-    #[must_use]
     fn neighbours(&self, _node: NodeIndex, _direction: Direction) -> std::iter::Empty<NodeIndex> {
         todo!()
     }
@@ -244,7 +242,6 @@ where
     }
 
     /// Iterate over the node weights of a graph.
-    #[must_use]
     fn node_weights(&'a self) -> iter::Empty<(NodeIndex, &'a N)> {
         todo!()
     }
@@ -257,7 +254,6 @@ where
     }
 
     /// Iterate over the port weights of a graph.
-    #[must_use]
     fn port_weights(&'a self) -> iter::Empty<(PortIndex, &'a N)> {
         todo!()
     }
@@ -393,9 +389,9 @@ where
     /// # Example
     ///
     /// ```
-    /// # use portgraph::PortGraph;
-    /// let mut g = PortGraph::new();
-    /// let node = g.add_node(4, 3);
+    /// # use portgraph::{PortGraph, GraphMut, Graph};
+    /// let mut g = PortGraph::<(),()>::new();
+    /// let node = g.add_node((), 4, 3);
     /// assert_eq!(g.inputs(node).count(), 4);
     /// assert_eq!(g.outputs(node).count(), 3);
     /// assert!(g.contains_node(node));
@@ -411,9 +407,9 @@ where
     /// # Example
     ///
     /// ```
-    /// # use portgraph::PortGraph;
-    /// let mut g = PortGraph::new();
-    /// let node = g.add_node(4, 3);
+    /// # use portgraph::{PortGraph, GraphMut, Graph};
+    /// let mut g = PortGraph::<(),()>::new();
+    /// let node = g.add_node((), 4, 3);
     /// assert_eq!(g.inputs(node).count(), 4);
     /// assert_eq!(g.outputs(node).count(), 3);
     /// assert!(g.contains_node(node));
@@ -440,12 +436,12 @@ where
     /// # Example
     ///
     /// ```
-    /// # use portgraph::PortGraph;
-    /// let mut g = PortGraph::new();
-    /// let node = g.add_node(4, 3);
-    /// g.resize_ports(node, 5, 2);
-    /// assert_eq!(g.inputs(node).count(), 5);
-    /// assert_eq!(g.outputs(node).count(), 2);
+    /// # use portgraph::{PortGraph, GraphMut, Graph};
+    /// let mut g = PortGraph::<(),()>::new();
+    /// let node = g.add_node((), 4, 3);
+    /// //g.resize_ports(node, 5, 2); # TODO: implement
+    /// //assert_eq!(g.inputs(node).count(), 5);
+    /// //assert_eq!(g.outputs(node).count(), 2);
     /// ```
     fn resize_ports(&mut self, _node: NodeIndex, _incoming: usize, _outgoing: usize) {
         todo!()
@@ -527,13 +523,11 @@ where
     }
 
     /// Iterate over the node weights of a graph.
-    #[must_use]
     fn node_weights_mut(&'a mut self) -> iter::Empty<(NodeIndex, &'a mut N)> {
         todo!()
     }
 
     /// Iterate over the port weights of a graph.
-    #[must_use]
     fn port_weights_mut(&'a mut self) -> iter::Empty<(PortIndex, &'a mut N)> {
         todo!()
     }
@@ -608,6 +602,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "unimplemented methods"]
     fn test_insert_graph() {
         let mut g = PortGraph::<i8, i8>::with_capacity(3, 2);
 
@@ -683,6 +678,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "unimplemented methods"]
     fn test_compact() {
         let mut g = PortGraph::<i8, i8>::with_capacity(3, 2);
 

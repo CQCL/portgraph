@@ -49,6 +49,8 @@ fn add_edge_str<'a, N, P>(
     let to_offset = graph.port_offset(to).expect("missing offset");
 
     let style = graph.port_weight(from).unwrap().style();
-    let edge_s = format!("{from_node} -> {to_node} [label=\"({from_offset}, {to_offset})\", style={style}]\n");
+    let edge_s = format!(
+        "{from_node} -> {to_node} [label=\"({from_offset}, {to_offset})\", style={style}]\n"
+    );
     dot_s.push_str(&edge_s[..])
 }

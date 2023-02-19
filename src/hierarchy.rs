@@ -70,7 +70,7 @@ impl Hierarchy {
         node_data.parent = Some(parent);
         node_data.siblings[0] = node_prev;
 
-        match replace(&mut self.get_mut(parent).children[1], Some(node)) {
+        match node_prev {
             Some(prev) => self.get_mut(prev).siblings[1] = Some(node),
             None => self.get_mut(parent).children[0] = Some(node),
         }

@@ -1,13 +1,13 @@
 use std::num::NonZeroU32;
 use thiserror::Error;
 
+pub mod algorithms;
 pub mod dot;
 #[allow(clippy::module_inception)]
 pub mod graph;
 pub mod hierarchy;
 pub mod secondary;
 pub mod substitute;
-pub mod toposort;
 pub mod unweighted;
 pub mod weights;
 

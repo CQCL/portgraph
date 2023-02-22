@@ -1,5 +1,4 @@
-use super::{Direction, NodeIndex};
-use crate::{PortIndex, UnweightedGraph};
+use crate::{Direction, NodeIndex, PortIndex, UnweightedGraph};
 use bitvec::prelude::BitVec;
 use std::{collections::VecDeque, iter::FusedIterator};
 

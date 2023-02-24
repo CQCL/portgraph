@@ -1,22 +1,34 @@
+//! `portgraph` is a data structure library for graphs with ports.
+//!
+//! A port graph (as implemented by this library) consists of a collection of nodes,
+//! each equipped with an ordered sequence of input and output ports.
+//! A port can be linked to exactly one other port of the opposite direction or be left dangling.
+//!
+//! The core data structure [`PortGraph`] implements a port graph which identifies nodes and ports via
+//! [`NodeIndex`] and [`PortIndex`] but does not attach any additional information to them.
+//! To keep track of weights the user of this library may accompany a [`PortGraph`] with a data structure
+//! which maps from indices to the weight type such as a [`SecondaryMap`] or a [`HashMap`].
+//! This allows for more flexibility in how weights are stored and managed, for instance optimizing for
+//! cache locality or sparsity.
+//! Using the node and port indices also allows to impose additional structure to a [`PortGraph`].
+//! This is exemplified via [`Hierarchy`] which arranges a port graph's nodes into a forest so that
+//! it can represent a port graph in which nodes may be nested within each other.
+//!
+//! [`HashMap`]: std::collections::HashMap
 use std::num::NonZeroU32;
 use thiserror::Error;
 
 pub mod algorithms;
-pub mod dot;
-#[allow(clippy::module_inception)]
-pub mod graph;
 pub mod hierarchy;
+pub mod portgraph;
 pub mod secondary;
-pub mod substitute;
-pub mod unweighted;
-pub mod weights;
 
-#[cfg(feature = "pyo3")]
-pub mod py_graph;
-
-pub use crate::graph::PortGraph;
-pub use crate::graph::{Graph, GraphMut};
-pub use crate::unweighted::{LinkError, UnweightedGraph};
+#[doc(inline)]
+pub use crate::hierarchy::Hierarchy;
+#[doc(inline)]
+pub use crate::portgraph::PortGraph;
+#[doc(inline)]
+pub use crate::secondary::SecondaryMap;
 
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Eq, Ord, Hash)]
@@ -33,6 +45,9 @@ impl Default for Direction {
 }
 
 impl Direction {
+    /// Incoming and outgoing.
+    pub const BOTH: [Direction; 2] = [Direction::Incoming, Direction::Outgoing];
+
     #[inline(always)]
     pub fn index(self) -> usize {
         self as usize
@@ -47,9 +62,12 @@ impl Direction {
     }
 }
 
-/// Incoming and outgoing.
-pub const DIRECTIONS: [Direction; 2] = [Direction::Incoming, Direction::Outgoing];
-
+/// Index of a node within a `PortGraph`.
+///
+/// Restricted to be at most `2^31 - 1` to allow more efficient encodings of the port graph structure.
+/// This type admits the *null pointer optimization* so that `Option<NodeIndex>` takes as much space
+/// as a `NodeIndex` by itself.
+#[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeIndex(NonZeroU32);
 
@@ -92,6 +110,12 @@ impl std::fmt::Debug for NodeIndex {
     }
 }
 
+/// Index of a port within a `PortGraph`.
+///
+/// Restricted to be at most `2^31 - 1` to allow more efficient encodings of the port graph structure.
+/// This type admits the *null pointer optimization* so that `Option<PortIndex>` takes as much space
+/// as a `PortIndex` by itself.
+#[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PortIndex(NonZeroU32);
 
@@ -134,6 +158,7 @@ impl std::fmt::Debug for PortIndex {
     }
 }
 
+/// Error indicating a `NodeIndex` or `PortIndex` is too large.
 #[derive(Debug, Clone, Error)]
 #[error("Index too large.")]
 pub struct IndexError;

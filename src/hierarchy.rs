@@ -5,10 +5,12 @@ use thiserror::Error;
 use crate::secondary::SecondaryMap;
 use crate::NodeIndex;
 
-/// A forest of nodes using doubly linked lists.
+/// Hierarchical structure on top of a [`PortGraph`].
 ///
 /// The order of child nodes is maintained as a doubly linked list which
 /// supports efficient insertion and removal at any point in the list.
+///
+/// [`PortGraph`]: crate::portgraph::PortGraph
 #[derive(Debug, Clone)]
 pub struct Hierarchy {
     data: SecondaryMap<NodeIndex, NodeData>,

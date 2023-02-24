@@ -4,6 +4,7 @@ use std::{
     ops::{Index, IndexMut},
 };
 
+/// A dense map from keys to values with default fallbacks.
 #[derive(Debug, Clone)]
 pub struct SecondaryMap<K, V> {
     data: Vec<V>,

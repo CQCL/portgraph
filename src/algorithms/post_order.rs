@@ -2,11 +2,11 @@ use std::iter::FusedIterator;
 
 use bitvec::vec::BitVec;
 
-use crate::{Direction, NodeIndex, UnweightedGraph};
+use crate::{Direction, NodeIndex, PortGraph};
 
 /// Iterator over an `UnweightedGraph` in post-order.
 pub struct PostOrder<'graph> {
-    graph: &'graph UnweightedGraph,
+    graph: &'graph PortGraph,
     stack: Vec<NodeIndex>,
     visited: BitVec,
     finished: BitVec,
@@ -15,7 +15,7 @@ pub struct PostOrder<'graph> {
 
 impl<'graph> PostOrder<'graph> {
     pub fn new(
-        graph: &'graph UnweightedGraph,
+        graph: &'graph PortGraph,
         source: impl IntoIterator<Item = NodeIndex>,
         direction: Direction,
     ) -> Self {

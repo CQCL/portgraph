@@ -1,5 +1,5 @@
 use super::post_order::PostOrder;
-use crate::{secondary::SecondaryMap, Direction, NodeIndex, UnweightedGraph};
+use crate::{secondary::SecondaryMap, Direction, NodeIndex, PortGraph};
 use std::cmp::Ordering;
 
 pub struct DominatorTree {
@@ -8,7 +8,7 @@ pub struct DominatorTree {
 }
 
 impl DominatorTree {
-    pub fn new(graph: &UnweightedGraph, entry: NodeIndex, direction: Direction) -> Self {
+    pub fn new(graph: &PortGraph, entry: NodeIndex, direction: Direction) -> Self {
         // We traverse the graph in post order starting at the `entry` node.
         // We associate each node that we encounter with its index within the traversal.
         let mut node_to_index = SecondaryMap::with_capacity(graph.node_capacity());

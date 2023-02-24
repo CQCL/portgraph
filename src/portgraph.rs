@@ -336,6 +336,22 @@ impl PortGraph {
         }
     }
 
+    /// Iterates over the input and output ports of the `node` in sequence.
+    pub fn all_ports(&self, node: NodeIndex) -> NodePorts {
+        let Some(node_meta) = self.node_meta_valid(node) else {
+            return NodePorts::default();
+        };
+
+        let Some(port_list) = node_meta.port_list() else {
+            return NodePorts::default();
+        };
+
+        NodePorts {
+            index: port_list.0,
+            length: node_meta.incoming() as usize + node_meta.outgoing() as usize,
+        }
+    }
+
     /// Returns the port at the given offset in the `node`.
     ///
     /// This is equivalent to `ports(node, direction).nth(offset)`
@@ -387,7 +403,7 @@ impl PortGraph {
         self.ports(node, Direction::Outgoing)
     }
 
-    /// Slice of all the links of the `node` in the given `direction`. When the
+    /// Iterates over the links of the `node` in the given `direction`. When the
     /// corresponding node port is linked to another one, the Option contains
     /// the index of the other port.
     ///
@@ -407,43 +423,59 @@ impl PortGraph {
     ///
     /// graph.link_ports(port_a, port_b).unwrap();
     ///
-    /// assert_eq!(graph.links(node_a, Direction::Outgoing), &[Some(port_b), None]);
-    /// assert_eq!(graph.links(node_b, Direction::Incoming), &[Some(port_a)]);
+    /// assert!(graph.links(node_a, Direction::Outgoing).eq([Some(port_b), None]));
+    /// assert!(graph.links(node_b, Direction::Incoming).eq([Some(port_a)]));
     /// ```
     #[inline]
-    pub fn links(&self, node: NodeIndex, direction: Direction) -> &[Option<PortIndex>] {
+    pub fn links(&self, node: NodeIndex, direction: Direction) -> NodeLinks<'_> {
         let Some(node_meta) = self.node_meta_valid(node) else {
-            return &[];
+            return NodeLinks([].iter());
         };
 
         let Some(port_list) = node_meta.port_list() else {
-            return &[];
+            return NodeLinks([].iter());
         };
 
         match direction {
             Direction::Incoming => {
                 let start = port_list.index();
                 let stop = start + node_meta.incoming() as usize;
-                &self.port_link[start..stop]
+                NodeLinks(self.port_link[start..stop].iter())
             }
             Direction::Outgoing => {
                 let start = port_list.index() + node_meta.incoming() as usize;
                 let stop = start + node_meta.outgoing() as usize;
-                &self.port_link[start..stop]
+                NodeLinks(self.port_link[start..stop].iter())
             }
         }
     }
 
-    /// Slice of all the input links of the `node`. Shorthand for [`PortGraph::links`].
+    /// Iterates over the input links of the `node`. Shorthand for [`PortGraph::links`].
     #[inline]
-    pub fn input_links(&self, node: NodeIndex) -> &[Option<PortIndex>] {
+    pub fn input_links(&self, node: NodeIndex) -> NodeLinks<'_> {
         self.links(node, Direction::Incoming)
     }
 
-    /// Slice of all the output links of the `node`. Shorthand for [`PortGraph::links`].
+    /// Iterates over the output links of the `node`. Shorthand for [`PortGraph::links`].
     #[inline]
-    pub fn output_links(&self, node: NodeIndex) -> &[Option<PortIndex>] {
+    pub fn output_links(&self, node: NodeIndex) -> NodeLinks<'_> {
         self.links(node, Direction::Outgoing)
+    }
+
+    /// Iterates over the input and output links of the `node` in sequence.
+    #[inline]
+    pub fn all_links(&self, node: NodeIndex) -> NodeLinks<'_> {
+        let Some(node_meta) = self.node_meta_valid(node) else {
+            return NodeLinks([].iter());
+        };
+
+        let Some(port_list) = node_meta.port_list() else {
+            return NodeLinks([].iter());
+        };
+
+        let start = port_list.index();
+        let stop = start + node_meta.incoming() as usize + node_meta.outgoing() as usize;
+        NodeLinks(self.port_link[start..stop].iter())
     }
 
     /// Returns whether the port graph contains the `node`.
@@ -1001,6 +1033,45 @@ impl<'a> DoubleEndedIterator for Ports<'a> {
 }
 
 impl<'a> FusedIterator for Ports<'a> {}
+
+/// Iterator created by [`PortGraph::links`].
+#[derive(Clone)]
+pub struct NodeLinks<'a>(std::slice::Iter<'a, Option<PortIndex>>);
+
+impl<'a> Iterator for NodeLinks<'a> {
+    type Item = Option<PortIndex>;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next().copied()
+    }
+
+    #[inline]
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        self.0.nth(n).copied()
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.0.size_hint()
+    }
+}
+
+impl<'a> ExactSizeIterator for NodeLinks<'a> {
+    #[inline]
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+}
+
+impl<'a> DoubleEndedIterator for NodeLinks<'a> {
+    #[inline]
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.0.next_back().copied()
+    }
+}
+
+impl<'a> FusedIterator for NodeLinks<'a> {}
 
 #[derive(Debug, Clone, Error)]
 pub enum LinkError {

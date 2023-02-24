@@ -1,7 +1,7 @@
 use std::{
     iter::FusedIterator,
     mem::{replace, take},
-    num::NonZeroU32,
+    num::{NonZeroU16, NonZeroU32},
 };
 
 use crate::{graph::Direction, NodeIndex, PortIndex};
@@ -9,9 +9,9 @@ use thiserror::Error;
 
 #[derive(Clone)]
 pub struct UnweightedGraph {
-    node_meta: Vec<NodeMeta>,
+    node_meta: Vec<NodeEntry>,
     port_link: Vec<Option<PortIndex>>,
-    port_meta: Vec<PortMeta>,
+    port_meta: Vec<PortEntry>,
     node_free: Option<NodeIndex>,
     port_free: Vec<Option<PortIndex>>,
     node_count: usize,
@@ -67,8 +67,11 @@ impl UnweightedGraph {
             None
         };
 
+        assert!(incoming < u16::MAX as usize - 1);
+        assert!(outgoing < u16::MAX as usize - 1);
+
         self.node_meta[node.index()] =
-            NodeMeta::new_node(port_list, incoming as u16, outgoing as u16);
+            NodeEntry::Node(NodeMeta::new(port_list, incoming as u16, outgoing as u16));
 
         self.node_count += 1;
         self.port_count += incoming + outgoing;
@@ -80,14 +83,16 @@ impl UnweightedGraph {
     fn alloc_node(&mut self) -> NodeIndex {
         match self.node_free {
             Some(node) => {
-                let meta_before = self.node_meta[node.index()];
-                debug_assert!(meta_before.is_free());
-                self.node_free = meta_before.free_next();
+                let NodeEntry::Free(next) = self.node_meta[node.index()] else {
+                    unreachable!("non free node on free list");
+                };
+
+                self.node_free = next;
                 node
             }
             None => {
                 let index = self.node_meta.len();
-                self.node_meta.push(NodeMeta::new_free(None));
+                self.node_meta.push(NodeEntry::Free(None));
                 NodeIndex::new(index)
             }
         }
@@ -96,13 +101,12 @@ impl UnweightedGraph {
     #[inline]
     fn alloc_ports(&mut self, node: NodeIndex, incoming: usize, outgoing: usize) -> PortIndex {
         let size = incoming + outgoing;
-        let meta_incoming = PortMeta::new_node(node, Direction::Incoming);
-        let meta_outgoing = PortMeta::new_node(node, Direction::Outgoing);
+        let meta_incoming = PortEntry::Port(PortMeta::new(node, Direction::Incoming));
+        let meta_outgoing = PortEntry::Port(PortMeta::new(node, Direction::Outgoing));
 
         match self.port_free.get(size - 1).copied().flatten() {
             Some(port) => {
                 let free_next = take(&mut self.port_link[port.index()]);
-                debug_assert!(self.port_meta[port.index()].is_free());
                 self.port_free[size - 1] = free_next;
 
                 let i = port.index();
@@ -150,9 +154,9 @@ impl UnweightedGraph {
             return;
         };
 
-        if node_meta.is_free() {
+        let NodeEntry::Node(node_meta) = node_meta else {
             return;
-        }
+        };
 
         self.free_node(node);
 
@@ -166,7 +170,7 @@ impl UnweightedGraph {
             assert!(port_list.index() + size <= self.port_meta.len());
 
             for i in port_list.index()..port_list.index() + size {
-                self.port_meta[i] = PortMeta::new_free();
+                self.port_meta[i] = PortEntry::Free;
 
                 if let Some(link) = self.port_link[i] {
                     self.port_link[link.index()] = None;
@@ -179,12 +183,7 @@ impl UnweightedGraph {
 
     #[inline]
     fn free_node(&mut self, node: NodeIndex) {
-        let meta_before = replace(
-            &mut self.node_meta[node.index()],
-            NodeMeta::new_free(self.node_free),
-        );
-
-        debug_assert!(!meta_before.is_free());
+        self.node_meta[node.index()] = NodeEntry::Free(self.node_free);
         self.node_free = Some(node);
     }
 
@@ -196,7 +195,7 @@ impl UnweightedGraph {
 
         let ports_free = &mut self.port_free[size - 1];
 
-        self.port_meta[ports.index()] = PortMeta::new_free();
+        self.port_meta[ports.index()] = PortEntry::Free;
         self.port_link[ports.index()] = replace(ports_free, Some(ports));
     }
 
@@ -279,10 +278,15 @@ impl UnweightedGraph {
     pub fn port_index(&self, port: PortIndex) -> Option<usize> {
         let port_meta = self.port_meta_valid(port)?;
         let node = port_meta.node();
-        // PERFORMANCE: The bounds check here is not needed
-        let node_meta = self.node_meta[node.index()];
-        // PERFORMANCE: The unwrap will always succeed
-        let port_list = node_meta.port_list().unwrap();
+
+        let node_meta = match self.node_meta[node.index()] {
+            NodeEntry::Free(_) => unreachable!("ports are only attached to valid nodes"),
+            NodeEntry::Node(node_meta) => node_meta,
+        };
+
+        let port_list = node_meta
+            .port_list()
+            .expect("port list can't be empty since it contains at least the given port");
 
         let port_offset = port.index().wrapping_sub(port_list.index());
 
@@ -522,30 +526,36 @@ impl UnweightedGraph {
         let mut old_index = 0;
         let mut new_index = 0;
         self.node_meta.retain(|node_meta| {
-            if node_meta.is_free() {
-                old_index += 1;
-                return false;
-            }
-
             let old_node = NodeIndex::new(old_index);
             let new_node = NodeIndex::new(new_index);
+
+            old_index += 1;
+
+            let node_meta = match node_meta {
+                NodeEntry::Free(_) => {
+                    old_index += 1;
+                    return false;
+                }
+                NodeEntry::Node(node_meta) => node_meta,
+            };
 
             if let Some(port_list) = node_meta.port_list() {
                 let incoming = node_meta.incoming() as usize;
                 let outgoing = node_meta.outgoing() as usize;
 
                 for port in port_list.index()..port_list.index() + incoming {
-                    self.port_meta[port] = PortMeta::new_node(new_node, Direction::Incoming);
+                    self.port_meta[port] =
+                        PortEntry::Port(PortMeta::new(new_node, Direction::Incoming));
                 }
 
                 for port in port_list.index() + incoming..port_list.index() + outgoing {
-                    self.port_meta[port] = PortMeta::new_node(new_node, Direction::Outgoing);
+                    self.port_meta[port] =
+                        PortEntry::Port(PortMeta::new(new_node, Direction::Outgoing));
                 }
             }
 
             rekey(old_node, new_node);
 
-            old_index += 1;
             new_index += 1;
             true
         });
@@ -562,30 +572,47 @@ impl UnweightedGraph {
     {
         let mut old_index = 0;
 
-        self.port_link.retain(|_| {
-            let retain = !self.port_meta[old_index].is_free();
-            old_index += 1;
-            retain
+        self.port_link.retain(|_| match self.port_meta[old_index] {
+            PortEntry::Free => {
+                old_index += 1;
+                false
+            }
+            PortEntry::Port(_) => {
+                old_index += 1;
+                true
+            }
         });
 
         let mut new_index = 0;
         let mut old_index = 0;
 
         self.port_meta.retain(|port_meta| {
-            if port_meta.is_free() {
-                old_index += 1;
-                return false;
-            }
-
             let old_port = PortIndex::new(old_index);
             let new_port = PortIndex::new(new_index);
 
+            old_index += 1;
+
+            let port_meta = match port_meta {
+                PortEntry::Free => {
+                    return false;
+                }
+                PortEntry::Port(port_meta) => port_meta,
+            };
+
             // If we are moving the first port in a node's port list, we have to update the node.
-            let node_meta = &mut self.node_meta[port_meta.node().index()];
+            let node_entry = &mut self.node_meta[port_meta.node().index()];
+
+            let node_meta = match *node_entry {
+                NodeEntry::Free(_) => unreachable!("port must be attached to a valid node"),
+                NodeEntry::Node(node_meta) => node_meta,
+            };
 
             if node_meta.port_list() == Some(old_port) {
-                *node_meta =
-                    NodeMeta::new_node(Some(new_port), node_meta.incoming(), node_meta.outgoing());
+                *node_entry = NodeEntry::Node(NodeMeta::new(
+                    Some(new_port),
+                    node_meta.incoming(),
+                    node_meta.outgoing(),
+                ));
             }
 
             rekey(old_port, new_port);
@@ -612,24 +639,18 @@ impl UnweightedGraph {
 
     #[inline]
     fn node_meta_valid(&self, node: NodeIndex) -> Option<NodeMeta> {
-        let node_meta = self.node_meta.get(node.index())?;
-
-        if node_meta.is_free() {
-            None
-        } else {
-            Some(*node_meta)
+        match self.node_meta.get(node.index()) {
+            Some(NodeEntry::Node(node_meta)) => Some(*node_meta),
+            _ => None,
         }
     }
 
     #[inline]
     #[must_use]
     fn port_meta_valid(&self, port: PortIndex) -> Option<PortMeta> {
-        let port_meta = self.port_meta.get(port.index())?;
-
-        if port_meta.is_free() {
-            None
-        } else {
-            Some(*port_meta)
+        match self.port_meta.get(port.index()) {
+            Some(PortEntry::Port(port_meta)) => Some(*port_meta),
+            _ => None,
         }
     }
 }
@@ -640,52 +661,53 @@ impl Default for UnweightedGraph {
     }
 }
 
+/// Meta data stored for a valid node.
 #[derive(Debug, Clone, Copy)]
-struct NodeMeta(u32, u16, u16);
+struct NodeMeta {
+    /// The index of the first port in the port list.
+    /// If the node has no ports, this will be `None`.
+    port_list: Option<PortIndex>,
+    /// The number of incoming ports plus 1.
+    /// We use the `NonZeroU16` here to ensure that `NodeEntry` is 8 bytes.
+    incoming: NonZeroU16,
+    /// The nmber of outgoing ports.
+    outgoing: u16,
+}
 
 impl NodeMeta {
     #[inline]
-    pub fn is_free(self) -> bool {
-        self.2 == u16::MAX
-    }
-
-    #[inline]
-    pub fn new_free(next: Option<NodeIndex>) -> Self {
-        Self(next.map_or(0, |next| u32::from(next.0)), 0, u16::MAX)
-    }
-
-    #[inline]
-    pub fn new_node(port_list: Option<PortIndex>, incoming: u16, outgoing: u16) -> Self {
-        Self(
-            port_list.map_or(0, |next| u32::from(next.0)),
-            incoming,
+    pub fn new(port_list: Option<PortIndex>, incoming: u16, outgoing: u16) -> Self {
+        Self {
+            port_list,
+            incoming: unsafe { NonZeroU16::new_unchecked(incoming + 1) },
             outgoing,
-        )
+        }
     }
 
     #[inline]
-    pub fn free_next(self) -> Option<NodeIndex> {
-        debug_assert!(self.is_free());
-        Some(NodeIndex(NonZeroU32::new(self.0)?))
+    pub fn port_list(&self) -> Option<PortIndex> {
+        self.port_list
     }
 
     #[inline]
-    pub fn incoming(self) -> u16 {
-        debug_assert!(!self.is_free());
-        self.1
+    pub fn incoming(&self) -> u16 {
+        u16::from(self.incoming).wrapping_sub(1)
     }
 
     #[inline]
-    pub fn outgoing(self) -> u16 {
-        debug_assert!(!self.is_free());
-        self.2
+    pub fn outgoing(&self) -> u16 {
+        self.outgoing
     }
+}
 
-    #[inline]
-    pub fn port_list(self) -> Option<PortIndex> {
-        debug_assert!(!self.is_free());
-        Some(PortIndex(NonZeroU32::new(self.0)?))
-    }
+/// Meta data stored for a node, which might be free.
+#[derive(Debug, Clone, Copy)]
+enum NodeEntry {
+    /// No node is stored at this entry.
+    /// Instead the entry contains the next index in the node free list.
+    Free(Option<NodeIndex>),
+    /// A node is stored at this entry.
+    Node(NodeMeta),
 }
 
 impl std::fmt::Debug for UnweightedGraph {
@@ -762,48 +784,49 @@ mod debug {
     }
 }
 
+/// Meta data stored for a valid port.
+///
+/// Encodes a `NodeIndex` and a `Direction` by using the last bit.
+/// We use a `NonZeroU32` here to ensure that `PortEntry` only uses 4 bytes.
 #[derive(Debug, Clone, Copy)]
-struct PortMeta(u32);
+struct PortMeta(NonZeroU32);
 
 impl PortMeta {
     const DIRECTION_BIT: u32 = u32::BITS - 1;
     const NODE_MASK: u32 = !(1 << Self::DIRECTION_BIT);
 
     #[inline]
-    pub fn new_free() -> Self {
-        Self(u32::MAX)
-    }
-
-    #[inline]
-    pub fn new_node(node: NodeIndex, direction: Direction) -> Self {
+    pub fn new(node: NodeIndex, direction: Direction) -> Self {
         let direction = (direction as u32) << Self::DIRECTION_BIT;
         let index = node.index() as u32 + 1;
-        Self(index | direction)
+        // SAFETY: We know that this can not be zero
+        Self(unsafe { NonZeroU32::new_unchecked(index | direction) })
     }
 
     #[inline]
-    pub fn is_free(self) -> bool {
-        self.0 == u32::MAX
+    pub fn node(self) -> NodeIndex {
+        // PERFORMANCE: Make sure that this does not involve a check
+        NodeIndex::new((u32::from(self.0) & Self::NODE_MASK) as usize - 1)
     }
 
     #[inline]
     pub fn direction(self) -> Direction {
-        debug_assert!(!self.is_free());
-        if self.0 >> Self::DIRECTION_BIT == 0 {
+        if u32::from(self.0) >> Self::DIRECTION_BIT == 0 {
             Direction::Incoming
         } else {
             Direction::Outgoing
         }
     }
+}
 
-    #[inline]
-    pub fn node(self) -> NodeIndex {
-        debug_assert!(!self.is_free());
-        match NonZeroU32::new(self.0 & Self::NODE_MASK) {
-            Some(index) => NodeIndex(index),
-            None => panic!(),
-        }
-    }
+/// Meta data stored for a port, which might be free.
+#[derive(Debug, Clone, Copy)]
+enum PortEntry {
+    /// No port is stored at this entry.
+    /// The index will be part of a port list currently on the free list.
+    Free,
+    /// A port is stored at this entry.
+    Port(PortMeta),
 }
 
 #[derive(Debug, Clone)]
@@ -859,7 +882,7 @@ impl Default for NodePorts {
 
 #[derive(Clone)]
 pub struct Nodes<'a> {
-    iter: std::iter::Enumerate<std::slice::Iter<'a, NodeMeta>>,
+    iter: std::iter::Enumerate<std::slice::Iter<'a, NodeEntry>>,
     len: usize,
 }
 
@@ -868,12 +891,11 @@ impl<'a> Iterator for Nodes<'a> {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.iter.find_map(|(index, node_meta)| {
-            if !node_meta.is_free() {
+        self.iter.find_map(|(index, node_meta)| match node_meta {
+            NodeEntry::Free(_) => None,
+            NodeEntry::Node(_) => {
                 self.len -= 1;
                 Some(NodeIndex::new(index))
-            } else {
-                None
             }
         })
     }
@@ -900,7 +922,7 @@ impl<'a> DoubleEndedIterator for Nodes<'a> {
         }
 
         while let Some((index, node_meta)) = self.iter.next_back() {
-            if !node_meta.is_free() {
+            if let NodeEntry::Node(_) = node_meta {
                 self.len -= 1;
                 return Some(NodeIndex::new(index));
             }
@@ -914,7 +936,7 @@ impl<'a> FusedIterator for Nodes<'a> {}
 
 #[derive(Clone)]
 pub struct Ports<'a> {
-    iter: std::iter::Enumerate<std::slice::Iter<'a, PortMeta>>,
+    iter: std::iter::Enumerate<std::slice::Iter<'a, PortEntry>>,
     len: usize,
 }
 
@@ -926,8 +948,8 @@ impl<'a> Iterator for Ports<'a> {
             return None;
         }
 
-        for (index, port_meta) in &mut self.iter {
-            if !port_meta.is_free() {
+        for (index, port_entry) in &mut self.iter {
+            if let PortEntry::Port(_) = port_entry {
                 self.len -= 1;
                 return Some(PortIndex::new(index));
             }
@@ -957,8 +979,8 @@ impl<'a> DoubleEndedIterator for Ports<'a> {
             return None;
         }
 
-        while let Some((index, port_meta)) = self.iter.next_back() {
-            if !port_meta.is_free() {
+        while let Some((index, port_entry)) = self.iter.next_back() {
+            if let PortEntry::Port(_) = port_entry {
                 self.len -= 1;
                 return Some(PortIndex::new(index));
             }

@@ -1,8 +1,8 @@
 //! Substitution and rewriting of graphs.
-//! 
+//!
 //! This module provides the [`Rewrite`] and [`WeightedRewrite`] types which can
 //! be used to define and perform substitutions and rewrites on graphs.
-//! 
+//!
 //! TODO: Rewriting with hierarchy. There's some design work to do here with
 //! matching the replaced subgraph hierarchy in the replacement.
 
@@ -18,10 +18,7 @@ use thiserror::Error;
 
 impl PortGraph {
     /// Applies a rewrite to the graph.
-    pub fn apply_rewrite<N: Clone, P: Clone>(
-        &mut self,
-        rewrite: Rewrite,
-    ) -> Result<(), RewriteError> {
+    pub fn apply_rewrite(&mut self, rewrite: Rewrite) -> Result<(), RewriteError> {
         rewrite.apply(self)
     }
 
@@ -49,7 +46,7 @@ impl PortGraph {
     /// - `port_inserted`: A callback that is called with the old port index in
     ///   the rewrite's [OpenGraph], and the new port index in the graph.
     /// - `ports_connected`: A callback that is called when two ports are connected.
-    pub fn apply_rewrite_with_callbacks<N: Clone, P: Clone>(
+    pub fn apply_rewrite_with_callbacks(
         &mut self,
         rewrite: Rewrite,
         node_removed: impl FnMut(NodeIndex),
@@ -218,7 +215,11 @@ pub struct WeightedRewrite<N = (), P = ()> {
     replacement_weights: Weights<N, P>,
 }
 
-impl<N, P> WeightedRewrite<N, P> where N: Clone, P: Clone {
+impl<N, P> WeightedRewrite<N, P>
+where
+    N: Clone,
+    P: Clone,
+{
     /// Creates a new rewrite operation.
     pub fn new(
         subgraph: BoundedSubgraph,
@@ -238,10 +239,16 @@ impl<N, P> WeightedRewrite<N, P> where N: Clone, P: Clone {
         weights: &mut Weights<N, P>,
     ) -> Result<(), RewriteError> {
         let node_inserted = |old, new| {
-            std::mem::swap(&mut weights.nodes[new], &mut self.replacement_weights.nodes[old]);
+            std::mem::swap(
+                &mut weights.nodes[new],
+                &mut self.replacement_weights.nodes[old],
+            );
         };
         let port_inserted = |old, new| {
-            std::mem::swap(&mut weights.ports[new], &mut self.replacement_weights.ports[old]);
+            std::mem::swap(
+                &mut weights.ports[new],
+                &mut self.replacement_weights.ports[old],
+            );
         };
         self.rewrite.apply_with_callbacks(
             graph,
@@ -408,9 +415,9 @@ mod tests {
     fn test_replace_subgraph() -> Result<(), Box<dyn Error>> {
         let mut g = PortGraph::with_capacity(3, 2);
 
-        let n0 = g.add_node( 0, 2);
-        let n1 = g.add_node( 1, 1);
-        let n2 = g.add_node( 2, 0);
+        let n0 = g.add_node(0, 2);
+        let n1 = g.add_node(1, 1);
+        let n2 = g.add_node(2, 0);
 
         g.link_nodes(n0, 0, n1, 0)?;
         g.link_nodes(n1, 0, n2, 0)?;
@@ -490,18 +497,15 @@ mod tests {
     fn test_replace_empty_subgraph() -> Result<(), Box<dyn Error>> {
         let mut g = PortGraph::with_capacity(3, 2);
 
-        let n0 = g.add_node( 0, 2);
-        let n1 = g.add_node( 1, 1);
-        let n2 = g.add_node( 2, 0);
+        let n0 = g.add_node(0, 2);
+        let n1 = g.add_node(1, 1);
+        let n2 = g.add_node(2, 0);
 
         g.link_nodes(n0, 0, n1, 0)?;
         g.link_nodes(n1, 0, n2, 0)?;
 
         // Run an empty rewrite
-        let rewrite = Rewrite::new(
-            BoundedSubgraph::default(),
-            OpenGraph::default(),
-        );
+        let rewrite = Rewrite::new(BoundedSubgraph::default(), OpenGraph::default());
 
         rewrite.apply(&mut g)?;
 

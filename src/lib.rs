@@ -19,7 +19,7 @@ use std::num::NonZeroU32;
 use thiserror::Error;
 
 pub mod algorithms;
-//pub mod dot;
+pub mod dot;
 pub mod hierarchy;
 pub mod portgraph;
 //pub mod py_graph;
@@ -28,13 +28,13 @@ pub mod substitute;
 pub mod weights;
 
 #[doc(inline)]
-pub use crate::portgraph::PortGraph;
-#[doc(inline)]
 pub use crate::hierarchy::Hierarchy;
 #[doc(inline)]
-pub use crate::weights::Weights;
+pub use crate::portgraph::PortGraph;
 #[doc(inline)]
 pub use crate::secondary::SecondaryMap;
+#[doc(inline)]
+pub use crate::weights::Weights;
 
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Eq, Ord, Hash)]

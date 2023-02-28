@@ -308,10 +308,16 @@ impl PortGraph {
     ) -> Result<(PortIndex, PortIndex), LinkError> {
         let from_port = self
             .output(from, from_offset)
-            .ok_or(LinkError::UnknownOffset(from, Direction::Outgoing, from_offset))?;
-        let to_port = self
-            .input(to, to_offset)
-            .ok_or(LinkError::UnknownOffset(to, Direction::Incoming, to_offset))?;
+            .ok_or(LinkError::UnknownOffset(
+                from,
+                Direction::Outgoing,
+                from_offset,
+            ))?;
+        let to_port = self.input(to, to_offset).ok_or(LinkError::UnknownOffset(
+            to,
+            Direction::Incoming,
+            to_offset,
+        ))?;
         self.link_ports(from_port, to_port)?;
         Ok((from_port, to_port))
     }
@@ -1205,18 +1211,30 @@ mod test {
 
         g.link_ports(node0_output, node1_input).unwrap();
         assert_eq!(g.link_count(), 1);
-        assert_eq!(g.get_connection(node0, node1), Some((node0_output, node1_input)));
+        assert_eq!(
+            g.get_connection(node0, node1),
+            Some((node0_output, node1_input))
+        );
         assert!(!g.connected(node1, node0));
 
         g.link_ports(node1_output, node0_input).unwrap();
         assert_eq!(g.link_count(), 2);
-        assert_eq!(g.get_connection(node0, node1), Some((node0_output, node1_input)));
-        assert_eq!(g.get_connection(node1, node0), Some((node1_output, node0_input)));
+        assert_eq!(
+            g.get_connection(node0, node1),
+            Some((node0_output, node1_input))
+        );
+        assert_eq!(
+            g.get_connection(node1, node0),
+            Some((node1_output, node0_input))
+        );
 
         g.unlink_port(node0_output);
         assert_eq!(g.link_count(), 1);
         assert!(!g.connected(node0, node1));
-        assert_eq!(g.get_connection(node1, node0), Some((node1_output, node0_input)));
+        assert_eq!(
+            g.get_connection(node1, node0),
+            Some((node1_output, node0_input))
+        );
     }
 
     #[test]

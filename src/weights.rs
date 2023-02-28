@@ -19,8 +19,7 @@ where
     ///
     /// This does not allocate any memory until a value is modified.
     #[inline]
-    pub fn new() -> Self
-    {
+    pub fn new() -> Self {
         Self {
             nodes: SecondaryMap::new(),
             ports: SecondaryMap::new(),
@@ -29,8 +28,7 @@ where
 
     /// Creates a new secondary map with specified capacity.
     #[inline]
-    pub fn with_capacity(nodes: usize, ports: usize) -> Self
-    {
+    pub fn with_capacity(nodes: usize, ports: usize) -> Self {
         Self {
             nodes: SecondaryMap::with_capacity(nodes),
             ports: SecondaryMap::with_capacity(ports),

@@ -71,7 +71,7 @@ where
 
     /// Mutably borrows the value at a `key`.
     ///
-    /// When the value is not present, the secondary map is resized to accomodate it.
+    /// When the value is not present, the secondary map is resized to accommodate it.
     /// To avoid frequent resizing, use [`SecondaryMap::ensure_capacity`] to keep the
     /// capacity of the secondary map in line with the size of the key space.
     #[inline]

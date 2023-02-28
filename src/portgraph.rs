@@ -26,6 +26,7 @@ pub struct PortGraph {
     port_free: Vec<Option<PortIndex>>,
     node_count: usize,
     port_count: usize,
+    link_count: usize,
 }
 
 impl PortGraph {
@@ -39,6 +40,7 @@ impl PortGraph {
             port_free: Vec::new(),
             node_count: 0,
             port_count: 0,
+            link_count: 0,
         }
     }
 
@@ -52,6 +54,7 @@ impl PortGraph {
             port_free: Vec::new(),
             node_count: 0,
             port_count: 0,
+            link_count: 0,
         }
     }
 
@@ -184,6 +187,7 @@ impl PortGraph {
 
                 if let Some(link) = self.port_link[i] {
                     self.port_link[link.index()] = None;
+                    self.link_count -= 1;
                 }
             }
 
@@ -259,7 +263,7 @@ impl PortGraph {
 
         self.port_link[port_from.index()] = Some(port_to);
         self.port_link[port_to.index()] = Some(port_from);
-
+        self.link_count += 1;
         Ok(())
     }
 
@@ -269,7 +273,47 @@ impl PortGraph {
         self.port_meta_valid(port)?;
         let linked = take(&mut self.port_link[port.index()])?;
         self.port_link[linked.index()] = None;
+        self.link_count -= 1;
         Some(linked)
+    }
+
+    /// Checks whether there is a directed link between the two nodes and
+    /// returns the first matching pair of ports.
+    #[must_use]
+    #[inline]
+    pub fn get_connection(&self, from: NodeIndex, to: NodeIndex) -> Option<(PortIndex, PortIndex)> {
+        self.outputs(from)
+            .filter_map(|from_port| {
+                self.port_link(from_port)
+                    .filter(|to_port| self.port_node(*to_port) == Some(to))
+                    .map(|to_port| (from_port, to_port))
+            })
+            .next()
+    }
+
+    /// Checks whether there is a directed link between the two nodes.
+    #[must_use]
+    #[inline]
+    pub fn connected(&self, from: NodeIndex, to: NodeIndex) -> bool {
+        self.get_connection(from, to).is_some()
+    }
+
+    /// Links two nodes at an input and output port offsets.
+    pub fn link_nodes(
+        &mut self,
+        from: NodeIndex,
+        from_offset: usize,
+        to: NodeIndex,
+        to_offset: usize,
+    ) -> Result<(PortIndex, PortIndex), LinkError> {
+        let from_port = self
+            .output(from, from_offset)
+            .ok_or(LinkError::UnknownOffset(from, Direction::Outgoing, from_offset))?;
+        let to_port = self
+            .input(to, to_offset)
+            .ok_or(LinkError::UnknownOffset(to, Direction::Incoming, to_offset))?;
+        self.link_ports(from_port, to_port)?;
+        Ok((from_port, to_port))
     }
 
     /// Returns the direction of the `port`.
@@ -285,7 +329,7 @@ impl PortGraph {
     }
 
     /// Returns the index of a `port` within its node's port list.
-    pub fn port_index(&self, port: PortIndex) -> Option<usize> {
+    pub fn port_offset(&self, port: PortIndex) -> Option<usize> {
         let port_meta = self.port_meta_valid(port)?;
         let node = port_meta.node();
 
@@ -300,11 +344,36 @@ impl PortGraph {
 
         let port_offset = port.index().wrapping_sub(port_list.index());
 
-        let port_index = port_offset
+        let port_offset = port_offset
             .checked_sub(node_meta.incoming() as usize)
             .unwrap_or(port_offset);
 
-        Some(port_index)
+        Some(port_offset)
+    }
+
+    /// Returns the port index for a given node, direction, and offset.
+    #[must_use]
+    pub fn port_index(
+        &self,
+        node: NodeIndex,
+        offset: usize,
+        direction: Direction,
+    ) -> Option<PortIndex> {
+        let node_meta = self.node_meta_valid(node)?;
+        let port_list = node_meta.port_list()?;
+
+        match direction {
+            Direction::Incoming if offset >= node_meta.incoming() as usize => {
+                Some(PortIndex(port_list.0.saturating_add(offset as u32)))
+            }
+            Direction::Outgoing if offset >= node_meta.outgoing() as usize => Some(PortIndex(
+                port_list
+                    .0
+                    .saturating_add(node_meta.incoming() as u32)
+                    .saturating_add(offset as u32),
+            )),
+            _ => None,
+        }
     }
 
     /// Returns the port that the given `port` is linked to.
@@ -508,6 +577,12 @@ impl PortGraph {
         self.port_count
     }
 
+    /// Returns the number of links between ports.
+    #[inline]
+    pub fn link_count(&self) -> usize {
+        self.link_count
+    }
+
     /// Iterates over the nodes in the port graph.
     #[inline]
     pub fn nodes_iter(&self) -> Nodes<'_> {
@@ -535,6 +610,7 @@ impl PortGraph {
         self.port_free.clear();
         self.node_count = 0;
         self.port_count = 0;
+        self.link_count = 0;
     }
 
     /// Returns the capacity of the underlying buffer for nodes.
@@ -1079,6 +1155,8 @@ pub enum LinkError {
     AlreadyLinked(PortIndex),
     #[error("unknown port")]
     UnknownPort(PortIndex),
+    #[error("unknown port")]
+    UnknownOffset(NodeIndex, Direction, usize),
     #[error("unexpected port direction")]
     UnexpectedDirection(PortIndex),
 }
@@ -1086,6 +1164,17 @@ pub enum LinkError {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn create_graph() {
+        let graph = PortGraph::new();
+
+        assert_eq!(graph.node_count(), 0);
+        assert_eq!(graph.port_count(), 0);
+        assert_eq!(graph.link_count(), 0);
+        assert_eq!(graph.nodes_iter().count(), 0);
+        assert_eq!(graph.ports_iter().count(), 0);
+    }
 
     #[test]
     fn add_nodes() {
@@ -1102,14 +1191,43 @@ mod test {
     }
 
     #[test]
+    fn link_ports() {
+        let mut g = PortGraph::new();
+        let node0 = g.add_node(1, 1);
+        let node1 = g.add_node(1, 1);
+        let node0_input = g.input(node0, 0).unwrap();
+        let node0_output = g.output(node0, 0).unwrap();
+        let node1_input = g.input(node1, 0).unwrap();
+        let node1_output = g.output(node1, 0).unwrap();
+        assert_eq!(g.link_count(), 0);
+        assert!(!g.connected(node0, node1));
+        assert!(!g.connected(node1, node0));
+
+        g.link_ports(node0_output, node1_input).unwrap();
+        assert_eq!(g.link_count(), 1);
+        assert_eq!(g.get_connection(node0, node1), Some((node0_output, node1_input)));
+        assert!(!g.connected(node1, node0));
+
+        g.link_ports(node1_output, node0_input).unwrap();
+        assert_eq!(g.link_count(), 2);
+        assert_eq!(g.get_connection(node0, node1), Some((node0_output, node1_input)));
+        assert_eq!(g.get_connection(node1, node0), Some((node1_output, node0_input)));
+
+        g.unlink_port(node0_output);
+        assert_eq!(g.link_count(), 1);
+        assert!(!g.connected(node0, node1));
+        assert_eq!(g.get_connection(node1, node0), Some((node1_output, node0_input)));
+    }
+
+    #[test]
     fn link_ports_errors() {
         let mut g = PortGraph::new();
         let node0 = g.add_node(1, 1);
         let node1 = g.add_node(1, 1);
-        let node0_input = g.inputs(node0).nth(0).unwrap();
-        let node0_output = g.outputs(node0).nth(0).unwrap();
-        let node1_input = g.inputs(node1).nth(0).unwrap();
-        let node1_output = g.outputs(node1).nth(0).unwrap();
+        let node0_input = g.input(node0, 0).unwrap();
+        let node0_output = g.output(node0, 0).unwrap();
+        let node1_input = g.input(node1, 0).unwrap();
+        let node1_output = g.output(node1, 0).unwrap();
         assert!(g.link_ports(node0_input, node1_input).is_err());
         assert!(g.link_ports(node0_output, node1_output).is_err());
         g.link_ports(node0_output, node0_input).unwrap();

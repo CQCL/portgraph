@@ -19,14 +19,20 @@ use std::num::NonZeroU32;
 use thiserror::Error;
 
 pub mod algorithms;
+//pub mod dot;
 pub mod hierarchy;
 pub mod portgraph;
+//pub mod py_graph;
 pub mod secondary;
+pub mod substitute;
+pub mod weights;
 
+#[doc(inline)]
+pub use crate::portgraph::PortGraph;
 #[doc(inline)]
 pub use crate::hierarchy::Hierarchy;
 #[doc(inline)]
-pub use crate::portgraph::PortGraph;
+pub use crate::weights::Weights;
 #[doc(inline)]
 pub use crate::secondary::SecondaryMap;
 

@@ -25,10 +25,18 @@ where
     where
         V: Default,
     {
+        Self::with_default(Default::default())
+    }
+
+    /// Creates a new secondary map, specifying the default element.
+    ///
+    /// This does not allocate any memory until a value is modified.
+    #[inline]
+    pub fn with_default(default: V) -> Self {
         Self {
             data: Vec::new(),
             phantom: PhantomData,
-            default: V::default(),
+            default,
         }
     }
 
@@ -38,10 +46,16 @@ where
     where
         V: Default,
     {
+        Self::with_capacity_and_default(capacity, Default::default())
+    }
+
+    /// Creates a new secondary map with specified capacity and default element.
+    #[inline]
+    pub fn with_capacity_and_default(capacity: usize, default: V) -> Self {
         Self {
             data: Vec::with_capacity(capacity),
             phantom: PhantomData,
-            default: V::default(),
+            default,
         }
     }
 

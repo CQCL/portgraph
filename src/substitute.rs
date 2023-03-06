@@ -131,9 +131,9 @@ impl FromIterator<NodeIndex> for SubgraphRef {
 pub struct BoundedSubgraph {
     /// Nodes in the subgraph.
     pub subgraph: SubgraphRef,
-    /// [`Direction::Outgoing`] ports outside the subset that are connected to the subgraph.
+    /// [`crate::Direction::Outgoing`] ports outside the subset that are connected to the subgraph.
     pub inputs: Vec<PortIndex>,
-    /// [`Direction::Incoming`] ports outside the subset that the subgraph is connected to.
+    /// [`crate::Direction::Incoming`] ports outside the subset that the subgraph is connected to.
     pub outputs: Vec<PortIndex>,
 }
 
@@ -177,9 +177,9 @@ impl BoundedSubgraph {
 pub struct OpenGraph {
     /// The graph.
     pub graph: PortGraph,
-    /// [`Direction::Incoming`] dangling ports in the graph.
+    /// [`crate::Direction::Incoming`] dangling ports in the graph.
     pub dangling_inputs: Vec<PortIndex>,
-    /// [`Direction::Outgoing`] dangling ports in the graph.
+    /// [`crate::Direction::Outgoing`] dangling ports in the graph.
     pub dangling_outputs: Vec<PortIndex>,
 }
 

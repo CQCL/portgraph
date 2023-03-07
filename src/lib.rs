@@ -1,4 +1,4 @@
-//! `portgraph` is a data structure library for graphs with ports.
+//! `portgraph` is a data structure library for graphs with node ports.
 //!
 //! A port graph (as implemented by this library) consists of a collection of nodes,
 //! each equipped with an ordered sequence of input and output ports.
@@ -15,6 +15,38 @@
 //! it can represent a port graph in which nodes may be nested within each other.
 //!
 //! [`HashMap`]: std::collections::HashMap
+//!
+//! # Example
+//!
+//! ```
+//! use portgraph::{PortGraph, Direction};
+//! use portgraph::algorithms::toposort;
+//! use portgraph::substitute::Rewrite;
+//!
+//! // Create a graph with two nodes, each with two input and two output ports
+//! let mut graph = PortGraph::new();
+//! let node_a = graph.add_node(2, 2);
+//! let node_b = graph.add_node(2, 2);
+//!
+//! // Link the first output port of node A to the first input port of node B
+//! graph.link_nodes(node_a, 0, node_b, 0).unwrap();
+//!
+//! // Get globally unique indices for the ports, and link them directly
+//! let port_a = graph.output(node_a, 1).unwrap();
+//! let port_b = graph.input(node_b, 1).unwrap();
+//! graph.link_ports(port_a, port_b).unwrap();
+//!
+//! // Run a topological sort on the graph starting at node A.
+//! let topo = toposort(&graph, [port_a], Direction::Outgoing)
+//! assert_eq!(topo.collect::<Vec<_>>(), [node_a, node_b]);
+//!
+//! ```
+//!
+//! # Features
+//!
+//! - `serde` enables serialization and deserialization of `PortGraph`s and graph component structures.
+//! - `pyo3` enables Python bindings.
+//!
 use std::num::NonZeroU32;
 use thiserror::Error;
 

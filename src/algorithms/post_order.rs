@@ -4,7 +4,16 @@ use bitvec::vec::BitVec;
 
 use crate::{Direction, NodeIndex, PortGraph};
 
-/// Iterator over an `UnweightedGraph` in post-order.
+/// Returns a post-order iterator over a [`..::Portgraph`].
+pub fn postorder(
+    graph: &PortGraph,
+    source: impl IntoIterator<Item = NodeIndex>,
+    direction: Direction,
+) -> PostOrder {
+    PostOrder::new(graph, source, direction)
+}
+
+/// Iterator over a [`Portgraph`] in post-order.
 pub struct PostOrder<'graph> {
     graph: &'graph PortGraph,
     stack: Vec<NodeIndex>,

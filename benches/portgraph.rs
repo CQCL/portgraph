@@ -1,3 +1,5 @@
+#![allow(clippy::unit_arg)] // Required for black_box uses
+
 use criterion::{
     black_box, criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion,
     PlotConfiguration,

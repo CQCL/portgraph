@@ -127,9 +127,9 @@ impl PortGraph {
                 self.port_free[size - 1] = free_next;
 
                 let i = port.index();
-                self.port_meta[(i + incoming..i + size)].fill(meta_outgoing);
-                self.port_meta[(i..i + incoming)].fill(meta_incoming);
-                self.port_link[(i..i + size)].fill(None);
+                self.port_meta[i + incoming..i + size].fill(meta_outgoing);
+                self.port_meta[i..i + incoming].fill(meta_incoming);
+                self.port_link[i..i + size].fill(None);
 
                 port
             }

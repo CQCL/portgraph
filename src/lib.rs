@@ -18,6 +18,9 @@
 use std::num::NonZeroU32;
 use thiserror::Error;
 
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
+
 pub mod algorithms;
 pub mod dot;
 pub mod hierarchy;
@@ -27,10 +30,13 @@ pub mod secondary;
 pub mod substitute;
 pub mod weights;
 
+#[cfg(feature = "pyo3")]
+pub mod py_graph;
+
 #[doc(inline)]
 pub use crate::hierarchy::Hierarchy;
 #[doc(inline)]
-pub use crate::portgraph::PortGraph;
+pub use crate::portgraph::{PortGraph, LinkError};
 #[doc(inline)]
 pub use crate::secondary::SecondaryMap;
 #[doc(inline)]

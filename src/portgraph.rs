@@ -7,6 +7,9 @@ use std::{
 use crate::{Direction, NodeIndex, PortIndex};
 use thiserror::Error;
 
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
+
 /// An unlabelled port graph.
 ///
 /// A port graph consists of a collection of nodes identified by a [`NodeIndex`].
@@ -17,6 +20,7 @@ use thiserror::Error;
 /// when a new node is added.
 /// The indices of unaffected nodes and ports remain stable.
 /// [`PortGraph::compact_nodes`] and [`PortGraph::compact_ports`] to eliminate fragmentation in the index space.
+#[cfg_attr(feature = "pyo3", pyclass)]
 #[derive(Clone)]
 pub struct PortGraph {
     node_meta: Vec<NodeEntry>,

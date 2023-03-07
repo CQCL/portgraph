@@ -1,6 +1,6 @@
 use pyo3::{types::PyInt, IntoPy, PyErr, PyObject, Python};
 
-use crate::{substitute::RewriteError, PortIndex, NodeIndex, LinkError};
+use crate::{substitute::RewriteError, LinkError, NodeIndex, PortIndex};
 
 impl From<PyInt> for NodeIndex {
     fn from(x: PyInt) -> Self {

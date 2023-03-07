@@ -36,7 +36,7 @@ pub mod py_graph;
 #[doc(inline)]
 pub use crate::hierarchy::Hierarchy;
 #[doc(inline)]
-pub use crate::portgraph::{PortGraph, LinkError};
+pub use crate::portgraph::{LinkError, PortGraph};
 #[doc(inline)]
 pub use crate::secondary::SecondaryMap;
 #[doc(inline)]

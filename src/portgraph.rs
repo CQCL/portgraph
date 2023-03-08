@@ -482,6 +482,33 @@ impl PortGraph {
         self.ports(node, Direction::Outgoing)
     }
 
+    /// Returns the number of input ports of the `node`.
+    ///
+    /// Shorthand for [`PortGraph::num_ports`].
+    #[inline]
+    pub fn num_inputs(&self, node: NodeIndex) -> usize {
+        self.num_ports(node, Direction::Incoming)
+    }
+
+    /// Returns the number of output ports of the `node`.
+    ///
+    /// Shorthand for [`PortGraph::num_ports`].
+    #[inline]
+    pub fn output_count(&self, node: NodeIndex) -> usize {
+        self.num_ports(node, Direction::Outgoing)
+    }
+
+    /// Returns the number of ports of the `node` in the given `direction`.
+    #[inline]
+    pub fn num_ports(&self, node: NodeIndex, direction: Direction) -> usize {
+        let Some(node_meta) = self.node_meta_valid(node) else {return 0;};
+        if Direction::Incoming == direction {
+            node_meta.incoming() as usize
+        } else {
+            node_meta.outgoing() as usize
+        }
+    }
+
     /// Iterates over the links of the `node` in the given `direction`. When the
     /// corresponding node port is linked to another one, the Option contains
     /// the index of the other port.
@@ -797,7 +824,7 @@ struct NodeMeta {
     /// The number of incoming ports plus 1.
     /// We use the `NonZeroU16` here to ensure that `NodeEntry` is 8 bytes.
     incoming: NonZeroU16,
-    /// The nmber of outgoing ports.
+    /// The number of outgoing ports.
     outgoing: u16,
 }
 

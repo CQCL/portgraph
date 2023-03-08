@@ -53,7 +53,9 @@ jobs:
         include:
           #- rust: 1.61.0  # Update once MSRV != stable
           - rust: stable
+            cache: true
           - rust: beta
+            cache: true
           - rust: nightly
             bench: true
 
@@ -64,6 +66,10 @@ jobs:
           profile: minimal
           toolchain: ${{ matrix.rust }}
           override: true
+      - uses: Swatinem/rust-cache@v2
+        if: ${{ matrix.cache }}
+        with:
+          prefix-key: v0-rust-${{ matrix.rust }}
       - name: Build
         run: |
           cargo build --verbose --no-default-features

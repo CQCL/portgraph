@@ -57,6 +57,7 @@ jobs:
           - rust: beta
             cache: true
           - rust: nightly
+            cache: true
             bench: true
 
     steps:

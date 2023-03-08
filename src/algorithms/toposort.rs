@@ -5,6 +5,20 @@ use std::{collections::VecDeque, iter::FusedIterator};
 /// Returns an iterator over a [`Portgraph`] in topological ordering.
 ///
 /// Implements [Kahn's algorithm](https://en.wikipedia.org/wiki/Topological_sorting#Kahn's_algorithm).
+///
+/// # Example
+///
+/// ```
+/// # use portgraph::{algorithms::toposort, Direction, PortGraph};
+/// let mut graph = PortGraph::new();
+/// let node_a = graph.add_node(2, 2);
+/// let node_b = graph.add_node(2, 2);
+/// graph.link_nodes(node_a, 0, node_b, 0).unwrap();
+///
+/// // Run a topological sort on the graph starting at node A.
+/// let topo = toposort(&graph, [node_a], Direction::Outgoing);
+/// assert_eq!(topo.collect::<Vec<_>>(), [node_a, node_b]);
+/// ```
 pub fn toposort(
     graph: &PortGraph,
     source: impl IntoIterator<Item = NodeIndex>,
@@ -53,15 +67,29 @@ impl<'graph> TopoSort<'graph> {
     pub fn ports_remaining(&self) -> impl ExactSizeIterator<Item = PortIndex> + '_ {
         self.remaining_ports.iter_ones().map(PortIndex::new)
     }
+
+    /// Checks if a node is ready to be visited, i.e. it has been reached from
+    /// all its linked ports.
+    fn target_ready(&mut self, node: NodeIndex) -> bool {
+        self.graph.ports(node, self.direction.reverse()).all(|p| {
+            if !self.remaining_ports[p.index()] {
+                true
+            } else if self.graph.port_link(p).is_none() {
+                // If the port is not linked, mark it as visited.
+                self.remaining_ports.set(p.index(), false);
+                true
+            } else {
+                false
+            }
+        })
+    }
 }
 
 impl<'graph> Iterator for TopoSort<'graph> {
     type Item = NodeIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let Some(node) = self.candidate_nodes.pop_front() else {
-            return None;
-        };
+        let node = self.candidate_nodes.pop_front()?;
 
         for port in self.graph.ports(node, self.direction) {
             self.remaining_ports.set(port.index(), false);
@@ -70,12 +98,7 @@ impl<'graph> Iterator for TopoSort<'graph> {
                 self.remaining_ports.set(link.index(), false);
                 let target = self.graph.port_node(link).unwrap();
 
-                let target_ready = self
-                    .graph
-                    .ports(node, self.direction.reverse())
-                    .all(|p| !self.remaining_ports[p.index()]);
-
-                if target_ready {
+                if self.target_ready(target) {
                     self.candidate_nodes.push_back(target);
                 }
             }
@@ -95,3 +118,23 @@ impl<'graph> Iterator for TopoSort<'graph> {
 }
 
 impl<'graph> FusedIterator for TopoSort<'graph> {}
+
+#[cfg(test)]
+mod test {
+    use crate::{algorithms::toposort, Direction, PortGraph};
+
+    #[test]
+    fn small_toposort() {
+        let mut graph = PortGraph::new();
+        let node_a = graph.add_node(2, 3);
+        let node_b = graph.add_node(3, 2);
+
+        // Add two edges between node A and B
+        graph.link_nodes(node_a, 0, node_b, 0).unwrap();
+        graph.link_nodes(node_a, 1, node_b, 1).unwrap();
+
+        // Run a topological sort on the graph starting at node A.
+        let topo = toposort(&graph, [node_a], Direction::Outgoing);
+        assert_eq!(topo.collect::<Vec<_>>(), [node_a, node_b]);
+    }
+}

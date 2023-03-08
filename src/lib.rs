@@ -37,7 +37,7 @@
 //! graph.link_ports(port_a, port_b).unwrap();
 //!
 //! // Run a topological sort on the graph starting at node A.
-//! let topo = toposort(&graph, [port_a], Direction::Outgoing)
+//! let topo = toposort(&graph, [node_a], Direction::Outgoing);
 //! assert_eq!(topo.collect::<Vec<_>>(), [node_a, node_b]);
 //!
 //! ```

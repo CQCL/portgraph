@@ -1,18 +1,24 @@
 //! `portgraph` is a data structure library for graphs with node ports.
 //!
-//! A port graph (as implemented by this library) consists of a collection of nodes,
-//! each equipped with an ordered sequence of input and output ports.
-//! A port can be linked to exactly one other port of the opposite direction or be left dangling.
+//! A port graph (as implemented by this library) consists of a collection of
+//! nodes, each equipped with an ordered sequence of input and output ports. A
+//! port can be linked to exactly one other port of the opposite direction or be
+//! left dangling.
 //!
-//! The core data structure [`PortGraph`] implements a port graph which identifies nodes and ports via
-//! [`NodeIndex`] and [`PortIndex`] but does not attach any additional information to them.
-//! To keep track of weights the user of this library may accompany a [`PortGraph`] with a data structure
-//! which maps from indices to the weight type such as a [`SecondaryMap`] or a [`HashMap`].
-//! This allows for more flexibility in how weights are stored and managed, for instance optimizing for
-//! cache locality or sparsity.
-//! Using the node and port indices also allows to impose additional structure to a [`PortGraph`].
-//! This is exemplified via [`Hierarchy`] which arranges a port graph's nodes into a forest so that
-//! it can represent a port graph in which nodes may be nested within each other.
+//! The core data structure [`PortGraph`] implements a port graph which
+//! identifies nodes and ports via [`NodeIndex`] and [`PortIndex`] but does not
+//! attach any additional information to them. To keep track of weights the user
+//! of this library may accompany a [`PortGraph`] with a data structure which
+//! maps from indices to the weight type such as a [`SecondaryMap`] or a
+//! [`HashMap`]. This allows for more flexibility in how weights are stored and
+//! managed, for instance optimizing for cache locality or sparsity. The
+//! [`Weights`] struct offers a simple wrapper around two a [`SecondaryMap`]s to
+//! quickly encode port and node weights together.
+//!
+//! Using the node and port indices also allows to impose additional structure
+//! to a [`PortGraph`]. This is exemplified via [`Hierarchy`] which arranges a
+//! port graph's nodes into a forest so that it can represent a port graph in
+//! which nodes may be nested within each other.
 //!
 //! [`HashMap`]: std::collections::HashMap
 //!
@@ -44,7 +50,8 @@
 //!
 //! # Features
 //!
-//! - `serde` enables serialization and deserialization of `PortGraph`s and graph component structures.
+//! - `serde` enables serialization and deserialization of `PortGraph`s and
+//!   graph component structures.
 //! - `pyo3` enables Python bindings.
 //!
 use std::num::NonZeroU32;

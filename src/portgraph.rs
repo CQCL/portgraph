@@ -1023,6 +1023,15 @@ impl ExactSizeIterator for NodePorts {
     }
 }
 
+impl DoubleEndedIterator for NodePorts {
+    #[inline]
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.length = self.length.checked_sub(1)?;
+        let port = PortIndex(self.index.saturating_add(self.length as u32));
+        Some(port)
+    }
+}
+
 impl FusedIterator for NodePorts {}
 
 impl Default for NodePorts {

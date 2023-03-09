@@ -494,7 +494,7 @@ impl PortGraph {
     ///
     /// Shorthand for [`PortGraph::num_ports`].
     #[inline]
-    pub fn output_count(&self, node: NodeIndex) -> usize {
+    pub fn num_outputs(&self, node: NodeIndex) -> usize {
         self.num_ports(node, Direction::Outgoing)
     }
 

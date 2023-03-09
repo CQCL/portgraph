@@ -1,3 +1,5 @@
+//! Functions to encode a `PortGraph` in dot format.
+
 use std::fmt::Display;
 
 use crate::{Direction, NodeIndex, PortGraph, PortIndex, Weights};
@@ -40,18 +42,26 @@ pub fn dot_string_with(
     dot_node.push_str("digraph {\n");
 
     for n in graph.nodes_iter() {
-        let inputs_row = get_ports_row_dot(graph, n, Direction::Incoming, &mut ports);
-        let node_label = nodes(n);
-        let label_row = format!("<tr><td align=\"text\">{node_label}</td></tr>");
-        let outputs_row = get_ports_row_dot(graph, n, Direction::Outgoing, &mut ports);
+        // Format the node as a table
 
-        let node_str = format!("{} [shape=plain label=\"<", n.index())
-            + "<table border=\"0\">"
+        // Track the port counts for spacing
+        let ins = graph.num_inputs(n).max(1);
+        let outs = graph.num_outputs(n).max(1);
+        let table_width = ins*outs;
+
+        let inputs_row = get_ports_row_dot(graph, n, Direction::Incoming, outs, &mut ports);
+        let outputs_row = get_ports_row_dot(graph, n, Direction::Outgoing, ins, &mut ports);
+
+        let node_label = nodes(n);
+        let label_row = format!("<tr><td align=\"text\" border=\"0\" colspan=\"{table_width}\">{node_label}</td></tr>");
+
+        let node_str = format!("{} [shape=plain label=<", n.index())
+            + "<table border=\"1\">"
             + &inputs_row
             + &label_row
             + &outputs_row
             + "</table>"
-            + ">\"]\n";
+            + ">]\n";
         dot_node.push_str(&node_str);
 
         // Connect the linked output ports
@@ -70,10 +80,13 @@ pub fn dot_string_with(
 }
 
 /// Outputs an html table row with the ports of a node.
+/// 
+/// `num_others` is the number of ports in the other direction.
 fn get_ports_row_dot(
     graph: &PortGraph,
     node: NodeIndex,
     direction: Direction,
+    num_others: usize,
     mut ports: impl FnMut(PortIndex) -> (String, DotEdgeStyle),
 ) -> String {
     if graph.num_ports(node, direction) == 0 {
@@ -88,7 +101,7 @@ fn get_ports_row_dot(
     for (offset, port) in graph.ports(node, direction).enumerate() {
         let (port_label, _) = ports(port);
         ports_row.push_str(&format!(
-            "<td port=\"{dir}{offset}\" align=\"text\">{offset}{separator}{port_label}</td>",
+            "<td port=\"{dir}{offset}\" align=\"text\" colspan=\"{num_others}\" cellpadding=\"1\">{offset}{separator}{port_label}</td>",
             separator = if port_label.is_empty() { "" } else { ": " },
         ));
     }
@@ -124,7 +137,7 @@ mod tests {
     #[test]
     fn test_dot_string() {
         let mut graph = PortGraph::new();
-        let n1 = graph.add_node(0, 2);
+        let n1 = graph.add_node(3, 2);
         let n2 = graph.add_node(1, 0);
         let n3 = graph.add_node(1, 0);
         graph.link_nodes(n1, 0, n2, 0).unwrap();
@@ -132,9 +145,9 @@ mod tests {
 
         let dot = dot_string(&graph);
         let expected = r#"digraph {
-0 [shape=plain label="<<table border="0"><tr><td align="text">0</td></tr><tr><td port="out0" align="text">0</td><td port="out1" align="text">1</td></tr></table>>"]
-1 [shape=plain label="<<table border="0"><tr><td port="in0" align="text">0</td></tr><tr><td align="text">1</td></tr></table>>"]
-2 [shape=plain label="<<table border="0"><tr><td port="in0" align="text">0</td></tr><tr><td align="text">2</td></tr></table>>"]
+0 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="2" cellpadding="1">0</td><td port="in1" align="text" colspan="2" cellpadding="1">1</td><td port="in2" align="text" colspan="2" cellpadding="1">2</td></tr><tr><td align="text" border="0" colspan="6">0</td></tr><tr><td port="out0" align="text" colspan="3" cellpadding="1">0</td><td port="out1" align="text" colspan="3" cellpadding="1">1</td></tr></table>>]
+1 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1">0</td></tr><tr><td align="text" border="0" colspan="1">1</td></tr></table>>]
+2 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1">0</td></tr><tr><td align="text" border="0" colspan="1">2</td></tr></table>>]
 0:out0 -> 1:in0 [style=None]
 0:out1 -> 2:in0 [style=None]
 }
@@ -166,10 +179,11 @@ mod tests {
         weights[p30] = "in 0".to_string();
 
         let dot = dot_string_weighted(&graph, &weights);
+        println!("\n{}\n", dot);
         let expected = r#"digraph {
-0 [shape=plain label="<<table border="0"><tr><td align="text">node1</td></tr><tr><td port="out0" align="text">0: out 0</td><td port="out1" align="text">1: out 1</td></tr></table>>"]
-1 [shape=plain label="<<table border="0"><tr><td port="in0" align="text">0: in 0</td></tr><tr><td align="text">node2</td></tr></table>>"]
-2 [shape=plain label="<<table border="0"><tr><td port="in0" align="text">0: in 0</td></tr><tr><td align="text">node3</td></tr></table>>"]
+0 [shape=plain label=<<table border="1"><tr><td align="text" border="0" colspan="2">node1</td></tr><tr><td port="out0" align="text" colspan="1" cellpadding="1">0: out 0</td><td port="out1" align="text" colspan="1" cellpadding="1">1: out 1</td></tr></table>>]
+1 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1">0: in 0</td></tr><tr><td align="text" border="0" colspan="1">node2</td></tr></table>>]
+2 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1">0: in 0</td></tr><tr><td align="text" border="0" colspan="1">node3</td></tr></table>>]
 0:out0 -> 1:in0 [style=None]
 0:out1 -> 2:in0 [style=None]
 }

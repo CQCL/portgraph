@@ -47,13 +47,15 @@ pub fn dot_string_with(
         // Track the port counts for spacing
         let ins = graph.num_inputs(n).max(1);
         let outs = graph.num_outputs(n).max(1);
-        let table_width = ins*outs;
+        let table_width = ins * outs;
 
         let inputs_row = get_ports_row_dot(graph, n, Direction::Incoming, outs, &mut ports);
         let outputs_row = get_ports_row_dot(graph, n, Direction::Outgoing, ins, &mut ports);
 
         let node_label = nodes(n);
-        let label_row = format!("<tr><td align=\"text\" border=\"0\" colspan=\"{table_width}\">{node_label}</td></tr>");
+        let label_row = format!(
+            "<tr><td align=\"text\" border=\"0\" colspan=\"{table_width}\">{node_label}</td></tr>"
+        );
 
         let node_str = format!("{} [shape=plain label=<", n.index())
             + "<table border=\"1\">"
@@ -80,7 +82,7 @@ pub fn dot_string_with(
 }
 
 /// Outputs an html table row with the ports of a node.
-/// 
+///
 /// `num_others` is the number of ports in the other direction.
 fn get_ports_row_dot(
     graph: &PortGraph,

@@ -61,6 +61,9 @@ use thiserror::Error;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 pub mod algorithms;
 pub mod dot;
 pub mod hierarchy;
@@ -136,6 +139,7 @@ impl TryFrom<usize> for Direction {
 /// as a `NodeIndex` by itself.
 #[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct NodeIndex(NonZeroU32);
 
 impl NodeIndex {
@@ -194,6 +198,7 @@ impl std::fmt::Debug for NodeIndex {
 /// as a `PortIndex` by itself.
 #[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct PortIndex(NonZeroU32);
 
 impl PortIndex {

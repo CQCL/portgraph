@@ -1,9 +1,6 @@
 use pyo3::{types::PyInt, IntoPy, PyErr, PyObject, Python};
 
-use crate::{
-    graph::{ConnectError, EdgeIndex, NodeIndex},
-    substitute::RewriteError,
-};
+use crate::{substitute::RewriteError, LinkError, NodeIndex, PortIndex};
 
 impl From<PyInt> for NodeIndex {
     fn from(x: PyInt) -> Self {
@@ -16,14 +13,14 @@ impl IntoPy<PyObject> for NodeIndex {
     }
 }
 
-impl IntoPy<PyObject> for EdgeIndex {
+impl IntoPy<PyObject> for PortIndex {
     fn into_py(self, py: Python<'_>) -> PyObject {
         self.index().into_py(py)
     }
 }
 
-impl std::convert::From<ConnectError> for PyErr {
-    fn from(s: ConnectError) -> Self {
+impl std::convert::From<LinkError> for PyErr {
+    fn from(s: LinkError) -> Self {
         pyo3::exceptions::PyRuntimeError::new_err(s.to_string())
     }
 }

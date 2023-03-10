@@ -5,6 +5,9 @@ use thiserror::Error;
 use crate::secondary::SecondaryMap;
 use crate::NodeIndex;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 /// Hierarchical structure on top of a [`PortGraph`].
 ///
 /// The order of child nodes is maintained as a doubly linked list which
@@ -12,6 +15,7 @@ use crate::NodeIndex;
 ///
 /// [`PortGraph`]: crate::portgraph::PortGraph
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct Hierarchy {
     data: SecondaryMap<NodeIndex, NodeData>,
 }
@@ -352,6 +356,7 @@ impl Hierarchy {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 struct NodeData {
     /// The first and last child of the node, if any.
     children: [Option<NodeIndex>; 2],

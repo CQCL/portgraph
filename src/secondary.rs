@@ -4,8 +4,12 @@ use std::{
     ops::{Index, IndexMut},
 };
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 /// A dense map from keys to values with default fallbacks.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct SecondaryMap<K, V> {
     data: Vec<V>,
     phantom: PhantomData<K>,

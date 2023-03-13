@@ -1022,9 +1022,10 @@ struct NodeMeta {
 
 impl NodeMeta {
     /// The maximum number of incoming ports for a node.
-    const MAX_INCOMING: usize = u16::MAX as usize - 1;
+    /// This is restricted by the `NonZeroU16` representation.
+    const MAX_INCOMING: usize = u16::MAX as usize;
     /// The maximum number of outgoing ports for a node.
-    const MAX_OUTGOING: usize = u16::MAX as usize;
+    const MAX_OUTGOING: usize = u16::MAX as usize + 1;
 
     #[inline]
     pub fn new(port_list: Option<PortIndex>, incoming: u16, outgoing: u16) -> Self {

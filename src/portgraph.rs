@@ -109,8 +109,8 @@ impl PortGraph {
             None
         };
 
-        assert!(incoming < u16::MAX as usize - 1);
-        assert!(outgoing < u16::MAX as usize - 1);
+        assert!(incoming < NodeMeta::MAX_INCOMING);
+        assert!(outgoing < NodeMeta::MAX_OUTGOING);
 
         self.node_meta[node.index()] =
             NodeEntry::Node(NodeMeta::new(port_list, incoming as u16, outgoing as u16));
@@ -698,8 +698,9 @@ impl PortGraph {
     {
         // TODO: Add port capacity and use a grow factor to avoid unnecessary reallocations.
 
-        assert!(incoming < u16::MAX as usize - 1);
-        assert!(outgoing < u16::MAX as usize - 1);
+        assert!(incoming < NodeMeta::MAX_INCOMING);
+        assert!(outgoing < NodeMeta::MAX_OUTGOING);
+
         let new_total = incoming + outgoing;
 
         let Some(node_meta) = self.node_meta_valid(node) else {return;};
@@ -906,8 +907,11 @@ impl PortGraph {
     /// without reallocating, but requires maintaining the total number of
     /// ports.
     ///
+    /// Every time a port is moved, the `rekey` function will be called with its old and new index.
+    /// If the port is removed, the new index will be `None`.
+    ///
     /// TODO: Although it probably isn't used often, this will come in handy
-    /// once we have preallocated port capacity, higher that the number of
+    /// once we have preallocated port capacity, higher than the number of
     /// ports.
     ///
     /// # Panics
@@ -923,9 +927,12 @@ impl PortGraph {
     ) where
         F: FnMut(PortIndex, Option<PortIndex>),
     {
+        assert!(incoming < u16::MAX as usize - 1);
+        assert!(outgoing < u16::MAX as usize - 1);
+
         let node_meta = self.node_meta_valid(node).expect("Node must be valid");
         let Some(port_list) = node_meta.port_list() else {
-            assert_eq!(incoming + outgoing, 0, "The total number of ports must not change");
+            assert_eq!(incoming + outgoing, 0, "The total number of ports must remain 0");
             return;
         };
 
@@ -1014,6 +1021,11 @@ struct NodeMeta {
 }
 
 impl NodeMeta {
+    /// The maximum number of incoming ports for a node.
+    const MAX_INCOMING: usize = u16::MAX as usize - 1;
+    /// The maximum number of outgoing ports for a node.
+    const MAX_OUTGOING: usize = u16::MAX as usize;
+
     #[inline]
     pub fn new(port_list: Option<PortIndex>, incoming: u16, outgoing: u16) -> Self {
         Self {
@@ -1546,6 +1558,8 @@ mod test {
         g.link_nodes(b, 0, b, 1).unwrap();
         g.link_nodes(b, 1, c, 0).unwrap();
         g.link_nodes(c, 0, a, 0).unwrap();
+        let a_input = g.input(a, 0).unwrap();
+        let a_output = g.input(a, 0).unwrap();
 
         assert_eq!(g.link_count(), 4);
         assert_eq!(g.node_count(), 4);
@@ -1566,6 +1580,14 @@ mod test {
             new_nodes.insert(old, new);
         });
 
+        assert_eq!(
+            g.nodes_iter().collect::<Vec<_>>(),
+            (0..3).map(NodeIndex::new).collect::<Vec<_>>()
+        );
+        assert_eq!(new_nodes.len(), 3);
+        assert_eq!(g.port_node(a_input), Some(new_nodes[&a]));
+        assert_eq!(g.port_node(a_output), Some(new_nodes[&a]));
+
         let a = new_nodes[&a];
         let b = new_nodes[&b];
         let c = new_nodes[&c];
@@ -1578,7 +1600,18 @@ mod test {
         assert!(g.connected(b, c));
         assert!(g.connected(c, a));
 
-        g.compact_ports(|_, _| {});
+        let mut new_ports = HashMap::new();
+        g.compact_ports(|old, new| {
+            new_ports.insert(old, new);
+        });
+
+        assert_eq!(
+            g.ports_iter().collect::<Vec<_>>(),
+            (0..8).map(PortIndex::new).collect::<Vec<_>>()
+        );
+        assert_eq!(new_ports.len(), 8);
+        assert_eq!(g.port_node(new_ports[&a_input]), Some(a));
+        assert_eq!(g.port_node(new_ports[&a_output]), Some(a));
 
         assert_eq!(g.link_count(), 4);
         assert_eq!(g.node_count(), 3);

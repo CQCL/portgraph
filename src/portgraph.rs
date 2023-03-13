@@ -927,8 +927,8 @@ impl PortGraph {
     ) where
         F: FnMut(PortIndex, Option<PortIndex>),
     {
-        assert!(incoming < u16::MAX as usize - 1);
-        assert!(outgoing < u16::MAX as usize - 1);
+        assert!(incoming < NodeMeta::MAX_INCOMING);
+        assert!(outgoing < NodeMeta::MAX_OUTGOING);
 
         let node_meta = self.node_meta_valid(node).expect("Node must be valid");
         let Some(port_list) = node_meta.port_list() else {

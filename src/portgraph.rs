@@ -1171,6 +1171,8 @@ enum PortEntry {
     Port(PortMeta),
 }
 
+/// Iterator over the ports of a node.
+/// See [`PortGraph::inputs`], [`PortGraph::outputs`], and [`PortGraph::all_ports`].
 #[derive(Debug, Clone)]
 pub struct NodePorts {
     index: NonZeroU32,
@@ -1222,6 +1224,7 @@ impl Default for NodePorts {
     }
 }
 
+/// Iterator over the nodes of a graph, created by [`PortGraph::nodes_iter`].
 #[derive(Clone)]
 pub struct Nodes<'a> {
     iter: std::iter::Enumerate<std::slice::Iter<'a, NodeEntry>>,
@@ -1278,6 +1281,7 @@ impl<'a> DoubleEndedIterator for Nodes<'a> {
 
 impl<'a> FusedIterator for Nodes<'a> {}
 
+/// Iterator over the ports of a graph, created by [`PortGraph::ports_iter`].
 #[derive(Clone)]
 pub struct Ports<'a> {
     iter: std::iter::Enumerate<std::slice::Iter<'a, PortEntry>>,
@@ -1336,7 +1340,9 @@ impl<'a> DoubleEndedIterator for Ports<'a> {
 
 impl<'a> FusedIterator for Ports<'a> {}
 
-/// Iterator created by [`PortGraph::links`].
+/// Iterator over the links of a node, created by [`PortGraph::links`]. Returns
+/// the port indices linked to each port, or `None` if the corresponding port is
+/// not connected.
 #[derive(Clone)]
 pub struct NodeLinks<'a>(std::slice::Iter<'a, Option<PortIndex>>);
 
@@ -1375,14 +1381,19 @@ impl<'a> DoubleEndedIterator for NodeLinks<'a> {
 
 impl<'a> FusedIterator for NodeLinks<'a> {}
 
+/// Error generated when linking ports.
 #[derive(Debug, Clone, Error)]
 pub enum LinkError {
+    /// The port is already linked.
     #[error("port is already linked")]
     AlreadyLinked(PortIndex),
+    /// The port does not exist.
     #[error("unknown port")]
     UnknownPort(PortIndex),
+    /// The port offset is invalid.
     #[error("unknown port")]
     UnknownOffset(NodeIndex, Direction, usize),
+    /// The port cannot be linked in this direction.
     #[error("unexpected port direction")]
     UnexpectedDirection(PortIndex),
 }

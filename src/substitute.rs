@@ -66,12 +66,18 @@ impl PortGraph {
     }
 }
 
+/// Error generated when a rewrite fails.
 #[derive(Debug, Error)]
 pub enum RewriteError {
-    #[error("boundary size mismatch")]
+    /// The rewrite failed because the boundary defined by the
+    /// [`BoundedSubgraph`] could not be matched to the dangling ports of the
+    /// [`OpenGraph`].
+    #[error("The boundary defined by the BoundedSubgraph could not be matched to the dangling ports of the OpenGraph")]
     BoundarySize,
-    #[error("Connect Error")]
-    Link(LinkError),
+    /// There was an error connecting the ports of the [`OpenGraph`] to the
+    /// boundary.
+    #[error("There was an error connecting the ports of the OpenGraph to the boundary")]
+    Link(#[source] LinkError),
 }
 
 /// A subgraph defined as a subset of the nodes in a graph.
@@ -184,6 +190,7 @@ pub struct OpenGraph {
 }
 
 impl OpenGraph {
+    /// Creates a new open graph from a graph and a set of dangling ports.
     pub fn new(
         graph: PortGraph,
         dangling_inputs: Vec<PortIndex>,
@@ -264,7 +271,9 @@ where
 /// A rewrite operation that replaces a subgraph with another graph.
 #[derive(Debug, Clone, Default)]
 pub struct Rewrite {
+    /// The subgraph to replace in the target.
     pub subgraph: BoundedSubgraph,
+    /// The graph to replace the subgraph with.
     pub replacement: OpenGraph,
 }
 

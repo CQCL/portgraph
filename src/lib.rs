@@ -1,3 +1,4 @@
+#![warn(missing_docs)]
 //! `portgraph` is a data structure library for graphs with node ports.
 //!
 //! A port graph (as implemented by this library) consists of a collection of
@@ -64,7 +65,6 @@ pub mod algorithms;
 pub mod dot;
 pub mod hierarchy;
 pub mod portgraph;
-//pub mod py_graph;
 pub mod secondary;
 pub mod substitute;
 pub mod weights;
@@ -81,34 +81,47 @@ pub use crate::secondary::SecondaryMap;
 #[doc(inline)]
 pub use crate::weights::Weights;
 
+/// Direction of a port.
 #[cfg_attr(feature = "pyo3", pyclass)]
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Eq, Ord, Hash, Default)]
 pub enum Direction {
+    /// Input to a node.
+    #[default]
     Incoming = 0,
+    /// Output from a node.
     Outgoing = 1,
 }
 
-impl Default for Direction {
-    #[inline(always)]
-    fn default() -> Self {
-        Direction::Incoming
-    }
-}
-
 impl Direction {
-    /// Incoming and outgoing.
+    /// Incoming and outgoing directions.
     pub const BOTH: [Direction; 2] = [Direction::Incoming, Direction::Outgoing];
 
-    #[inline(always)]
-    pub fn index(self) -> usize {
-        self as usize
-    }
-
+    /// Returns the opposite direction.
     #[inline(always)]
     pub fn reverse(self) -> Direction {
         match self {
             Direction::Incoming => Direction::Outgoing,
             Direction::Outgoing => Direction::Incoming,
+        }
+    }
+}
+
+impl From<Direction> for usize {
+    #[inline(always)]
+    fn from(dir: Direction) -> Self {
+        dir as usize
+    }
+}
+
+impl TryFrom<usize> for Direction {
+    type Error = IndexError;
+
+    #[inline(always)]
+    fn try_from(dir: usize) -> Result<Self, Self::Error> {
+        match dir {
+            0 => Ok(Direction::Incoming),
+            1 => Ok(Direction::Outgoing),
+            _ => Err(IndexError),
         }
     }
 }
@@ -123,11 +136,17 @@ impl Direction {
 pub struct NodeIndex(NonZeroU32);
 
 impl NodeIndex {
+    /// Creates a new node index from a `usize`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the index is greater than `2^31 - 2`.
     #[inline]
     pub fn new(index: usize) -> Self {
         index.try_into().unwrap()
     }
 
+    /// Returns the index as a `usize`.
     #[inline]
     pub fn index(self) -> usize {
         self.into()
@@ -171,11 +190,17 @@ impl std::fmt::Debug for NodeIndex {
 pub struct PortIndex(NonZeroU32);
 
 impl PortIndex {
+    /// Creates a new port index from a `usize`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the index is greater than `2^31 - 2`.
     #[inline]
     pub fn new(index: usize) -> Self {
         index.try_into().unwrap()
     }
 
+    /// Returns the index as a `usize`.
     #[inline]
     pub fn index(self) -> usize {
         self.into()

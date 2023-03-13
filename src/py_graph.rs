@@ -1,3 +1,5 @@
+//! Python bindings for the crate's types.
+
 use pyo3::{types::PyInt, IntoPy, PyErr, PyObject, Python};
 
 use crate::{substitute::RewriteError, LinkError, NodeIndex, PortIndex};

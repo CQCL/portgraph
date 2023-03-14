@@ -53,12 +53,8 @@ fn gen_graph_and_edges(
             .into_iter()
             .min()
             .unwrap();
-        if in_ports.len() > n_edges {
-            in_ports.drain(n_edges..);
-        }
-        if out_ports.len() > n_edges {
-            out_ports.drain(n_edges..);
-        }
+        in_ports.truncate(n_edges);
+        out_ports.truncate(n_edges);
         (graph, in_ports, out_ports)
     })
 }

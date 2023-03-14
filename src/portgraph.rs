@@ -1037,6 +1037,7 @@ impl NodeMeta {
     pub fn new(port_list: Option<PortIndex>, incoming: u16, outgoing: u16) -> Self {
         Self {
             port_list,
+            // SAFETY: The value cannot be zero
             incoming: unsafe { NonZeroU16::new_unchecked(incoming + 1) },
             outgoing,
         }

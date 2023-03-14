@@ -171,6 +171,7 @@ impl TryFrom<usize> for NodeIndex {
         if index > Self::MAX {
             Err(IndexError { index })
         } else {
+            // SAFETY: The value cannot be zero
             Ok(Self(unsafe { NonZeroU32::new_unchecked(1 + index as u32) }))
         }
     }
@@ -228,6 +229,7 @@ impl TryFrom<usize> for PortIndex {
         if index > Self::MAX {
             Err(IndexError { index })
         } else {
+            // SAFETY: The value cannot be zero
             Ok(Self(unsafe { NonZeroU32::new_unchecked(1 + index as u32) }))
         }
     }

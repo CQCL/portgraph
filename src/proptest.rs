@@ -1,3 +1,7 @@
+//! Strategies for property testing using the `proptest` crate
+//!
+//! Currently, this module exposes a single function `gen_portgraph`, which
+//! returns strategies that generate random portgraphs.
 use std::iter::zip;
 
 use crate::{Direction, PortGraph, PortIndex};
@@ -13,13 +17,11 @@ prop_compose! {
     ///  - `max_port` is the maximum number of incoming and outgoing ports at
     ///    every node
     fn gen_no_edge_graph(max_n_nodes: usize, max_port: usize)(
-        ports in prop::collection::vec(0..=max_port, 2..=max_n_nodes)
+        ports in prop::collection::vec(0..=max_port, 2..=2*max_n_nodes)
     ) -> PortGraph {
         let mut g = PortGraph::new();
-        let mut ind = 0;
-        while ind + 1 < ports.len() {
+        for ind in (0..ports.len() - 1).step_by(2) {
             g.add_node(ports[ind], ports[ind + 1]);
-            ind += 2;
         }
         g
     }
@@ -35,17 +37,12 @@ fn gen_graph_and_edges(
     max_n_nodes: usize,
     max_port: usize,
     max_n_edges: usize,
-) -> impl Strategy<Value = (PortGraph, Vec<PortIndex>, Vec<PortIndex>)> {
+) -> impl Strategy<Value = (Vec<PortIndex>, Vec<PortIndex>, PortGraph)> {
     let graph = gen_no_edge_graph(max_n_nodes, max_port);
     (0..=max_n_edges, graph).prop_perturb(|(mut n_edges, graph), mut rng| {
-        let mut in_ports = Vec::new();
-        let mut out_ports = Vec::new();
-        for p in graph.ports_iter() {
-            match graph.port_direction(p).unwrap() {
-                Direction::Incoming => in_ports.push(p),
-                Direction::Outgoing => out_ports.push(p),
-            }
-        }
+        let (mut in_ports, mut out_ports): (Vec<_>, Vec<_>) = graph
+            .ports_iter()
+            .partition(|p| graph.port_direction(*p).unwrap() == Direction::Incoming);
         in_ports.shuffle(&mut rng);
         out_ports.shuffle(&mut rng);
 
@@ -53,9 +50,13 @@ fn gen_graph_and_edges(
             .into_iter()
             .min()
             .unwrap();
-        in_ports.truncate(n_edges);
-        out_ports.truncate(n_edges);
-        (graph, in_ports, out_ports)
+        if in_ports.len() > n_edges {
+            in_ports.drain(n_edges..);
+        }
+        if out_ports.len() > n_edges {
+            out_ports.drain(n_edges..);
+        }
+        (in_ports, out_ports, graph)
     })
 }
 
@@ -65,7 +66,7 @@ prop_compose! {
     /// With at least 1 and at most `max_n_nodes` nodes, with at most `max_port`
     /// incoming and outgoing ports at ever node, and at most `max_n_edges`.
     pub fn gen_portgraph(max_n_nodes: usize, max_port: usize, max_n_edges: usize)(
-        (mut graph, in_stubs, out_stubs) in gen_graph_and_edges(max_n_nodes, max_port, max_n_edges)
+        (in_stubs, out_stubs, mut graph) in gen_graph_and_edges(max_n_nodes, max_port, max_n_edges)
     ) -> PortGraph {
         for (incoming, outgoing) in zip(in_stubs, out_stubs) {
             graph.link_ports(outgoing, incoming).unwrap();

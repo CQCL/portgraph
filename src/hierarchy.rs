@@ -110,9 +110,9 @@ impl Hierarchy {
     /// Panics when the parent node will have more than `u32::MAX` children.
     pub fn attach_last(&mut self, node: NodeIndex, parent: NodeIndex) -> Result<(), AttachError> {
         if !self.cycle_check(node, parent) {
-            return Err(AttachError::Cycle);
+            return Err(AttachError::Cycle { node, parent });
         } else if self.get(node).parent.is_some() {
-            return Err(AttachError::AlreadyAttached);
+            return Err(AttachError::AlreadyAttached { node });
         }
 
         let parent_data = self.get_mut(parent);
@@ -143,9 +143,9 @@ impl Hierarchy {
     /// Panics when the parent node will have more than `u32::MAX` children.
     pub fn attach_first(&mut self, node: NodeIndex, parent: NodeIndex) -> Result<(), AttachError> {
         if !self.cycle_check(node, parent) {
-            return Err(AttachError::Cycle);
+            return Err(AttachError::Cycle { node, parent });
         } else if self.get(node).parent.is_some() {
-            return Err(AttachError::AlreadyAttached);
+            return Err(AttachError::AlreadyAttached { node });
         }
 
         let parent_data = self.get_mut(parent);
@@ -177,15 +177,15 @@ impl Hierarchy {
     /// Panics when the parent node will have more than `u32::MAX` children.
     pub fn attach_before(&mut self, node: NodeIndex, before: NodeIndex) -> Result<(), AttachError> {
         if self.get(node).parent.is_some() {
-            return Err(AttachError::AlreadyAttached);
+            return Err(AttachError::AlreadyAttached { node });
         }
 
         let Some(parent) = self.get(before).parent else {
-            return Err(AttachError::RootSibling);
+            return Err(AttachError::RootSibling{root: before});
         };
 
         if !self.cycle_check(node, parent) {
-            return Err(AttachError::Cycle);
+            return Err(AttachError::Cycle { node, parent });
         }
 
         self.get_mut(parent).children_count += 1;
@@ -218,15 +218,15 @@ impl Hierarchy {
     /// Panics when the parent node will have more than `u32::MAX` children.
     pub fn attach_after(&mut self, node: NodeIndex, after: NodeIndex) -> Result<(), AttachError> {
         if self.get(node).parent.is_some() {
-            return Err(AttachError::AlreadyAttached);
+            return Err(AttachError::AlreadyAttached { node });
         }
 
         let Some(parent) = self.get(after).parent else {
-            return Err(AttachError::RootSibling);
+            return Err(AttachError::RootSibling{root: after});
         };
 
         if !self.cycle_check(node, parent) {
-            return Err(AttachError::Cycle);
+            return Err(AttachError::Cycle { node, parent });
         }
 
         self.get_mut(parent).children_count += 1;
@@ -507,17 +507,17 @@ impl<'a> ExactSizeIterator for Children<'a> {
 impl<'a> FusedIterator for Children<'a> {}
 
 /// Error produced when trying to attach nodes in the Hierarchy.
-#[derive(Debug, Clone, Error)]
+#[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum AttachError {
     /// The node is already attached to a parent.
-    #[error("the node is already attached")]
-    AlreadyAttached,
+    #[error("the node {node:?} is already attached")]
+    AlreadyAttached { node: NodeIndex },
     /// The target node is a root node, and cannot have siblings.
-    #[error("Can not attach a sibling to a root node")]
-    RootSibling,
+    #[error("can not attach a sibling to root node {root:?}")]
+    RootSibling { root: NodeIndex },
     /// The relation would introduce a cycle.
-    #[error("attaching the node would introduce a cycle")]
-    Cycle,
+    #[error("attaching the node {node:?} to {parent:?} would introduce a cycle")]
+    Cycle { node: NodeIndex, parent: NodeIndex },
 }
 
 #[cfg(test)]
@@ -546,8 +546,17 @@ mod test {
         hierarchy.attach_last(child2, root).unwrap();
         hierarchy.attach_after(child1, child0).unwrap();
 
-        assert!(hierarchy.attach_first(root, child2).is_err());
-        assert!(hierarchy.attach_first(child2, root).is_err());
+        assert_eq!(
+            hierarchy.attach_first(root, child2),
+            Err(AttachError::Cycle {
+                node: root,
+                parent: child2
+            })
+        );
+        assert_eq!(
+            hierarchy.attach_first(child2, root),
+            Err(AttachError::AlreadyAttached { node: child2 })
+        );
 
         assert_eq!(hierarchy.child_count(root), 3);
         assert_eq!(

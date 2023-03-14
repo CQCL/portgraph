@@ -136,6 +136,9 @@ impl TryFrom<usize> for Direction {
 pub struct NodeIndex(NonZeroU32);
 
 impl NodeIndex {
+    /// Maximum allowed index. The higher bit is reserved for efficient encoding of the port graph.
+    const MAX: usize = (u32::MAX / 2) as usize - 1;
+
     /// Creates a new node index from a `usize`.
     ///
     /// # Panics
@@ -165,7 +168,7 @@ impl TryFrom<usize> for NodeIndex {
 
     #[inline]
     fn try_from(index: usize) -> Result<Self, Self::Error> {
-        if index >= (u32::MAX / 2) as usize {
+        if index > Self::MAX {
             Err(IndexError { index })
         } else {
             Ok(Self(unsafe { NonZeroU32::new_unchecked(1 + index as u32) }))
@@ -190,6 +193,9 @@ impl std::fmt::Debug for NodeIndex {
 pub struct PortIndex(NonZeroU32);
 
 impl PortIndex {
+    /// Maximum allowed index. The higher bit is reserved for efficient encoding of the port graph.
+    const MAX: usize = (u32::MAX / 2) as usize - 1;
+
     /// Creates a new port index from a `usize`.
     ///
     /// # Panics
@@ -219,7 +225,7 @@ impl TryFrom<usize> for PortIndex {
 
     #[inline]
     fn try_from(index: usize) -> Result<Self, Self::Error> {
-        if index >= (u32::MAX / 2) as usize {
+        if index > Self::MAX {
             Err(IndexError { index })
         } else {
             Ok(Self(unsafe { NonZeroU32::new_unchecked(1 + index as u32) }))

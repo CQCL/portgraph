@@ -25,8 +25,8 @@
 //! // Add some children.
 //! let child_0 = graph.add_node(0, 0);
 //! let child_1 = graph.add_node(0, 0);
-//! hierarchy.attach_first(child_1, parent).unwrap();
-//! hierarchy.attach_before(child_0, child_1).unwrap();
+//! hierarchy.push_child(child_1, parent).unwrap();
+//! hierarchy.insert_before(child_0, child_1).unwrap();
 //!
 //! assert_eq!(hierarchy.child_count(parent), 2);
 //! assert_eq!(hierarchy.children(parent).collect::<Vec<_>>(), vec![child_0, child_1]);
@@ -108,7 +108,7 @@ impl Hierarchy {
     /// # Panics
     ///
     /// Panics when the parent node will have more than `u32::MAX` children.
-    pub fn attach_last(&mut self, node: NodeIndex, parent: NodeIndex) -> Result<(), AttachError> {
+    pub fn push_child(&mut self, node: NodeIndex, parent: NodeIndex) -> Result<(), AttachError> {
         if !self.cycle_check(node, parent) {
             return Err(AttachError::Cycle { node, parent });
         } else if self.get(node).parent.is_some() {
@@ -141,7 +141,11 @@ impl Hierarchy {
     /// # Panics
     ///
     /// Panics when the parent node will have more than `u32::MAX` children.
-    pub fn attach_first(&mut self, node: NodeIndex, parent: NodeIndex) -> Result<(), AttachError> {
+    pub fn push_front_child(
+        &mut self,
+        node: NodeIndex,
+        parent: NodeIndex,
+    ) -> Result<(), AttachError> {
         if !self.cycle_check(node, parent) {
             return Err(AttachError::Cycle { node, parent });
         } else if self.get(node).parent.is_some() {
@@ -175,7 +179,7 @@ impl Hierarchy {
     /// # Panics
     ///
     /// Panics when the parent node will have more than `u32::MAX` children.
-    pub fn attach_before(&mut self, node: NodeIndex, before: NodeIndex) -> Result<(), AttachError> {
+    pub fn insert_before(&mut self, node: NodeIndex, before: NodeIndex) -> Result<(), AttachError> {
         if self.get(node).parent.is_some() {
             return Err(AttachError::AlreadyAttached { node });
         }
@@ -216,7 +220,7 @@ impl Hierarchy {
     /// # Panics
     ///
     /// Panics when the parent node will have more than `u32::MAX` children.
-    pub fn attach_after(&mut self, node: NodeIndex, after: NodeIndex) -> Result<(), AttachError> {
+    pub fn insert_after(&mut self, node: NodeIndex, after: NodeIndex) -> Result<(), AttachError> {
         if self.get(node).parent.is_some() {
             return Err(AttachError::AlreadyAttached { node });
         }
@@ -542,19 +546,19 @@ mod test {
         let child1 = NodeIndex::new(1);
         let child2 = NodeIndex::new(2);
         let children = [child0, child1, child2];
-        hierarchy.attach_first(child0, root).unwrap();
-        hierarchy.attach_last(child2, root).unwrap();
-        hierarchy.attach_after(child1, child0).unwrap();
+        hierarchy.push_front_child(child0, root).unwrap();
+        hierarchy.push_child(child2, root).unwrap();
+        hierarchy.insert_after(child1, child0).unwrap();
 
         assert_eq!(
-            hierarchy.attach_first(root, child2),
+            hierarchy.push_front_child(root, child2),
             Err(AttachError::Cycle {
                 node: root,
                 parent: child2
             })
         );
         assert_eq!(
-            hierarchy.attach_first(child2, root),
+            hierarchy.push_front_child(child2, root),
             Err(AttachError::AlreadyAttached { node: child2 })
         );
 
@@ -589,9 +593,9 @@ mod test {
         let child0 = NodeIndex::new(0);
         let child1 = NodeIndex::new(1);
         let child2 = NodeIndex::new(2);
-        hierarchy.attach_last(child2, root).unwrap();
-        hierarchy.attach_before(child1, child2).unwrap();
-        hierarchy.attach_before(child0, child1).unwrap();
+        hierarchy.push_child(child2, root).unwrap();
+        hierarchy.insert_before(child1, child2).unwrap();
+        hierarchy.insert_before(child0, child1).unwrap();
 
         assert_eq!(
             hierarchy.children(root).collect::<Vec<_>>(),
@@ -634,9 +638,9 @@ mod test {
         let child0 = NodeIndex::new(0);
         let child1 = NodeIndex::new(1);
         let child2 = NodeIndex::new(2);
-        hierarchy.attach_last(child2, root).unwrap();
-        hierarchy.attach_before(child1, child2).unwrap();
-        hierarchy.attach_before(child0, child1).unwrap();
+        hierarchy.push_child(child2, root).unwrap();
+        hierarchy.insert_before(child1, child2).unwrap();
+        hierarchy.insert_before(child0, child1).unwrap();
 
         assert_eq!(
             hierarchy.children(root).collect::<Vec<_>>(),
@@ -644,7 +648,7 @@ mod test {
         );
 
         let grandchild = NodeIndex::new(42);
-        hierarchy.attach_first(grandchild, child1).unwrap();
+        hierarchy.push_front_child(grandchild, child1).unwrap();
 
         assert_eq!(
             hierarchy.children(root).collect::<Vec<_>>(),
@@ -690,8 +694,8 @@ mod test {
         let parent = graph.add_node(0, 0);
         let mut child_0 = graph.add_node(0, 0);
         let mut child_1 = graph.add_node(0, 0);
-        hierarchy.attach_first(child_1, parent).unwrap();
-        hierarchy.attach_before(child_0, child_1).unwrap();
+        hierarchy.push_front_child(child_1, parent).unwrap();
+        hierarchy.insert_before(child_0, child_1).unwrap();
 
         // Modifications to the graph must be manually propagated to the hierarchy.
         graph.remove_node(parent);
@@ -701,7 +705,7 @@ mod test {
         assert!(hierarchy.is_root(child_1));
         assert_eq!(hierarchy.next(child_0), None);
 
-        hierarchy.attach_first(child_1, child_0).unwrap();
+        hierarchy.push_front_child(child_1, child_0).unwrap();
 
         graph.compact_nodes(|old, new| {
             hierarchy.rekey(old, new);

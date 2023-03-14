@@ -34,7 +34,7 @@
 //! // Graph operations that modify the keys use callbacks to update the weights.
 //! graph.set_num_ports(node, 1, 3, |old, new| {if let Some(new) = new {port_weights.swap(old, new);}});
 //!
-//! // The map do not track item removals, but the user can shrink the map manually.
+//! // The map does not track item removals, but the user can shrink the map manually.
 //! graph.remove_node(node);
 //! node_weights.shrink_to(graph.node_count());
 //! port_weights.shrink_to(graph.port_count());

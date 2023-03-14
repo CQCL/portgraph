@@ -29,7 +29,7 @@
 //! // Graph operations that modify the keys use callbacks to update the weights.
 //! graph.set_num_ports(node, 1, 3, |old, new| {if let Some(new) = new {weights.ports.swap(old, new);}});
 //!
-//! // The map do not track item removals, but the user can shrink the map manually.
+//! // The map does not track item removals, but the user can shrink the map manually.
 //! graph.remove_node(node);
 //! weights.nodes.shrink_to(graph.node_count());
 //! weights.ports.shrink_to(graph.port_count());

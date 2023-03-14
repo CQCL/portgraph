@@ -1,6 +1,6 @@
 //! Strategies for property testing using the `proptest` crate
 //!
-//! Currently, this module exposes a single function `gen_portgraph`, which
+//! Currently, this module exposes a single function [`gen_portgraph`], which
 //! returns strategies that generate random portgraphs.
 use std::iter::zip;
 
@@ -50,12 +50,8 @@ fn gen_graph_and_edges(
             .into_iter()
             .min()
             .unwrap();
-        if in_ports.len() > n_edges {
-            in_ports.drain(n_edges..);
-        }
-        if out_ports.len() > n_edges {
-            out_ports.drain(n_edges..);
-        }
+        in_ports.truncate(n_edges);
+        out_ports.truncate(n_edges);
         (in_ports, out_ports, graph)
     })
 }

@@ -2,7 +2,7 @@ portgraph
 =========
 
 [![build_status][]](https://github.com/CQCL/portgraph/actions)
-[![msrv][]](https://github.com/rust-lang/hashbrown)
+[![msrv][]](https://github.com/CQCL/portgraph)
 
 Data structure library for directed graphs with first-level ports. Includes
 secondary data structures for node and port weights, and node hierarchies.

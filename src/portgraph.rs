@@ -1,3 +1,15 @@
+//! Main definition of the port graph data structure.
+//!
+//! This module defines the [`PortGraph`] data structure and its associated
+//! types. The port graph is a directed graph where each node has a pre-set
+//! number of input and output ports, split between [`Direction::Incoming`] and
+//! [`Direction::Outgoing`] . Each node has a global [`NodeIndex`] identifier
+//! and each port has a global [`PortIndex`] identifier in addition to a local
+//! port direction and offset.
+//!
+//! The number of ports of a node is set at creation time, but can be modified
+//! at runtime using [`PortGraph::set_num_ports`].
+
 use std::{
     iter::FusedIterator,
     mem::{replace, take},
@@ -23,13 +35,26 @@ use pyo3::prelude::*;
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[derive(Clone)]
 pub struct PortGraph {
+    /// Metadata for each node. Free slots form a linked list.
     node_meta: Vec<NodeEntry>,
+    /// Links from ports to other ports. Free ports slabs (fixed-length lists of
+    /// ports) form a linked list, with the next slab index stored in the first
+    /// port.
     port_link: Vec<Option<PortIndex>>,
+    /// Metadata for each port. Ports of a node are stored contiguously, with
+    /// incoming ports first.
     port_meta: Vec<PortEntry>,
+    /// Index of the first free node slot in the free-node linked list embedded
+    /// in `node_meta`.
     node_free: Option<NodeIndex>,
+    /// List of free slabs of ports. Each i-th item is the index of the first
+    /// slab of size `i+1` in the free-port linked list embedded in `port_link`.
     port_free: Vec<Option<PortIndex>>,
+    /// Number of nodes in the graph.
     node_count: usize,
+    /// Number of ports in the graph.
     port_count: usize,
+    /// Number of links in the graph.
     link_count: usize,
 }
 
@@ -84,8 +109,8 @@ impl PortGraph {
             None
         };
 
-        assert!(incoming < u16::MAX as usize - 1);
-        assert!(outgoing < u16::MAX as usize - 1);
+        assert!(incoming < NodeMeta::MAX_INCOMING);
+        assert!(outgoing < NodeMeta::MAX_OUTGOING);
 
         self.node_meta[node.index()] =
             NodeEntry::Node(NodeMeta::new(port_list, incoming as u16, outgoing as u16));
@@ -186,15 +211,6 @@ impl PortGraph {
             assert!(port_list.index() + size <= self.port_link.len());
             assert!(port_list.index() + size <= self.port_meta.len());
 
-            for i in port_list.index()..port_list.index() + size {
-                self.port_meta[i] = PortEntry::Free;
-
-                if let Some(link) = self.port_link[i] {
-                    self.port_link[link.index()] = None;
-                    self.link_count -= 1;
-                }
-            }
-
             self.free_ports(port_list, size);
         }
     }
@@ -205,6 +221,9 @@ impl PortGraph {
         self.node_free = Some(node);
     }
 
+    /// Free a slab of ports.
+    ///
+    /// Disconnects all links and adds the slab to the free port list.
     #[inline]
     fn free_ports(&mut self, ports: PortIndex, size: usize) {
         if size > self.port_free.len() {
@@ -213,7 +232,16 @@ impl PortGraph {
 
         let ports_free = &mut self.port_free[size - 1];
 
-        self.port_meta[ports.index()] = PortEntry::Free;
+        for i in ports.index()..ports.index() + size {
+            self.port_meta[i] = PortEntry::Free;
+
+            if let Some(link) = self.port_link[i].take() {
+                self.port_link[link.index()] = None;
+                self.link_count -= 1;
+            }
+        }
+
+        // Add this slab to the free list.
         self.port_link[ports.index()] = replace(ports_free, Some(ports));
     }
 
@@ -370,20 +398,18 @@ impl PortGraph {
         direction: Direction,
     ) -> Option<PortIndex> {
         let node_meta = self.node_meta_valid(node)?;
-        let port_list = node_meta.port_list()?;
-
-        match direction {
-            Direction::Incoming if offset >= node_meta.incoming() as usize => {
-                Some(PortIndex(port_list.0.saturating_add(offset as u32)))
-            }
-            Direction::Outgoing if offset >= node_meta.outgoing() as usize => Some(PortIndex(
-                port_list
-                    .0
-                    .saturating_add(node_meta.incoming() as u32)
-                    .saturating_add(offset as u32),
-            )),
-            _ => None,
+        let mut offset: u16 = offset.try_into().ok()?;
+        let bounds_check = if direction == Direction::Outgoing {
+            offset += node_meta.incoming();
+            offset < node_meta.incoming() + node_meta.outgoing()
+        } else {
+            offset < node_meta.incoming()
+        };
+        if !bounds_check {
+            return None;
         }
+        let index = node_meta.port_list()?.0;
+        Some(PortIndex(index.saturating_add(offset as u32)))
     }
 
     /// Returns the port that the given `port` is linked to.
@@ -431,31 +457,12 @@ impl PortGraph {
         }
     }
 
-    /// Returns the port at the given offset in the `node`.
-    ///
-    /// This is equivalent to `ports(node, direction).nth(offset)`
-    pub fn port(&self, node: NodeIndex, offset: usize, direction: Direction) -> Option<PortIndex> {
-        let node_meta = self.node_meta_valid(node)?;
-        let mut offset: u16 = offset.try_into().ok()?;
-        let bounds_check = if direction == Direction::Outgoing {
-            offset += node_meta.incoming();
-            offset < node_meta.incoming() + node_meta.outgoing()
-        } else {
-            offset < node_meta.incoming()
-        };
-        if !bounds_check {
-            return None;
-        }
-        let index = node_meta.port_list()?.0;
-        Some(PortIndex(index.saturating_add(offset as u32)))
-    }
-
     /// Returns the input port at the given offset in the `node`.
     ///
     /// Shorthand for [`PortGraph::port`].
     #[inline]
     pub fn input(&self, node: NodeIndex, offset: usize) -> Option<PortIndex> {
-        self.port(node, offset, Direction::Incoming)
+        self.port_index(node, offset, Direction::Incoming)
     }
 
     /// Returns the output port at the given offset in the `node`.
@@ -463,7 +470,7 @@ impl PortGraph {
     /// Shorthand for [`PortGraph::ports`].
     #[inline]
     pub fn output(&self, node: NodeIndex, offset: usize) -> Option<PortIndex> {
-        self.port(node, offset, Direction::Outgoing)
+        self.port_index(node, offset, Direction::Outgoing)
     }
 
     /// Iterates over all the input ports of the `node`.
@@ -671,6 +678,91 @@ impl PortGraph {
         self.port_link.reserve(ports);
     }
 
+    /// Changes the number of ports of the `node` to the given `incoming` and `outgoing` counts.
+    ///
+    /// Invalidates the indices of the node's ports. If the number of incoming or outgoing ports
+    /// is reduced, the ports are removed from the end of the port list.
+    ///
+    /// Every time a port is moved, the `rekey` function will be called with its old and new index.
+    /// If the port is removed, the new index will be `None`.
+    ///
+    /// This operation is O(n) where n is the number of ports of the node.
+    pub fn set_num_ports<F>(
+        &mut self,
+        node: NodeIndex,
+        incoming: usize,
+        outgoing: usize,
+        mut rekey: F,
+    ) where
+        F: FnMut(PortIndex, Option<PortIndex>),
+    {
+        // TODO: Add port capacity and use a grow factor to avoid unnecessary reallocations.
+
+        assert!(incoming < NodeMeta::MAX_INCOMING);
+        assert!(outgoing < NodeMeta::MAX_OUTGOING);
+
+        let new_total = incoming + outgoing;
+
+        let Some(node_meta) = self.node_meta_valid(node) else {return;};
+        let old_incoming = node_meta.incoming() as usize;
+        let old_outgoing = node_meta.outgoing() as usize;
+        let old_total = old_incoming + old_outgoing;
+        let old_port_list = node_meta.port_list();
+        if old_incoming == incoming && old_outgoing == outgoing {
+            return;
+        }
+        if old_incoming + old_outgoing == incoming + outgoing {
+            // Special case when we can avoid reallocations by rotating the ports in-place.
+            self.resize_ports_inplace(node, incoming, outgoing, rekey);
+            return;
+        }
+
+        // Disconnect any port to be removed.
+        for port in self
+            .inputs(node)
+            .skip(incoming)
+            .chain(self.outputs(node).skip(outgoing))
+        {
+            self.unlink_port(port);
+            rekey(port, None);
+        }
+
+        let port_list = if incoming + outgoing > 0 {
+            let new_port_list = self.alloc_ports(node, incoming, outgoing);
+            if let Some(old_port_list) = old_port_list {
+                let incoming_rekeys = (0..old_incoming).zip(0..incoming);
+                let outgoing_rekeys = (old_incoming..old_total).zip(incoming..new_total);
+                for (old, new) in incoming_rekeys.chain(outgoing_rekeys) {
+                    let old_index = old_port_list.index() + old;
+                    let new_index = new_port_list.index() + new;
+                    let old_port = PortIndex::new(old_index);
+                    let new_port = PortIndex::new(new_index);
+
+                    if let Some(link) = self.port_link[old_index] {
+                        self.port_link[link.index()] = Some(new_port);
+                    }
+                    self.port_link[new_index] = self.port_link[old_index].take();
+                    self.port_meta[new_index] = self.port_meta[old_index];
+
+                    rekey(old_port, Some(new_port));
+                }
+                self.free_ports(old_port_list, old_incoming + old_outgoing);
+            }
+            Some(new_port_list)
+        } else {
+            if let Some(plist) = old_port_list {
+                self.free_ports(plist, old_incoming + old_outgoing);
+            }
+            None
+        };
+
+        self.node_meta[node.index()] =
+            NodeEntry::Node(NodeMeta::new(port_list, incoming as u16, outgoing as u16));
+
+        self.port_count -= old_incoming + old_outgoing;
+        self.port_count += incoming + outgoing;
+    }
+
     /// Compacts the storage of nodes in the portgraph so that all nodes are stored consecutively.
     ///
     /// Every time a node is moved, the `rekey` function will be called with its old and new index.
@@ -684,12 +776,9 @@ impl PortGraph {
             let old_node = NodeIndex::new(old_index);
             let new_node = NodeIndex::new(new_index);
 
-            let node_meta = match node_meta {
-                NodeEntry::Free(_) => {
-                    old_index += 1;
-                    return false;
-                }
-                NodeEntry::Node(node_meta) => node_meta,
+            let NodeEntry::Node(node_meta) = node_meta else {
+                old_index += 1;
+                return false;
             };
 
             if let Some(port_list) = node_meta.port_list() {
@@ -724,41 +813,44 @@ impl PortGraph {
     where
         F: FnMut(PortIndex, PortIndex),
     {
-        let mut old_index = 0;
+        let mut new_index = 0;
+        for old_index in 0..self.port_link.len() {
+            if let PortEntry::Free = self.port_meta[old_index] {
+                continue;
+            }
+            if new_index == old_index {
+                new_index += 1;
+                continue;
+            }
 
-        self.port_link.retain(|_| match self.port_meta[old_index] {
-            PortEntry::Free => {
-                old_index += 1;
-                false
+            // Invariant: The neighbour ports of visited ports always have
+            // backlinks pointing to the correctly updated port indices.
+            //
+            // At the end of the loop, all port links have been updated.
+            if let Some(link) = self.port_link[old_index] {
+                self.port_link[link.index()] = Some(PortIndex::new(new_index));
             }
-            PortEntry::Port(_) => {
-                old_index += 1;
-                true
-            }
-        });
+            self.port_link.swap(new_index, old_index);
+            new_index += 1;
+        }
+        self.port_link.truncate(new_index);
 
         let mut new_index = 0;
         let mut old_index = 0;
-
         self.port_meta.retain(|port_meta| {
             let old_port = PortIndex::new(old_index);
             let new_port = PortIndex::new(new_index);
 
-            old_index += 1;
-
-            let port_meta = match port_meta {
-                PortEntry::Free => {
-                    return false;
-                }
-                PortEntry::Port(port_meta) => port_meta,
+            let PortEntry::Port(port_meta) = port_meta else {
+                old_index += 1;
+                return false;
             };
 
             // If we are moving the first port in a node's port list, we have to update the node.
             let node_entry = &mut self.node_meta[port_meta.node().index()];
 
-            let node_meta = match *node_entry {
-                NodeEntry::Free(_) => unreachable!("port must be attached to a valid node"),
-                NodeEntry::Node(node_meta) => node_meta,
+            let NodeEntry::Node(node_meta) = *node_entry else {
+                unreachable!("port must be attached to a valid node")
             };
 
             if node_meta.port_list() == Some(old_port) {
@@ -807,6 +899,106 @@ impl PortGraph {
             _ => None,
         }
     }
+
+    /// Change the number of incoming and outgoing ports of a node, without
+    /// altering the total.
+    ///
+    /// This operation avoids changing the number of incoming and outgoing ports
+    /// without reallocating, but requires maintaining the total number of
+    /// ports.
+    ///
+    /// Every time a port is moved, the `rekey` function will be called with its old and new index.
+    /// If the port is removed, the new index will be `None`.
+    ///
+    /// TODO: Although it probably isn't used often, this will come in handy
+    /// once we have preallocated port capacity, higher than the number of
+    /// ports.
+    ///
+    /// # Panics
+    /// If `incoming + outgoing` is not equal to the total number of ports of
+    /// the node.
+    #[cold]
+    fn resize_ports_inplace<F>(
+        &mut self,
+        node: NodeIndex,
+        incoming: usize,
+        outgoing: usize,
+        mut rekey: F,
+    ) where
+        F: FnMut(PortIndex, Option<PortIndex>),
+    {
+        assert!(incoming < NodeMeta::MAX_INCOMING);
+        assert!(outgoing < NodeMeta::MAX_OUTGOING);
+
+        let node_meta = self.node_meta_valid(node).expect("Node must be valid");
+        let Some(port_list) = node_meta.port_list() else {
+            assert_eq!(incoming + outgoing, 0, "The total number of ports must remain 0");
+            return;
+        };
+
+        let old_incoming = node_meta.incoming() as usize;
+        let old_outgoing = node_meta.outgoing() as usize;
+        assert_eq!(
+            incoming + outgoing,
+            old_incoming + old_outgoing,
+            "The total number of ports must not change"
+        );
+
+        // Disconnect any port to be removed.
+        for port in self
+            .inputs(node)
+            .skip(incoming)
+            .chain(self.outputs(node).skip(outgoing))
+        {
+            self.unlink_port(port);
+            rekey(port, None);
+        }
+
+        let ports_start = port_list.index();
+        let ports_end = ports_start + old_incoming + old_outgoing;
+        let old_out_indices = (ports_start + old_incoming)..ports_end;
+        let out_indices = (ports_start + incoming)..ports_end;
+
+        // Choose to move the ports from the start or from the end of the
+        // list, to avoid overwriting valid data.
+        let move_pairs: Box<dyn Iterator<Item = _>> = if old_incoming > incoming {
+            Box::new(old_out_indices.zip(out_indices))
+        } else {
+            Box::new(old_out_indices.zip(out_indices).rev())
+        };
+
+        for (old, new) in move_pairs {
+            let old_port = PortIndex::new(old);
+            let new_port = PortIndex::new(new);
+            self.port_link[new] = self.port_link[old];
+            self.port_meta[new] = self.port_meta[old];
+            rekey(old_port, Some(new_port));
+            if let Some(link) = self.port_link[new] {
+                self.port_link[link.index()] = Some(new_port);
+            }
+        }
+
+        // Initialize the new (input or output) ports
+        if old_incoming > incoming {
+            for i in 0..(old_incoming - incoming) {
+                let port = ports_start + incoming + old_outgoing + i;
+                self.port_link[port] = None;
+                self.port_meta[port] = PortEntry::Port(PortMeta::new(node, Direction::Outgoing));
+            }
+        } else {
+            for i in 0..(incoming - old_incoming) {
+                let port = ports_start + old_incoming + i;
+                self.port_link[port] = None;
+                self.port_meta[port] = PortEntry::Port(PortMeta::new(node, Direction::Incoming));
+            }
+        }
+
+        self.node_meta[node.index()] = NodeEntry::Node(NodeMeta::new(
+            Some(port_list),
+            incoming as u16,
+            outgoing as u16,
+        ));
+    }
 }
 
 impl Default for PortGraph {
@@ -829,6 +1021,12 @@ struct NodeMeta {
 }
 
 impl NodeMeta {
+    /// The maximum number of incoming ports for a node.
+    /// This is restricted by the `NonZeroU16` representation.
+    const MAX_INCOMING: usize = u16::MAX as usize;
+    /// The maximum number of outgoing ports for a node.
+    const MAX_OUTGOING: usize = u16::MAX as usize + 1;
+
     #[inline]
     pub fn new(port_list: Option<PortIndex>, incoming: u16, outgoing: u16) -> Self {
         Self {
@@ -861,6 +1059,9 @@ enum NodeEntry {
     /// Instead the entry contains the next index in the node free list.
     Free(Option<NodeIndex>),
     /// A node is stored at this entry.
+    ///
+    /// This value allows for null-value optimization so that
+    /// `size_of::<NodeEntry>() == size_of::<NodeMeta>()`.
     Node(NodeMeta),
 }
 
@@ -983,6 +1184,8 @@ enum PortEntry {
     Port(PortMeta),
 }
 
+/// Iterator over the ports of a node.
+/// See [`PortGraph::inputs`], [`PortGraph::outputs`], and [`PortGraph::all_ports`].
 #[derive(Debug, Clone)]
 pub struct NodePorts {
     index: NonZeroU32,
@@ -1002,7 +1205,7 @@ impl Iterator for NodePorts {
     }
 
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
-        self.length = self.length.checked_sub(n)?;
+        self.length = self.length.checked_sub(n + 1)?;
         let index = self.index.saturating_add(n as u32);
         self.index = index.saturating_add(1);
         Some(PortIndex(index))
@@ -1043,6 +1246,7 @@ impl Default for NodePorts {
     }
 }
 
+/// Iterator over the nodes of a graph, created by [`PortGraph::nodes_iter`].
 #[derive(Clone)]
 pub struct Nodes<'a> {
     iter: std::iter::Enumerate<std::slice::Iter<'a, NodeEntry>>,
@@ -1063,10 +1267,12 @@ impl<'a> Iterator for Nodes<'a> {
         })
     }
 
+    #[inline]
     fn count(self) -> usize {
         self.len
     }
 
+    #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
         (self.len, Some(self.len))
     }
@@ -1097,6 +1303,7 @@ impl<'a> DoubleEndedIterator for Nodes<'a> {
 
 impl<'a> FusedIterator for Nodes<'a> {}
 
+/// Iterator over the ports of a graph, created by [`PortGraph::ports_iter`].
 #[derive(Clone)]
 pub struct Ports<'a> {
     iter: std::iter::Enumerate<std::slice::Iter<'a, PortEntry>>,
@@ -1155,7 +1362,9 @@ impl<'a> DoubleEndedIterator for Ports<'a> {
 
 impl<'a> FusedIterator for Ports<'a> {}
 
-/// Iterator created by [`PortGraph::links`].
+/// Iterator over the links of a node, created by [`PortGraph::links`]. Returns
+/// the port indices linked to each port, or `None` if the corresponding port is
+/// not connected.
 #[derive(Clone)]
 pub struct NodeLinks<'a>(std::slice::Iter<'a, Option<PortIndex>>);
 
@@ -1194,20 +1403,27 @@ impl<'a> DoubleEndedIterator for NodeLinks<'a> {
 
 impl<'a> FusedIterator for NodeLinks<'a> {}
 
+/// Error generated when linking ports.
 #[derive(Debug, Clone, Error)]
 pub enum LinkError {
+    /// The port is already linked.
     #[error("port is already linked")]
     AlreadyLinked(PortIndex),
+    /// The port does not exist.
     #[error("unknown port")]
     UnknownPort(PortIndex),
+    /// The port offset is invalid.
     #[error("unknown port")]
     UnknownOffset(NodeIndex, Direction, usize),
+    /// The port cannot be linked in this direction.
     #[error("unexpected port direction")]
     UnexpectedDirection(PortIndex),
 }
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashMap;
+
     use super::*;
 
     #[test]
@@ -1223,16 +1439,63 @@ mod test {
 
     #[test]
     fn add_nodes() {
-        let mut graph = PortGraph::new();
+        let mut graph = PortGraph::with_capacity(5, 10);
+        assert_eq!(graph.node_count(), 0);
+        assert_eq!(graph.node_capacity(), 5);
+        assert_eq!(graph.port_count(), 0);
+        assert_eq!(graph.port_capacity(), 10);
 
         let lengths = [(0, 1), (0, 0), (1, 0), (2, 1), (1, 6)];
+        let node_count = lengths.len();
+        let port_count = lengths
+            .iter()
+            .map(|(incoming, outgoing)| incoming + outgoing)
+            .sum();
 
-        for (incoming, outgoing) in lengths {
+        for (incoming, outgoing) in lengths.iter().copied() {
             let node = graph.add_node(incoming, outgoing);
             assert!(graph.contains_node(node));
-            assert_eq!(graph.ports(node, Direction::Incoming).count(), incoming);
-            assert_eq!(graph.ports(node, Direction::Outgoing).count(), outgoing);
+
+            assert_eq!(graph.inputs(node).count(), incoming);
+            assert_eq!(graph.outputs(node).count(), outgoing);
+            assert_eq!(graph.num_ports(node, Direction::Incoming), incoming);
+            assert_eq!(graph.num_ports(node, Direction::Outgoing), outgoing);
+            assert_eq!(graph.all_ports(node).count(), incoming + outgoing);
+
+            let inputs = graph
+                .inputs(node)
+                .enumerate()
+                .map(|(i, port)| (i, port, Direction::Incoming));
+            let outputs = graph
+                .outputs(node)
+                .enumerate()
+                .map(|(i, port)| (i, port, Direction::Outgoing));
+            for (i, port, dir) in inputs.chain(outputs) {
+                assert_eq!(graph.port_direction(port), Some(dir));
+                assert_eq!(graph.port_offset(port), Some(i));
+                assert_eq!(graph.port_node(port), Some(node));
+                assert_eq!(graph.port_index(node, i, dir), Some(port));
+                assert_eq!(graph.port_link(port), None);
+            }
         }
+
+        // Global iterators
+        let nodes = graph.nodes_iter().take(2);
+        let nodes = nodes.chain(graph.nodes_iter().skip(2));
+        let nodes = nodes.collect::<Vec<_>>();
+        assert_eq!(
+            nodes,
+            (0..node_count).map(NodeIndex::new).collect::<Vec<_>>()
+        );
+
+        let ports = graph.ports_iter().take(2);
+        let ports = ports.chain(graph.ports_iter().skip(2));
+        let ports = ports.collect::<Vec<_>>();
+        assert_eq!(ports.len(), port_count);
+        assert_eq!(
+            ports,
+            (0..port_count).map(PortIndex::new).collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -1256,7 +1519,7 @@ mod test {
         );
         assert!(!g.connected(node1, node0));
 
-        g.link_ports(node1_output, node0_input).unwrap();
+        g.link_nodes(node1, 0, node0, 0).unwrap();
         assert_eq!(g.link_count(), 2);
         assert_eq!(
             g.get_connection(node0, node1),
@@ -1292,5 +1555,147 @@ mod test {
         g.unlink_port(node0_output);
         g.remove_node(node1);
         assert!(g.link_ports(node1_output, node0_input).is_err());
+    }
+
+    #[test]
+    fn compact_operations() {
+        let mut g = PortGraph::new();
+        let x = g.add_node(3, 2);
+        let a = g.add_node(1, 1);
+        let b = g.add_node(2, 2);
+        let c = g.add_node(1, 1);
+        g.link_nodes(a, 0, b, 0).unwrap();
+        g.link_nodes(b, 0, b, 1).unwrap();
+        g.link_nodes(b, 1, c, 0).unwrap();
+        g.link_nodes(c, 0, a, 0).unwrap();
+        let a_input = g.input(a, 0).unwrap();
+        let a_output = g.input(a, 0).unwrap();
+
+        assert_eq!(g.link_count(), 4);
+        assert_eq!(g.node_count(), 4);
+        assert_eq!(g.port_count(), 13);
+
+        g.remove_node(x);
+
+        assert_eq!(g.link_count(), 4);
+        assert_eq!(g.node_count(), 3);
+        assert_eq!(g.port_count(), 8);
+        assert!(g.connected(a, b));
+        assert!(g.connected(b, b));
+        assert!(g.connected(b, c));
+        assert!(g.connected(c, a));
+
+        let mut new_nodes = HashMap::new();
+        g.compact_nodes(|old, new| {
+            new_nodes.insert(old, new);
+        });
+
+        assert_eq!(
+            g.nodes_iter().collect::<Vec<_>>(),
+            (0..3).map(NodeIndex::new).collect::<Vec<_>>()
+        );
+        assert_eq!(new_nodes.len(), 3);
+        assert_eq!(g.port_node(a_input), Some(new_nodes[&a]));
+        assert_eq!(g.port_node(a_output), Some(new_nodes[&a]));
+
+        let a = new_nodes[&a];
+        let b = new_nodes[&b];
+        let c = new_nodes[&c];
+
+        assert_eq!(g.link_count(), 4);
+        assert_eq!(g.node_count(), 3);
+        assert_eq!(g.port_count(), 8);
+        assert!(g.connected(a, b));
+        assert!(g.connected(b, b));
+        assert!(g.connected(b, c));
+        assert!(g.connected(c, a));
+
+        let mut new_ports = HashMap::new();
+        g.compact_ports(|old, new| {
+            new_ports.insert(old, new);
+        });
+
+        assert_eq!(
+            g.ports_iter().collect::<Vec<_>>(),
+            (0..8).map(PortIndex::new).collect::<Vec<_>>()
+        );
+        assert_eq!(new_ports.len(), 8);
+        assert_eq!(g.port_node(new_ports[&a_input]), Some(a));
+        assert_eq!(g.port_node(new_ports[&a_output]), Some(a));
+
+        assert_eq!(g.link_count(), 4);
+        assert_eq!(g.node_count(), 3);
+        assert_eq!(g.port_count(), 8);
+        assert!(g.connected(a, b));
+        assert!(g.connected(b, b));
+        assert!(g.connected(b, c));
+        assert!(g.connected(c, a));
+    }
+
+    #[test]
+    fn resize_ports() {
+        let mut g = PortGraph::new();
+        let x = g.add_node(3, 2);
+        let a = g.add_node(1, 1);
+        let b = g.add_node(2, 2);
+        let c = g.add_node(1, 1);
+        g.link_nodes(a, 0, b, 0).unwrap();
+        g.link_nodes(b, 0, b, 1).unwrap();
+        g.link_nodes(b, 1, c, 0).unwrap();
+        g.link_nodes(c, 0, a, 0).unwrap();
+
+        assert_eq!(g.link_count(), 4);
+        assert_eq!(g.node_count(), 4);
+        assert_eq!(g.port_count(), 13);
+
+        g.set_num_ports(x, 0, 0, |_, _| {});
+
+        assert_eq!(g.link_count(), 4);
+        assert_eq!(g.node_count(), 4);
+        assert_eq!(g.port_count(), 8);
+        assert!(g.connected(a, b));
+        assert!(g.connected(b, b));
+        assert!(g.connected(b, c));
+        assert!(g.connected(c, a));
+
+        g.set_num_ports(a, 2, 3, |_, _| {});
+
+        assert_eq!(g.link_count(), 4);
+        assert_eq!(g.node_count(), 4);
+        assert_eq!(g.port_count(), 11);
+        assert!(g.connected(a, b));
+        assert!(g.connected(b, b));
+        assert!(g.connected(b, c));
+        assert!(g.connected(c, a));
+
+        g.set_num_ports(b, 2, 3, |_, _| {});
+
+        assert_eq!(g.link_count(), 4);
+        assert_eq!(g.node_count(), 4);
+        assert_eq!(g.port_count(), 12);
+        assert!(g.connected(a, b));
+        assert!(g.connected(b, b));
+        assert!(g.connected(b, c));
+        assert!(g.connected(c, a));
+
+        g.set_num_ports(b, 3, 2, |_, _| {});
+
+        assert_eq!(g.link_count(), 4);
+        assert_eq!(g.node_count(), 4);
+        assert_eq!(g.port_count(), 12);
+        assert!(g.connected(a, b));
+        assert!(g.connected(b, b));
+        assert!(g.connected(b, c));
+        assert!(g.connected(c, a));
+
+        g.set_num_ports(b, 2, 3, |_, _| {});
+
+        assert_eq!(g.link_count(), 4);
+        assert_eq!(g.node_count(), 4);
+        assert_eq!(g.port_count(), 12);
+        assert!(g.connected(a, b));
+        assert!(g.connected(b, b));
+        assert!(g.connected(b, c));
+        assert!(g.connected(c, a));
     }
 }

@@ -67,7 +67,7 @@ impl PortGraph {
 }
 
 /// Error generated when a rewrite fails.
-#[derive(Debug, Error)]
+#[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum RewriteError {
     /// The rewrite failed because the boundary defined by the
     /// [`BoundedSubgraph`] could not be matched to the dangling ports of the

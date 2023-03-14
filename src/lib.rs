@@ -121,7 +121,7 @@ impl TryFrom<usize> for Direction {
         match dir {
             0 => Ok(Direction::Incoming),
             1 => Ok(Direction::Outgoing),
-            _ => Err(IndexError),
+            index => Err(IndexError { index }),
         }
     }
 }
@@ -166,7 +166,7 @@ impl TryFrom<usize> for NodeIndex {
     #[inline]
     fn try_from(index: usize) -> Result<Self, Self::Error> {
         if index >= (u32::MAX / 2) as usize {
-            Err(IndexError)
+            Err(IndexError { index })
         } else {
             Ok(Self(unsafe { NonZeroU32::new_unchecked(1 + index as u32) }))
         }
@@ -220,7 +220,7 @@ impl TryFrom<usize> for PortIndex {
     #[inline]
     fn try_from(index: usize) -> Result<Self, Self::Error> {
         if index >= (u32::MAX / 2) as usize {
-            Err(IndexError)
+            Err(IndexError { index })
         } else {
             Ok(Self(unsafe { NonZeroU32::new_unchecked(1 + index as u32) }))
         }
@@ -234,7 +234,9 @@ impl std::fmt::Debug for PortIndex {
     }
 }
 
-/// Error indicating a `NodeIndex` or `PortIndex` is too large.
-#[derive(Debug, Clone, Error)]
-#[error("Index too large.")]
-pub struct IndexError;
+/// Error indicating a `NodeIndex`, `PortIndex`, or `Direction` is too large.
+#[derive(Debug, Clone, Error, PartialEq, Eq)]
+#[error("the index {index} is too large.")]
+pub struct IndexError {
+    index: usize,
+}

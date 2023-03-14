@@ -274,23 +274,29 @@ impl PortGraph {
         port_to: PortIndex,
     ) -> Result<(), LinkError> {
         let Some(meta_from) = self.port_meta_valid(port_from) else {
-            return Err(LinkError::UnknownPort(port_from));
+            return Err(LinkError::UnknownPort{port: port_from});
         };
 
         let Some(meta_to) = self.port_meta_valid(port_to) else {
-            return Err(LinkError::UnknownPort(port_from));
+            return Err(LinkError::UnknownPort{port: port_from});
         };
 
         if meta_from.direction() != Direction::Outgoing {
-            return Err(LinkError::UnexpectedDirection(port_from));
+            return Err(LinkError::UnexpectedDirection {
+                port: port_from,
+                dir: meta_from.direction(),
+            });
         } else if meta_to.direction() != Direction::Incoming {
-            return Err(LinkError::UnexpectedDirection(port_to));
+            return Err(LinkError::UnexpectedDirection {
+                port: port_to,
+                dir: meta_to.direction(),
+            });
         }
 
         if self.port_link[port_from.index()].is_some() {
-            return Err(LinkError::AlreadyLinked(port_from));
+            return Err(LinkError::AlreadyLinked { port: port_from });
         } else if self.port_link[port_to.index()].is_some() {
-            return Err(LinkError::AlreadyLinked(port_to));
+            return Err(LinkError::AlreadyLinked { port: port_to });
         }
 
         self.port_link[port_from.index()] = Some(port_to);
@@ -340,16 +346,16 @@ impl PortGraph {
     ) -> Result<(PortIndex, PortIndex), LinkError> {
         let from_port = self
             .output(from, from_offset)
-            .ok_or(LinkError::UnknownOffset(
-                from,
-                Direction::Outgoing,
-                from_offset,
-            ))?;
-        let to_port = self.input(to, to_offset).ok_or(LinkError::UnknownOffset(
-            to,
-            Direction::Incoming,
-            to_offset,
-        ))?;
+            .ok_or(LinkError::UnknownOffset {
+                node: from,
+                dir: Direction::Outgoing,
+                offset: from_offset,
+            })?;
+        let to_port = self.input(to, to_offset).ok_or(LinkError::UnknownOffset {
+            node: to,
+            dir: Direction::Incoming,
+            offset: to_offset,
+        })?;
         self.link_ports(from_port, to_port)?;
         Ok((from_port, to_port))
     }
@@ -1404,20 +1410,25 @@ impl<'a> DoubleEndedIterator for NodeLinks<'a> {
 impl<'a> FusedIterator for NodeLinks<'a> {}
 
 /// Error generated when linking ports.
-#[derive(Debug, Clone, Error)]
+#[derive(Debug, Clone, Error, PartialEq, Eq)]
+#[allow(missing_docs)]
 pub enum LinkError {
     /// The port is already linked.
-    #[error("port is already linked")]
-    AlreadyLinked(PortIndex),
+    #[error("port {port:?} is already linked")]
+    AlreadyLinked { port: PortIndex },
     /// The port does not exist.
-    #[error("unknown port")]
-    UnknownPort(PortIndex),
+    #[error("unknown port '{port:?}''")]
+    UnknownPort { port: PortIndex },
     /// The port offset is invalid.
-    #[error("unknown port")]
-    UnknownOffset(NodeIndex, Direction, usize),
+    #[error("unknown port offset {offset} in node {node:?} in direction {dir:?}")]
+    UnknownOffset {
+        node: NodeIndex,
+        dir: Direction,
+        offset: usize,
+    },
     /// The port cannot be linked in this direction.
-    #[error("unexpected port direction")]
-    UnexpectedDirection(PortIndex),
+    #[error("port {port:?} had an unexpected direction {dir:?} during a link operation")]
+    UnexpectedDirection { port: PortIndex, dir: Direction },
 }
 
 #[cfg(test)]

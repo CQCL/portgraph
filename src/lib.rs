@@ -72,6 +72,9 @@ pub mod weights;
 #[cfg(feature = "pyo3")]
 pub mod py_graph;
 
+#[cfg(feature = "proptest")]
+pub mod proptest;
+
 #[doc(inline)]
 pub use crate::hierarchy::Hierarchy;
 #[doc(inline)]

@@ -1,3 +1,46 @@
+//! A dense key-value map used to store graph weights.
+//!
+//! This map does not allocate any memory until a value is modified, returning
+//! references to the default value instead.
+//!
+//! This structure is intended to be used alongside [`PortGraph`], as it does
+//! not keep track of the valid keys.
+//!
+//! For simple cases where the nodes and ports have a single weight each, see
+//! [`portgraph::Weights`].
+//!
+//! # Example
+//!
+//! ```
+//! # use portgraph::{PortGraph, NodeIndex, PortIndex};
+//! # use portgraph::secondary::SecondaryMap;
+//!
+//! let mut graph = PortGraph::new();
+//! let mut node_weights = SecondaryMap::<NodeIndex, usize>::new();
+//! let mut port_weights = SecondaryMap::<PortIndex, isize>::new();
+//!
+//! // The weights must be set manually.
+//! let node = graph.add_node(2, 2);
+//! let [in0, in1, ..] = graph.inputs(node).collect::<Vec<_>>()[..] else { unreachable!() };
+//! let [out0, out1, ..] = graph.outputs(node).collect::<Vec<_>>()[..] else { unreachable!() };
+//! node_weights[node] = 42;
+//! port_weights[in1] = 2;
+//! port_weights[out0] = -1;
+//! port_weights[out1] = -2;
+//!
+//! /// Unset weights return the default value.
+//! assert_eq!(port_weights[in0], 0);
+//!
+//! // Graph operations that modify the keys use callbacks to update the weights.
+//! graph.set_num_ports(node, 1, 3, |old, new| {if let Some(new) = new {port_weights.swap(old, new);}});
+//!
+//! // The map does not track item removals, but the user can shrink the map manually.
+//! graph.remove_node(node);
+//! node_weights.shrink_to(graph.node_count());
+//! port_weights.shrink_to(graph.port_count());
+//!
+//! ```
+
 use std::{
     marker::PhantomData,
     mem::MaybeUninit,
@@ -5,6 +48,7 @@ use std::{
 };
 
 /// A dense map from keys to values with default fallbacks.
+///
 #[derive(Debug, Clone)]
 pub struct SecondaryMap<K, V> {
     data: Vec<V>,
@@ -63,10 +107,19 @@ where
     ///
     /// Does nothing when the capacity of the secondary map is already sufficient.
     pub fn ensure_capacity(&mut self, capacity: usize) {
-        if let Some(additional) = self.data.capacity().checked_sub(capacity) {
-            self.data.reserve(additional);
-            self.data.resize(self.data.capacity(), self.default.clone());
+        if capacity > self.data.capacity() {
+            self.data.reserve(capacity - self.data.capacity());
+            self.data.resize(capacity, self.default.clone());
         }
+    }
+
+    /// Reduces the capacity of the secondary map to `capacity`.
+    /// Stored values higher than `capacity` are dropped.
+    ///
+    /// Does nothing when the capacity of the secondary map is already lower.
+    pub fn shrink_to(&mut self, capacity: usize) {
+        self.data.truncate(capacity);
+        self.data.shrink_to_fit();
     }
 
     /// Returns the maximum index the secondary map can contain without allocating.
@@ -122,24 +175,32 @@ where
         };
 
         // Collect pointers for all indices
-        let mut ptrs: [MaybeUninit<*mut V>; N] = unsafe { MaybeUninit::uninit().assume_init() };
+        let mut ptrs: [MaybeUninit<*mut V>; N] = [MaybeUninit::uninit(); N];
 
         // NOTE: This is a quadratic check. That is not a problem for very small
         // `N` but it would be nice if it could be avoided. See
         // https://docs.rs/slotmap/latest/slotmap/struct.SlotMap.html#method.get_disjoint_mut
         // for a linear time implementation. Unfortunately their trick is not
         // applicable here since we do not have the extra tagging bit available.
+        let data = self.data.as_mut_ptr();
         for (i, key) in keys.iter().enumerate() {
-            ptrs[i] = MaybeUninit::new(&mut self.data[(*key).into()]);
-
-            if keys.iter().skip(i + 1).any(|other| key == other) {
+            if keys[(i + 1)..].iter().any(|other| key == other) {
                 return None;
             }
+
+            let offset = (*key).into();
+            if offset >= self.data.len() {
+                return None;
+            }
+            // SAFETY: The offset is within the bounds of the underlying array.
+            let ptr: *mut V = unsafe { data.add(offset) };
+            ptrs[i].write(ptr);
         }
 
         // SAFETY: The pointers come from valid borrows into the underlying
         // array and we have checked their disjointness.
-        Some(unsafe { std::mem::transmute_copy::<_, [&mut V; N]>(&keys) })
+        let refs = unsafe { ptrs.map(|p| &mut *p.assume_init()) };
+        Some(refs)
     }
 
     /// Must be called with `len` greater than `self.data.len()`.
@@ -150,7 +211,7 @@ where
 
     /// Swaps the values of two keys.
     ///
-    /// Allocates more memory when neccessary to fit the keys.
+    /// Allocates more memory when necessary to fit the keys.
     #[inline]
     pub fn swap(&mut self, key0: K, key1: K) {
         let index0 = key0.into();
@@ -194,5 +255,87 @@ where
 {
     fn index_mut(&mut self, key: K) -> &mut Self::Output {
         self.get_mut(key)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_capacity() {
+        let mut map: SecondaryMap<usize, usize> = SecondaryMap::new();
+
+        assert_eq!(map.capacity(), 0);
+
+        map.ensure_capacity(10);
+        assert!(map.capacity() >= 10);
+
+        let prev_capacity = map.capacity();
+        map.ensure_capacity(5);
+        assert_eq!(map.capacity(), prev_capacity);
+
+        map.ensure_capacity(15);
+        assert!(map.capacity() >= 15);
+
+        map.shrink_to(5);
+        assert!(map.capacity() >= 5);
+
+        let prev_capacity = map.capacity();
+        map.shrink_to(10);
+        assert_eq!(map.capacity(), prev_capacity);
+    }
+
+    #[test]
+    fn test_get_mut() {
+        let mut map: SecondaryMap<usize, i32> = SecondaryMap::with_default(4);
+
+        let value = map.get_mut(0);
+        assert_eq!(value, &4);
+        *value = 1;
+        assert_eq!(map.get_mut(0), &1);
+
+        let value = map.try_get_mut(10);
+        assert_eq!(value, None);
+
+        let value = map.get_mut(10);
+        assert_eq!(value, &mut 4);
+        *value = 2;
+        assert_eq!(map.try_get_mut(10), Some(&mut 2));
+    }
+
+    #[test]
+    fn test_get_disjoint_mut() {
+        let mut map: SecondaryMap<usize, i32> = SecondaryMap::new();
+
+        let values = map.get_disjoint_mut([0, 1, 2]);
+        assert_eq!(values, Some([&mut 0, &mut 0, &mut 0]));
+        let values = values.unwrap();
+        *values[0] = 1;
+        *values[1] = 2;
+        *values[2] = 3;
+        assert_eq!(
+            map.get_disjoint_mut([0, 1, 2]),
+            Some([&mut 1, &mut 2, &mut 3])
+        );
+
+        let values = map.get_disjoint_mut([0, 1, 0]);
+        assert_eq!(values, None);
+    }
+
+    #[test]
+    fn test_swap() {
+        let mut map: SecondaryMap<usize, i32> = SecondaryMap::new();
+        map[0] = 0x10;
+        map[1] = 0x11;
+        map[3] = 0x13;
+
+        map.swap(0, 1);
+        assert_eq!(map[0], 0x11);
+        assert_eq!(map[1], 0x10);
+
+        map.swap(10, 3);
+        assert_eq!(map[3], 0);
+        assert_eq!(map[10], 0x13);
     }
 }

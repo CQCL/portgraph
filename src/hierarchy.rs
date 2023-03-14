@@ -512,6 +512,7 @@ impl<'a> FusedIterator for Children<'a> {}
 
 /// Error produced when trying to attach nodes in the Hierarchy.
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
+#[allow(missing_docs)]
 pub enum AttachError {
     /// The node is already attached to a parent.
     #[error("the node {node:?} is already attached")]

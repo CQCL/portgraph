@@ -25,10 +25,17 @@ jobs:
           toolchain: stable
           components: rustfmt, clippy
           override: true
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: v0
       - name: Check formatting
         run: cargo fmt -- --check
       - name: Run clippy
         run: cargo clippy --all-targets
+      - name: Build docs
+        run: cargo doc --no-deps --all-features
+        env:
+          RUSTDOCFLAGS: "-Dwarnings"
 
   miri:
     runs-on: ubuntu-latest

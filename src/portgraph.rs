@@ -465,7 +465,7 @@ impl PortGraph {
 
     /// Returns the input port at the given offset in the `node`.
     ///
-    /// Shorthand for [`PortGraph::port`].
+    /// Shorthand for [`PortGraph::port_index`].
     #[inline]
     pub fn input(&self, node: NodeIndex, offset: usize) -> Option<PortIndex> {
         self.port_index(node, offset, Direction::Incoming)

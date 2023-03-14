@@ -5,6 +5,8 @@
 //! keep track of key validity, and returns default values for missing keys. It
 //! is intended to be used alongside [`PortGraph`].
 //!
+//! [`PortGraph`]: crate::portgraph::PortGraph
+//!
 //! # Example
 //!
 //! ```

@@ -1,4 +1,6 @@
-use criterion::{black_box, criterion_group, AxisScale, Criterion, PlotConfiguration};
+#![allow(clippy::unit_arg)] // Required for black_box uses
+
+use criterion::{black_box, criterion_group, BatchSize, Criterion};
 use portgraph::{
     substitute::{BoundedSubgraph, OpenGraph, Rewrite, WeightedRewrite},
     NodeIndex, PortGraph,
@@ -38,40 +40,33 @@ fn make_single_node_weighted_rewrite(
 }
 
 fn bench_apply_rewrite(c: &mut Criterion) {
-    let mut g = c.benchmark_group("run a rewrite operation");
-    g.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
+    let mut g = c.benchmark_group("rewrite a single node");
+
+    let graph = make_line_graph(10);
+    let weights = make_weights(&graph);
+    let rewrite = make_single_node_rewrite(&graph, NodeIndex::new(3));
+    let w_rewrite = make_single_node_weighted_rewrite(&graph, NodeIndex::new(3));
 
     g.bench_function("apply_rewrite", |b| {
-        let graph = make_line_graph(10);
-        let rewrite = make_single_node_rewrite(&graph, NodeIndex::new(3));
-        b.iter(|| black_box(graph.clone().apply_rewrite(rewrite.clone())))
+        b.iter_batched(
+            || (graph.clone(), rewrite.clone()),
+            |(mut g, rewrite)| black_box(g.apply_rewrite(rewrite)),
+            BatchSize::SmallInput,
+        );
     });
-    g.finish();
-}
-
-fn bench_apply_weighted_rewrite(c: &mut Criterion) {
-    let mut g = c.benchmark_group("run a rewrite operation");
-    g.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
-
-    g.bench_function("apply_rewrite", |b| {
-        let graph = make_line_graph(10);
-        let weights = make_weights(&graph);
-        let rewrite = make_single_node_weighted_rewrite(&graph, NodeIndex::new(3));
-        b.iter(|| {
-            black_box(
-                graph
-                    .clone()
-                    .apply_weighted_rewrite(rewrite.clone(), &mut weights.clone()),
-            )
-        });
+    g.bench_function("apply_weighted_rewrite", |b| {
+        b.iter_batched(
+            || (graph.clone(), weights.clone(), w_rewrite.clone()),
+            |(mut g, mut w, rewrite)| black_box(g.apply_weighted_rewrite(rewrite, &mut w)),
+            BatchSize::SmallInput,
+        );
     });
     g.finish();
 }
 
 criterion_group! {
-    name = substitute_benches;
+    name = benches;
     config = Criterion::default();
     targets =
         bench_apply_rewrite,
-        bench_apply_weighted_rewrite,
 }

@@ -115,17 +115,20 @@ impl Hierarchy {
             return Err(AttachError::AlreadyAttached { node });
         }
 
-        let parent_data = self.get_mut(parent);
-        parent_data.children_count += 1;
-        let node_prev = replace(&mut self.get_mut(parent).children[1], Some(node));
-
         let node_data = self.get_mut(node);
         node_data.parent = Some(parent);
-        node_data.siblings[0] = node_prev;
 
-        match node_prev {
-            Some(prev) => self.get_mut(prev).siblings[1] = Some(node),
-            None => self.get_mut(parent).children[0] = Some(node),
+        let parent_data = self.get_mut(parent);
+        parent_data.children_count += 1;
+        match &mut parent_data.children {
+            Some([_, prev]) => {
+                let prev = replace(prev, node);
+                self.get_mut(node).siblings[0] = Some(prev);
+                self.get_mut(prev).siblings[1] = Some(node);
+            }
+            None => {
+                parent_data.children = Some([node, node]);
+            }
         }
 
         Ok(())
@@ -152,17 +155,20 @@ impl Hierarchy {
             return Err(AttachError::AlreadyAttached { node });
         }
 
-        let parent_data = self.get_mut(parent);
-        parent_data.children_count += 1;
-        let node_next = replace(&mut self.get_mut(parent).children[0], Some(node));
-
         let node_data = self.get_mut(node);
         node_data.parent = Some(parent);
-        node_data.siblings[1] = node_next;
 
-        match node_next {
-            Some(next) => self.get_mut(next).siblings[0] = Some(node),
-            None => self.get_mut(parent).children[1] = Some(node),
+        let parent_data = self.get_mut(parent);
+        parent_data.children_count += 1;
+        match &mut parent_data.children {
+            Some([next, _]) => {
+                let next = replace(next, node);
+                self.get_mut(node).siblings[1] = Some(next);
+                self.get_mut(next).siblings[0] = Some(node);
+            }
+            None => {
+                parent_data.children = Some([node, node]);
+            }
         }
 
         Ok(())
@@ -203,7 +209,7 @@ impl Hierarchy {
 
         match before_prev {
             Some(prev) => self.get_mut(prev).siblings[1] = Some(node),
-            None => self.get_mut(parent).children[0] = Some(node),
+            None => self.get_mut(parent).children.as_mut().unwrap()[0] = node,
         }
 
         Ok(())
@@ -244,7 +250,7 @@ impl Hierarchy {
 
         match after_next {
             Some(next) => self.get_mut(next).siblings[0] = Some(node),
-            None => self.get_mut(parent).children[1] = Some(node),
+            None => self.get_mut(parent).children.as_mut().unwrap()[1] = node,
         }
 
         Ok(())
@@ -253,7 +259,7 @@ impl Hierarchy {
     /// Ensures that making `node` a child of `parent` would not introduce a cycle.
     fn cycle_check(&self, node: NodeIndex, mut parent: NodeIndex) -> bool {
         // When `node` does not have any children it can't contain `parent`.
-        if self.get(node).children[0].is_none() {
+        if self.get(node).children.is_none() {
             return true;
         }
 
@@ -279,14 +285,18 @@ impl Hierarchy {
         if let Some(parent) = parent {
             self.get_mut(parent).children_count -= 1;
 
-            match siblings[0] {
-                Some(prev) => self.get_mut(prev).siblings[1] = siblings[1],
-                None => self.get_mut(parent).children[0] = siblings[1],
+            if let Some(prev) = siblings[0] {
+                self.get_mut(prev).siblings[1] = siblings[1];
+            }
+            if let Some(next) = siblings[1] {
+                self.get_mut(next).siblings[0] = siblings[0];
             }
 
-            match siblings[1] {
-                Some(next) => self.get_mut(next).siblings[0] = siblings[0],
-                None => self.get_mut(parent).children[1] = siblings[0],
+            match siblings {
+                [None, None] => self.get_mut(parent).children = None,
+                [Some(prev), None] => self.get_mut(parent).children.as_mut().unwrap()[1] = prev,
+                [None, Some(next)] => self.get_mut(parent).children.as_mut().unwrap()[0] = next,
+                _ => {}
             }
         }
 
@@ -300,8 +310,8 @@ impl Hierarchy {
         };
 
         node_data.children_count = 0;
-        let mut child_next = node_data.children[0];
-        node_data.children = [None, None];
+        let mut child_next = node_data.children.map(|c| c[0]);
+        node_data.children = None;
 
         while let Some(child) = child_next {
             let child_data = self.get_mut(child);
@@ -333,13 +343,13 @@ impl Hierarchy {
     /// Returns a node's first child, if any.
     #[inline]
     pub fn first(&self, parent: NodeIndex) -> Option<NodeIndex> {
-        self.get(parent).children[0]
+        self.get(parent).children.map(|c| c[0])
     }
 
     /// Returns a node's last child, if any.
     #[inline]
     pub fn last(&self, parent: NodeIndex) -> Option<NodeIndex> {
-        self.get(parent).children[1]
+        self.get(parent).children.map(|c| c[1])
     }
 
     /// Returns the next sibling in the node's parent, if any.
@@ -364,8 +374,8 @@ impl Hierarchy {
         let node_data = &self.get(node);
         Children {
             layout: self,
-            next: node_data.children[0],
-            prev: node_data.children[1],
+            next: node_data.children.map(|c| c[0]),
+            prev: node_data.children.map(|c| c[1]),
             len: node_data.children_count as usize,
         }
     }
@@ -391,16 +401,16 @@ impl Hierarchy {
         if let Some(parent) = node_data.parent {
             match node_data.siblings[0] {
                 Some(prev) => self.get_mut(prev).siblings[1] = Some(new),
-                None => self.get_mut(parent).children[0] = Some(new),
+                None => self.get_mut(parent).children.as_mut().unwrap()[0] = new,
             }
 
             match node_data.siblings[1] {
                 Some(next) => self.get_mut(next).siblings[0] = Some(new),
-                None => self.get_mut(parent).children[1] = Some(new),
+                None => self.get_mut(parent).children.as_mut().unwrap()[1] = new,
             }
         }
 
-        let mut next_child = node_data.children[0];
+        let mut next_child = node_data.children.map(|c| c[0]);
 
         while let Some(child) = next_child {
             let child_data = self.get_mut(child);
@@ -433,7 +443,7 @@ impl Hierarchy {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct NodeData {
     /// The first and last child of the node, if any.
-    children: [Option<NodeIndex>; 2],
+    children: Option<[NodeIndex; 2]>,
     /// The number of children
     children_count: u32,
     /// The parent of a node, if any.
@@ -445,7 +455,7 @@ struct NodeData {
 impl NodeData {
     pub const fn new() -> Self {
         Self {
-            children: [None; 2],
+            children: None,
             children_count: 0u32,
             parent: None,
             siblings: [None; 2],

@@ -22,6 +22,9 @@ use thiserror::Error;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 /// An unlabelled port graph.
 ///
 /// A port graph consists of a collection of nodes identified by a [`NodeIndex`].
@@ -33,7 +36,8 @@ use pyo3::prelude::*;
 /// The indices of unaffected nodes and ports remain stable.
 /// [`PortGraph::compact_nodes`] and [`PortGraph::compact_ports`] to eliminate fragmentation in the index space.
 #[cfg_attr(feature = "pyo3", pyclass)]
-#[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[derive(Clone, PartialEq)]
 pub struct PortGraph {
     /// Metadata for each node. Free slots form a linked list.
     node_meta: Vec<NodeEntry>,
@@ -1014,7 +1018,8 @@ impl Default for PortGraph {
 }
 
 /// Meta data stored for a valid node.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 struct NodeMeta {
     /// The index of the first port in the port list.
     /// If the node has no ports, this will be `None`.
@@ -1060,15 +1065,18 @@ impl NodeMeta {
 }
 
 /// Meta data stored for a node, which might be free.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 enum NodeEntry {
     /// No node is stored at this entry.
     /// Instead the entry contains the next index in the node free list.
+    #[cfg_attr(feature = "serde", serde(rename = "f",))]
     Free(Option<NodeIndex>),
     /// A node is stored at this entry.
     ///
     /// This value allows for null-value optimization so that
     /// `size_of::<NodeEntry>() == size_of::<NodeMeta>()`.
+    #[cfg_attr(feature = "serde", serde(rename = "n"))]
     Node(NodeMeta),
 }
 
@@ -1150,7 +1158,8 @@ mod debug {
 ///
 /// Encodes a `NodeIndex` and a `Direction` by using the last bit.
 /// We use a `NonZeroU32` here to ensure that `PortEntry` only uses 4 bytes.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 struct PortMeta(NonZeroU32);
 
 impl PortMeta {
@@ -1182,7 +1191,8 @@ impl PortMeta {
 }
 
 /// Meta data stored for a port, which might be free.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize), serde(untagged))]
 enum PortEntry {
     /// No port is stored at this entry.
     /// The index will be part of a port list currently on the free list.
@@ -1433,7 +1443,13 @@ pub enum LinkError {
 }
 
 #[cfg(test)]
-mod test {
+pub mod test {
+    #[cfg(feature = "serde")]
+    #[cfg(feature = "proptest")]
+    use crate::proptest::gen_portgraph;
+    #[cfg(feature = "proptest")]
+    use proptest::prelude::*;
+
     use std::collections::HashMap;
 
     use super::*;
@@ -1709,5 +1725,26 @@ mod test {
         assert!(g.connected(b, b));
         assert!(g.connected(b, c));
         assert!(g.connected(c, a));
+    }
+
+    #[cfg(feature = "serde")]
+    pub fn ser_roundtrip<T: Serialize + serde::de::DeserializeOwned>(g: &T) -> T {
+        let v = rmp_serde::to_vec_named(g).unwrap();
+        rmp_serde::from_slice(&v[..]).unwrap()
+    }
+    #[cfg(feature = "serde")]
+    #[cfg(feature = "proptest")]
+    proptest! {
+        #[test]
+        fn prop_serialization(graph in gen_portgraph(100, 50, 1000)) {
+            prop_assert_eq!(ser_roundtrip(&graph), graph);
+        }
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn empty_portgraph_serialize() {
+        let g = PortGraph::new();
+        assert_eq!(ser_roundtrip(&g), g);
     }
 }

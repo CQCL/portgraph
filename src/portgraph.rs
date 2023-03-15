@@ -1443,7 +1443,7 @@ pub enum LinkError {
 }
 
 #[cfg(test)]
-mod test {
+pub mod test {
     #[cfg(feature = "serde")]
     #[cfg(feature = "proptest")]
     use crate::proptest::gen_portgraph;
@@ -1526,7 +1526,6 @@ mod test {
         );
     }
 
-    #[cfg(feature = "serde")]
     #[test]
     fn link_ports() {
         let mut g = PortGraph::new();
@@ -1729,13 +1728,23 @@ mod test {
     }
 
     #[cfg(feature = "serde")]
+    pub fn ser_roundtrip<T: Serialize + serde::de::DeserializeOwned>(g: &T) -> T {
+        let v = rmp_serde::to_vec_named(g).unwrap();
+        rmp_serde::from_slice(&v[..]).unwrap()
+    }
+    #[cfg(feature = "serde")]
     #[cfg(feature = "proptest")]
     proptest! {
         #[test]
-        fn serialization(graph in gen_portgraph(100, 50, 1000)) {
-            let v = rmp_serde::to_vec_named(&graph).unwrap();
-            let g2 = rmp_serde::from_slice(&v[..]).unwrap();
-            prop_assert_eq!(graph, g2);
+        fn prop_serialization(graph in gen_portgraph(100, 50, 1000)) {
+            prop_assert_eq!(ser_roundtrip(&graph), graph);
         }
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn empty_portgraph_serialize() {
+        let g = PortGraph::new();
+        assert_eq!(ser_roundtrip(&g), g);
     }
 }

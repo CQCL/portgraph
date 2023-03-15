@@ -52,7 +52,7 @@ use serde::{Deserialize, Serialize};
 
 /// A dense map from keys to values with default fallbacks.
 ///
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct SecondaryMap<K, V> {
     data: Vec<V>,
@@ -341,5 +341,16 @@ mod test {
         map.swap(10, 3);
         assert_eq!(map[3], 0);
         assert_eq!(map[10], 0x13);
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn secondary_serialize() {
+        let mut map: SecondaryMap<usize, i32> = SecondaryMap::new();
+        assert_eq!(crate::portgraph::test::ser_roundtrip(&map), map);
+        map[0] = 0x10;
+        map[1] = 0x11;
+        map[3] = 0x13;
+        assert_eq!(crate::portgraph::test::ser_roundtrip(&map), map);
     }
 }

@@ -65,7 +65,7 @@ use serde::{Deserialize, Serialize};
 /// supports efficient insertion and removal at any point in the list.
 ///
 /// [`PortGraph`]: crate::portgraph::PortGraph
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct Hierarchy {
     data: SecondaryMap<NodeIndex, NodeData>,
@@ -727,5 +727,22 @@ mod test {
         assert!(hierarchy.is_root(child_0));
         assert_eq!(hierarchy.first(child_0), Some(child_1));
         assert_eq!(hierarchy.parent(child_1), Some(child_0));
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn hierarchy_serialize() {
+        let mut hierarchy = Hierarchy::new();
+        assert_eq!(crate::portgraph::test::ser_roundtrip(&hierarchy), hierarchy);
+        let root = NodeIndex::new(4);
+
+        let child0 = NodeIndex::new(0);
+        let child1 = NodeIndex::new(1);
+        let child2 = NodeIndex::new(2);
+        hierarchy.push_front_child(child0, root).unwrap();
+        hierarchy.push_child(child2, root).unwrap();
+        hierarchy.insert_after(child1, child0).unwrap();
+
+        assert_eq!(crate::portgraph::test::ser_roundtrip(&hierarchy), hierarchy);
     }
 }

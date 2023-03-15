@@ -7,7 +7,10 @@
 //! not keep track of the valid keys.
 //!
 //! For simple cases where the nodes and ports have a single weight each, see
-//! [`portgraph::Weights`].
+//! [`Weights`].
+//!
+//! [`PortGraph`]: crate::portgraph::PortGraph
+//! [`Weights`]: crate::weights::Weights
 //!
 //! # Example
 //!

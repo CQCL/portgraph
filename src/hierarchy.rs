@@ -74,6 +74,13 @@ impl Hierarchy {
             data: SecondaryMap::new(),
         }
     }
+
+    /// Creates a new empty layout with the given capacity.
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            data: SecondaryMap::with_capacity(capacity),
+        }
+    }
 }
 
 impl Default for Hierarchy {

@@ -150,8 +150,8 @@ mod tests {
 0 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="2" cellpadding="1">0</td><td port="in1" align="text" colspan="2" cellpadding="1">1</td><td port="in2" align="text" colspan="2" cellpadding="1">2</td></tr><tr><td align="text" border="0" colspan="6">0</td></tr><tr><td port="out0" align="text" colspan="3" cellpadding="1">0</td><td port="out1" align="text" colspan="3" cellpadding="1">1</td></tr></table>>]
 1 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1">0</td></tr><tr><td align="text" border="0" colspan="1">1</td></tr></table>>]
 2 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1">0</td></tr><tr><td align="text" border="0" colspan="1">2</td></tr></table>>]
-0:out0 -> 1:in0 [style=None]
-0:out1 -> 2:in0 [style=None]
+0:out0 -> 1:in0 [style=""]
+0:out1 -> 2:in0 [style=""]
 }
 "#;
         assert_eq!(dot, expected);
@@ -186,8 +186,8 @@ mod tests {
 0 [shape=plain label=<<table border="1"><tr><td align="text" border="0" colspan="2">node1</td></tr><tr><td port="out0" align="text" colspan="1" cellpadding="1">0: out 0</td><td port="out1" align="text" colspan="1" cellpadding="1">1: out 1</td></tr></table>>]
 1 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1">0: in 0</td></tr><tr><td align="text" border="0" colspan="1">node2</td></tr></table>>]
 2 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1">0: in 0</td></tr><tr><td align="text" border="0" colspan="1">node3</td></tr></table>>]
-0:out0 -> 1:in0 [style=None]
-0:out1 -> 2:in0 [style=None]
+0:out0 -> 1:in0 [style=""]
+0:out1 -> 2:in0 [style=""]
 }
 "#;
         assert_eq!(dot, expected);

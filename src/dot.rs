@@ -122,9 +122,9 @@ fn get_edge_dot(
     let to_port = graph.port_link(from_port)?;
     let to_node = graph.port_node(to_port).expect("missing node");
     let to_offset = graph.port_offset(to_port).expect("missing port");
-    let edge_style = ports(from_port).1.unwrap_or("None".to_string());
+    let edge_style = ports(from_port).1.unwrap_or_default();
     Some(format!(
-        "{}:out{} -> {}:in{} [style={edge_style}]\n",
+        "{}:out{} -> {}:in{} [style=\"{edge_style}\"]\n",
         from_node.index(),
         from_offset,
         to_node.index(),

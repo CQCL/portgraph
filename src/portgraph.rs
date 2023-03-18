@@ -704,7 +704,7 @@ impl PortGraph {
         outgoing: usize,
         mut rekey: F,
     ) where
-        F: FnMut(PortIndex, Option<PortIndex>),
+        F: FnMut(PortIndex, Option<PortIndex>, &PortGraph),
     {
         // TODO: Add port capacity and use a grow factor to avoid unnecessary reallocations.
 
@@ -734,7 +734,7 @@ impl PortGraph {
             .chain(self.outputs(node).skip(outgoing))
         {
             self.unlink_port(port);
-            rekey(port, None);
+            rekey(port, None, &self);
         }
 
         let port_list = if incoming + outgoing > 0 {
@@ -754,7 +754,7 @@ impl PortGraph {
                     self.port_link[new_index] = self.port_link[old_index].take();
                     self.port_meta[new_index] = self.port_meta[old_index];
 
-                    rekey(old_port, Some(new_port));
+                    rekey(old_port, Some(new_port), &self);
                 }
                 self.free_ports(old_port_list, old_incoming + old_outgoing);
             }
@@ -935,7 +935,7 @@ impl PortGraph {
         outgoing: usize,
         mut rekey: F,
     ) where
-        F: FnMut(PortIndex, Option<PortIndex>),
+        F: FnMut(PortIndex, Option<PortIndex>, &PortGraph),
     {
         assert!(incoming < NodeMeta::MAX_INCOMING);
         assert!(outgoing < NodeMeta::MAX_OUTGOING);
@@ -961,7 +961,7 @@ impl PortGraph {
             .chain(self.outputs(node).skip(outgoing))
         {
             self.unlink_port(port);
-            rekey(port, None);
+            rekey(port, None, &self);
         }
 
         let ports_start = port_list.index();
@@ -982,7 +982,7 @@ impl PortGraph {
             let new_port = PortIndex::new(new);
             self.port_link[new] = self.port_link[old];
             self.port_meta[new] = self.port_meta[old];
-            rekey(old_port, Some(new_port));
+            rekey(old_port, Some(new_port), &self);
             if let Some(link) = self.port_link[new] {
                 self.port_link[link.index()] = Some(new_port);
             }
@@ -1676,7 +1676,7 @@ pub mod test {
         assert_eq!(g.node_count(), 4);
         assert_eq!(g.port_count(), 13);
 
-        g.set_num_ports(x, 0, 0, |_, _| {});
+        g.set_num_ports(x, 0, 0, |_, _, _| {});
 
         assert_eq!(g.link_count(), 4);
         assert_eq!(g.node_count(), 4);
@@ -1686,7 +1686,7 @@ pub mod test {
         assert!(g.connected(b, c));
         assert!(g.connected(c, a));
 
-        g.set_num_ports(a, 2, 3, |_, _| {});
+        g.set_num_ports(a, 2, 3, |_, _, _| {});
 
         assert_eq!(g.link_count(), 4);
         assert_eq!(g.node_count(), 4);
@@ -1696,7 +1696,7 @@ pub mod test {
         assert!(g.connected(b, c));
         assert!(g.connected(c, a));
 
-        g.set_num_ports(b, 2, 3, |_, _| {});
+        g.set_num_ports(b, 2, 3, |_, _, _| {});
 
         assert_eq!(g.link_count(), 4);
         assert_eq!(g.node_count(), 4);
@@ -1706,7 +1706,7 @@ pub mod test {
         assert!(g.connected(b, c));
         assert!(g.connected(c, a));
 
-        g.set_num_ports(b, 3, 2, |_, _| {});
+        g.set_num_ports(b, 3, 2, |_, _, _| {});
 
         assert_eq!(g.link_count(), 4);
         assert_eq!(g.node_count(), 4);
@@ -1716,7 +1716,7 @@ pub mod test {
         assert!(g.connected(b, c));
         assert!(g.connected(c, a));
 
-        g.set_num_ports(b, 2, 3, |_, _| {});
+        g.set_num_ports(b, 2, 3, |_, _, _| {});
 
         assert_eq!(g.link_count(), 4);
         assert_eq!(g.node_count(), 4);

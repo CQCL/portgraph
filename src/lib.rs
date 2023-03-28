@@ -55,7 +55,7 @@
 //!   graph component structures.
 //! - `pyo3` enables Python bindings.
 //!
-use std::num::NonZeroU32;
+use std::num::{NonZeroU16, NonZeroU32};
 use thiserror::Error;
 
 #[cfg(feature = "pyo3")]
@@ -255,4 +255,68 @@ impl std::fmt::Debug for PortIndex {
 #[error("the index {index} is too large.")]
 pub struct IndexError {
     index: usize,
+}
+
+/// Port offset in a node
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Eq, Ord, Hash)]
+pub enum PortOffset {
+    /// Input to a node
+    ///
+    /// The index is shifted by one to allow the null pointer optimization.
+    ///
+    /// TODO: Check if this is actually necessary.
+    Incoming(NonZeroU16),
+    /// Output from a node.
+    Outgoing(u16),
+}
+
+impl PortOffset {
+    /// Creates a new port offset.
+    #[inline(always)]
+    pub fn new(direction: Direction, offset: usize) -> Self {
+        match direction {
+            Direction::Incoming => Self::new_incoming(offset),
+            Direction::Outgoing => Self::new_outgoing(offset),
+        }
+    }
+
+    /// Creates a new incoming port offset.
+    #[inline(always)]
+    pub fn new_incoming(offset: usize) -> Self {
+        assert!(offset < u16::MAX as usize);
+        // SAFETY: The value cannot be zero
+        let offset = unsafe { NonZeroU16::new_unchecked(offset.saturating_add(1) as u16) };
+        PortOffset::Incoming(offset)
+    }
+
+    /// Creates a new outgoing port offset.
+    #[inline(always)]
+    pub fn new_outgoing(offset: usize) -> Self {
+        assert!(offset <= u16::MAX as usize);
+        PortOffset::Outgoing(offset as u16)
+    }
+
+    /// Returns the direction of the port.
+    #[inline(always)]
+    pub fn direction(self) -> Direction {
+        match self {
+            PortOffset::Incoming(_) => Direction::Incoming,
+            PortOffset::Outgoing(_) => Direction::Outgoing,
+        }
+    }
+
+    /// Returns the offset of the port.
+    #[inline(always)]
+    pub fn index(self) -> usize {
+        match self {
+            PortOffset::Incoming(offset) => (offset.get() - 1) as usize,
+            PortOffset::Outgoing(offset) => offset as usize,
+        }
+    }
+}
+
+impl Default for PortOffset {
+    fn default() -> Self {
+        PortOffset::new_outgoing(0)
+    }
 }

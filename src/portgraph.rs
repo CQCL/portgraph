@@ -16,7 +16,7 @@ use std::{
     num::{NonZeroU16, NonZeroU32},
 };
 
-use crate::{Direction, NodeIndex, PortIndex};
+use crate::{Direction, NodeIndex, PortIndex, PortOffset};
 use thiserror::Error;
 
 #[cfg(feature = "pyo3")]
@@ -352,13 +352,11 @@ impl PortGraph {
             .output(from, from_offset)
             .ok_or(LinkError::UnknownOffset {
                 node: from,
-                dir: Direction::Outgoing,
-                offset: from_offset,
+                offset: PortOffset::new_outgoing(from_offset),
             })?;
         let to_port = self.input(to, to_offset).ok_or(LinkError::UnknownOffset {
             node: to,
-            dir: Direction::Incoming,
-            offset: to_offset,
+            offset: PortOffset::new_incoming(to_offset),
         })?;
         self.link_ports(from_port, to_port)?;
         Ok((from_port, to_port))
@@ -377,7 +375,7 @@ impl PortGraph {
     }
 
     /// Returns the index of a `port` within its node's port list.
-    pub fn port_offset(&self, port: PortIndex) -> Option<usize> {
+    pub fn port_offset(&self, port: PortIndex) -> Option<PortOffset> {
         let port_meta = self.port_meta_valid(port)?;
         let node = port_meta.node();
 
@@ -392,23 +390,21 @@ impl PortGraph {
 
         let port_offset = port.index().wrapping_sub(port_list.index());
 
-        let port_offset = port_offset
-            .checked_sub(node_meta.incoming() as usize)
-            .unwrap_or(port_offset);
-
-        Some(port_offset)
+        match port_meta.direction() {
+            Direction::Incoming => Some(PortOffset::new_incoming(port_offset)),
+            Direction::Outgoing => {
+                let port_offset = port_offset.saturating_sub(node_meta.incoming() as usize);
+                Some(PortOffset::new_outgoing(port_offset))
+            }
+        }
     }
 
     /// Returns the port index for a given node, direction, and offset.
     #[must_use]
-    pub fn port_index(
-        &self,
-        node: NodeIndex,
-        offset: usize,
-        direction: Direction,
-    ) -> Option<PortIndex> {
+    pub fn port_index(&self, node: NodeIndex, offset: PortOffset) -> Option<PortIndex> {
         let node_meta = self.node_meta_valid(node)?;
-        let mut offset: u16 = offset.try_into().ok()?;
+        let direction = offset.direction();
+        let mut offset: u16 = offset.index() as u16;
         let bounds_check = if direction == Direction::Outgoing {
             offset += node_meta.incoming();
             offset < node_meta.incoming() + node_meta.outgoing()
@@ -472,7 +468,7 @@ impl PortGraph {
     /// Shorthand for [`PortGraph::port_index`].
     #[inline]
     pub fn input(&self, node: NodeIndex, offset: usize) -> Option<PortIndex> {
-        self.port_index(node, offset, Direction::Incoming)
+        self.port_index(node, PortOffset::new_incoming(offset))
     }
 
     /// Returns the output port at the given offset in the `node`.
@@ -480,7 +476,7 @@ impl PortGraph {
     /// Shorthand for [`PortGraph::ports`].
     #[inline]
     pub fn output(&self, node: NodeIndex, offset: usize) -> Option<PortIndex> {
-        self.port_index(node, offset, Direction::Outgoing)
+        self.port_index(node, PortOffset::new_outgoing(offset))
     }
 
     /// Iterates over all the input ports of the `node`.
@@ -1431,12 +1427,8 @@ pub enum LinkError {
     #[error("unknown port '{port:?}''")]
     UnknownPort { port: PortIndex },
     /// The port offset is invalid.
-    #[error("unknown port offset {offset} in node {node:?} in direction {dir:?}")]
-    UnknownOffset {
-        node: NodeIndex,
-        dir: Direction,
-        offset: usize,
-    },
+    #[error("unknown port offset {} in node {node:?} in direction {:?}", offset.index(), offset.direction())]
+    UnknownOffset { node: NodeIndex, offset: PortOffset },
     /// The port cannot be linked in this direction.
     #[error("port {port:?} had an unexpected direction {dir:?} during a link operation")]
     UnexpectedDirection { port: PortIndex, dir: Direction },
@@ -1499,10 +1491,11 @@ pub mod test {
                 .enumerate()
                 .map(|(i, port)| (i, port, Direction::Outgoing));
             for (i, port, dir) in inputs.chain(outputs) {
+                let offset = PortOffset::new(dir, i);
                 assert_eq!(graph.port_direction(port), Some(dir));
-                assert_eq!(graph.port_offset(port), Some(i));
+                assert_eq!(graph.port_offset(port), Some(offset));
                 assert_eq!(graph.port_node(port), Some(node));
-                assert_eq!(graph.port_index(node, i, dir), Some(port));
+                assert_eq!(graph.port_index(node, offset), Some(port));
                 assert_eq!(graph.port_link(port), None);
             }
         }

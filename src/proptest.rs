@@ -4,7 +4,7 @@
 //! returns strategies that generate random portgraphs.
 use std::iter::zip;
 
-use crate::{Direction, PortGraph, PortIndex};
+use crate::{Direction, NodeIndex, PortGraph, PortIndex};
 use proptest::prelude::*;
 use rand::seq::SliceRandom;
 
@@ -69,6 +69,32 @@ prop_compose! {
         }
         graph
     }
+}
+
+/// Pick a random node in portgraph g
+///
+/// Returns a tuple (g, node) so that strategies for portgraph generation can
+/// be composed with this function. E.g, use as follows:
+///
+/// ```
+/// use proptest::prelude::*;
+///
+/// proptest! {
+///     #[test]
+///     fn prop_test((g, n) in gen_node_index(gen_portgraph(10, 4, 20))) {
+///         prop_assert!(true)
+///     }
+/// }
+/// ```
+pub fn gen_node_index<G>(g: G) -> impl Strategy<Value = (PortGraph, NodeIndex)>
+where
+    G: Strategy<Value = PortGraph>,
+{
+    g.prop_flat_map(move |g| {
+        let node_count = g.node_count();
+        let nodes: Vec<_> = g.nodes_iter().collect();
+        (Just(g), (0..node_count).prop_map(move |i| nodes[i]))
+    })
 }
 
 #[cfg(test)]

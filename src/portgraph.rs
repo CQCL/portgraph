@@ -1439,6 +1439,8 @@ pub mod test {
     #[cfg(feature = "serde")]
     #[cfg(feature = "proptest")]
     use crate::proptest::gen_portgraph;
+    #[cfg(feature = "serde")]
+    use crate::serialize::test::ser_roundtrip;
     #[cfg(feature = "proptest")]
     use proptest::prelude::*;
 
@@ -1720,11 +1722,6 @@ pub mod test {
         assert!(g.connected(c, a));
     }
 
-    #[cfg(feature = "serde")]
-    pub fn ser_roundtrip<T: Serialize + serde::de::DeserializeOwned>(g: &T) -> T {
-        let v = rmp_serde::to_vec_named(g).unwrap();
-        rmp_serde::from_slice(&v[..]).unwrap()
-    }
     #[cfg(feature = "serde")]
     #[cfg(feature = "proptest")]
     proptest! {

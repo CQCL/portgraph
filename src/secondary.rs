@@ -349,11 +349,13 @@ mod test {
     #[cfg(feature = "serde")]
     #[test]
     fn secondary_serialize() {
+        use crate::serialize::test::ser_roundtrip;
+
         let mut map: SecondaryMap<usize, i32> = SecondaryMap::new();
-        assert_eq!(crate::portgraph::test::ser_roundtrip(&map), map);
+        assert_eq!(ser_roundtrip(&map), map);
         map[0] = 0x10;
         map[1] = 0x11;
         map[3] = 0x13;
-        assert_eq!(crate::portgraph::test::ser_roundtrip(&map), map);
+        assert_eq!(ser_roundtrip(&map), map);
     }
 }

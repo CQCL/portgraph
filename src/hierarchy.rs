@@ -742,8 +742,10 @@ mod test {
     #[cfg(feature = "serde")]
     #[test]
     fn hierarchy_serialize() {
+        use crate::serialize::test::ser_roundtrip;
+
         let mut hierarchy = Hierarchy::new();
-        assert_eq!(crate::portgraph::test::ser_roundtrip(&hierarchy), hierarchy);
+        assert_eq!(ser_roundtrip(&hierarchy), hierarchy);
         let root = NodeIndex::new(4);
 
         let child0 = NodeIndex::new(0);
@@ -753,6 +755,6 @@ mod test {
         hierarchy.push_child(child2, root).unwrap();
         hierarchy.insert_after(child1, child0).unwrap();
 
-        assert_eq!(crate::portgraph::test::ser_roundtrip(&hierarchy), hierarchy);
+        assert_eq!(ser_roundtrip(&hierarchy), hierarchy);
     }
 }

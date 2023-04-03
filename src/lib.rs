@@ -78,6 +78,9 @@ pub mod py_graph;
 #[cfg(feature = "proptest")]
 pub mod proptest;
 
+#[cfg(feature = "serde")]
+pub mod serialize;
+
 #[doc(inline)]
 pub use crate::hierarchy::Hierarchy;
 #[doc(inline)]

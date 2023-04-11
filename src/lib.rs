@@ -258,7 +258,7 @@ pub struct IndexError {
 }
 
 /// Port offset in a node
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub enum PortOffset {
     /// Input to a node
     ///
@@ -318,5 +318,14 @@ impl PortOffset {
 impl Default for PortOffset {
     fn default() -> Self {
         PortOffset::new_outgoing(0)
+    }
+}
+
+impl std::fmt::Debug for PortOffset {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.direction() {
+            Direction::Incoming => write!(f, "Incoming({})", self.index()),
+            Direction::Outgoing => write!(f, "Outgoing({})", self.index()),
+        }
     }
 }

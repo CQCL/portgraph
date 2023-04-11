@@ -218,8 +218,10 @@ impl Debug for OpenGraph {
 /// Includes the new weights for the nodes in the replacement graph.
 #[derive(Debug, Clone)]
 pub struct WeightedRewrite<N = (), P = ()> {
-    rewrite: Rewrite,
-    replacement_weights: Weights<N, P>,
+    /// The rewrite operation.
+    pub rewrite: Rewrite,
+    /// The weights of the nodes in the replacement graph.
+    pub replacement_weights: Weights<N, P>,
 }
 
 impl<N, P> WeightedRewrite<N, P>

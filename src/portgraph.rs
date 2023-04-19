@@ -1445,8 +1445,8 @@ impl<'a> Iterator for Ports<'a> {
     }
 }
 
-/// Iterator over the port offsets of a node.
-/// See [`PortGraph::input_offsets`], [`PortGraph::output_offsets`], and [`PortGraph::all_offsets`].
+/// Iterator over the port offsets of a node. See [`PortGraph::input_offsets`],
+/// [`PortGraph::output_offsets`], and [`PortGraph::all_port_offsets`].
 #[derive(Clone)]
 pub struct NodePortOffsets {
     incoming: Range<u16>,

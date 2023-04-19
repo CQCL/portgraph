@@ -397,6 +397,12 @@ impl Hierarchy {
         self.get(node).children_count as usize
     }
 
+    /// Returns whether a node has any children.
+    #[inline]
+    pub fn has_children(&self, node: NodeIndex) -> bool {
+        self.child_count(node) > 0
+    }
+
     /// Changes the index of a node from `old` to `new`.
     ///
     /// # Panics

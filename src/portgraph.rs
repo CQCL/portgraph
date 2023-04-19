@@ -14,6 +14,7 @@ use std::{
     iter::{Flatten, FusedIterator},
     mem::{replace, take},
     num::{NonZeroU16, NonZeroU32},
+    ops::Range,
 };
 
 use crate::{Direction, NodeIndex, PortIndex, PortOffset};
@@ -519,6 +520,57 @@ impl PortGraph {
             node_meta.incoming() as usize
         } else {
             node_meta.outgoing() as usize
+        }
+    }
+
+    /// Iterates over all the port offsets of the `node` in the given `direction`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use portgraph::PortGraph;
+    /// # use portgraph::{Direction, PortOffset};
+    /// let mut graph = PortGraph::new();
+    /// let node = graph.add_node(0, 2);
+    ///
+    /// assert!(graph.links(node, Direction::Incoming).eq([]));
+    /// assert!(graph.port_offsets(node, Direction::Outgoing).eq([PortOffset::new_outgoing(0), PortOffset::new_outgoing(1)]));
+    /// ```
+    pub fn port_offsets(&self, node: NodeIndex, direction: Direction) -> NodePortOffsets {
+        match direction {
+            Direction::Incoming => NodePortOffsets {
+                incoming: 0..self.num_inputs(node) as u16,
+                outgoing: 0..0,
+            },
+            Direction::Outgoing => NodePortOffsets {
+                incoming: 0..0,
+                outgoing: 0..self.num_outputs(node) as u32,
+            },
+        }
+    }
+
+    /// Iterates over all the input port offsets of the `node`.
+    ///
+    /// Shorthand for [`PortGraph::port_offsets`].
+    #[inline]
+    pub fn input_offsets(&self, node: NodeIndex) -> NodePortOffsets {
+        self.port_offsets(node, Direction::Incoming)
+    }
+
+    /// Iterates over all the output port offsets of the `node`.
+    ///
+    /// Shorthand for [`PortGraph::port_offsets`].
+    #[inline]
+    pub fn output_offsets(&self, node: NodeIndex) -> NodePortOffsets {
+        self.port_offsets(node, Direction::Outgoing)
+    }
+
+    /// Iterates over the input and output port offsets of the `node` in sequence.
+    #[inline]
+    pub fn all_port_offsets(&self, node: NodeIndex) -> NodePortOffsets {
+        NodePortOffsets {
+            incoming: 0..self.num_inputs(node) as u16,
+            outgoing: 0..self.num_outputs(node) as u32,
         }
     }
 
@@ -1393,30 +1445,56 @@ impl<'a> Iterator for Ports<'a> {
     }
 }
 
-impl<'a> ExactSizeIterator for Ports<'a> {
-    fn len(&self) -> usize {
-        self.len
+/// Iterator over the port offsets of a node.
+/// See [`PortGraph::input_offsets`], [`PortGraph::output_offsets`], and [`PortGraph::all_offsets`].
+#[derive(Clone)]
+pub struct NodePortOffsets {
+    incoming: Range<u16>,
+    // Outgoing port offsets can go up to u16::MAX, hence the u32
+    outgoing: Range<u32>,
+}
+
+impl Iterator for NodePortOffsets {
+    type Item = PortOffset;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(i) = self.incoming.next() {
+            return Some(PortOffset::new_incoming(i as usize));
+        }
+        if let Some(i) = self.outgoing.next() {
+            return Some(PortOffset::new_outgoing(i as usize));
+        }
+        None
+    }
+
+    fn count(self) -> usize {
+        self.len()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.len(), Some(self.len()))
     }
 }
 
-impl<'a> DoubleEndedIterator for Ports<'a> {
+impl ExactSizeIterator for NodePortOffsets {
+    fn len(&self) -> usize {
+        self.incoming.len() + self.outgoing.len()
+    }
+}
+
+impl DoubleEndedIterator for NodePortOffsets {
     fn next_back(&mut self) -> Option<Self::Item> {
-        if self.len == 0 {
-            return None;
+        if let Some(i) = self.outgoing.next_back() {
+            return Some(PortOffset::new_outgoing(i as usize));
         }
-
-        while let Some((index, port_entry)) = self.iter.next_back() {
-            if let PortEntry::Port(_) = port_entry {
-                self.len -= 1;
-                return Some(PortIndex::new(index));
-            }
+        if let Some(i) = self.incoming.next_back() {
+            return Some(PortOffset::new_incoming(i as usize));
         }
-
         None
     }
 }
 
-impl<'a> FusedIterator for Ports<'a> {}
+impl FusedIterator for NodePortOffsets {}
 
 /// Iterator over the links of a node, created by [`PortGraph::links`]. Returns
 /// the port indices linked to each port, or `None` if the corresponding port is
@@ -1571,6 +1649,7 @@ pub mod test {
             assert_eq!(graph.num_ports(node, Direction::Incoming), incoming);
             assert_eq!(graph.num_ports(node, Direction::Outgoing), outgoing);
             assert_eq!(graph.all_ports(node).count(), incoming + outgoing);
+            assert_eq!(graph.all_port_offsets(node).count(), incoming + outgoing);
 
             let inputs = graph
                 .inputs(node)

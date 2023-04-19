@@ -2,10 +2,66 @@
 
 use std::fmt::Display;
 
-use crate::{Direction, NodeIndex, PortGraph, PortIndex, Weights};
+use crate::{Direction, Hierarchy, NodeIndex, PortGraph, PortIndex, Weights};
 
 /// Style of an edge in a dot graph. Defaults to "None".
 pub type DotEdgeStyle = Option<String>;
+
+/// Encode `PortGraph` and `Hierarchy` in dot format.
+///
+/// Calls the `nodes` and `ports` functions to get the labels for the nodes and ports.
+/// The `ports` function also returns the style of the edge connected to a port.
+///
+/// Hierarchy relationships are shown as a separate tree of parent-child relationships
+pub fn hier_graph_dot_string_with(
+    graph: &PortGraph,
+    forest: &Hierarchy,
+    nodes: impl FnMut(NodeIndex) -> String,
+    ports: impl FnMut(PortIndex) -> (String, DotEdgeStyle),
+) -> String {
+    let mut dot = String::new();
+
+    dot.push_str("digraph {\n");
+
+    node_and_edge_strings(graph, &mut dot, nodes, ports);
+
+    let hier_node_id = |n: NodeIndex| format!("hier{}", n.index());
+
+    for n in graph.nodes_iter() {
+        let node_str = format!(
+            "{} [shape=plain label=\"{}\"]\n",
+            hier_node_id(n),
+            n.index()
+        );
+        dot.push_str(&node_str);
+
+        // Connect the parent to any existing children
+        forest.children(n).for_each(|child| {
+            dot.push_str(&{
+                let from_node = n;
+                let to_node = child;
+                format!(
+                    "{} -> {}  [style = \"dashed\"] \n",
+                    hier_node_id(from_node),
+                    hier_node_id(to_node),
+                )
+            });
+        });
+    }
+
+    dot.push_str("}\n");
+    dot
+}
+
+/// Encode a `PortGraph` and `Hierarchy` in dot format.
+pub fn hier_graph_dot_string(graph: &PortGraph, hierarchy: &Hierarchy) -> String {
+    hier_graph_dot_string_with(
+        graph,
+        hierarchy,
+        |n| n.index().to_string(),
+        |_| ("".to_string(), None),
+    )
+}
 
 /// Encode a `PortGraph` in dot format.
 pub fn dot_string(graph: &PortGraph) -> String {
@@ -33,14 +89,24 @@ where
 /// The `ports` function also returns the style of the edge connected to a port.
 pub fn dot_string_with(
     graph: &PortGraph,
+    nodes: impl FnMut(NodeIndex) -> String,
+    ports: impl FnMut(PortIndex) -> (String, DotEdgeStyle),
+) -> String {
+    let mut dot = String::new();
+
+    dot.push_str("digraph {\n");
+    node_and_edge_strings(graph, &mut dot, nodes, ports);
+    dot.push_str("}\n");
+    dot
+}
+
+/// Append the node and edge data in dot format to a string
+fn node_and_edge_strings(
+    graph: &PortGraph,
+    dot_str: &mut String,
     mut nodes: impl FnMut(NodeIndex) -> String,
     mut ports: impl FnMut(PortIndex) -> (String, DotEdgeStyle),
-) -> String {
-    let mut dot_node = String::new();
-    let mut dot_edge = String::new();
-
-    dot_node.push_str("digraph {\n");
-
+) {
     for n in graph.nodes_iter() {
         // Format the node as a table
 
@@ -64,7 +130,7 @@ pub fn dot_string_with(
             + &outputs_row
             + "</table>"
             + ">]\n";
-        dot_node.push_str(&node_str);
+        dot_str.push_str(&node_str);
 
         // Connect the linked output ports
         graph
@@ -72,13 +138,9 @@ pub fn dot_string_with(
             .enumerate()
             .flat_map(|(offset, port)| get_edge_dot(graph, n, port, offset, &mut ports))
             .for_each(|edge| {
-                dot_edge.push_str(&edge);
+                dot_str.push_str(&edge);
             });
     }
-
-    dot_node.push_str(&dot_edge);
-    dot_node.push_str("}\n");
-    dot_node
 }
 
 /// Outputs an html table row with the ports of a node.
@@ -148,10 +210,45 @@ mod tests {
         let dot = dot_string(&graph);
         let expected = r#"digraph {
 0 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="2" cellpadding="1">0</td><td port="in1" align="text" colspan="2" cellpadding="1">1</td><td port="in2" align="text" colspan="2" cellpadding="1">2</td></tr><tr><td align="text" border="0" colspan="6">0</td></tr><tr><td port="out0" align="text" colspan="3" cellpadding="1">0</td><td port="out1" align="text" colspan="3" cellpadding="1">1</td></tr></table>>]
-1 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1">0</td></tr><tr><td align="text" border="0" colspan="1">1</td></tr></table>>]
-2 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1">0</td></tr><tr><td align="text" border="0" colspan="1">2</td></tr></table>>]
 0:out0 -> 1:in0 [style=""]
 0:out1 -> 2:in0 [style=""]
+1 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1">0</td></tr><tr><td align="text" border="0" colspan="1">1</td></tr></table>>]
+2 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1">0</td></tr><tr><td align="text" border="0" colspan="1">2</td></tr></table>>]
+}
+"#;
+        assert_eq!(dot, expected);
+    }
+
+    #[test]
+    fn test_hier_dot_string() {
+        let mut graph = PortGraph::new();
+        let n1 = graph.add_node(3, 2);
+        let n2 = graph.add_node(1, 0);
+        let n3 = graph.add_node(1, 0);
+        graph.link_nodes(n1, 0, n2, 0).unwrap();
+        graph.link_nodes(n1, 1, n3, 0).unwrap();
+
+        let mut hier = Hierarchy::new();
+
+        hier.push_child(n2, n1).unwrap();
+        hier.push_child(n3, n1).unwrap();
+        let dot = hier_graph_dot_string_with(
+            &graph,
+            &hier,
+            |_| Default::default(),
+            |_| Default::default(),
+        );
+        let expected = r#"digraph {
+0 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="2" cellpadding="1">0</td><td port="in1" align="text" colspan="2" cellpadding="1">1</td><td port="in2" align="text" colspan="2" cellpadding="1">2</td></tr><tr><td align="text" border="0" colspan="6"></td></tr><tr><td port="out0" align="text" colspan="3" cellpadding="1">0</td><td port="out1" align="text" colspan="3" cellpadding="1">1</td></tr></table>>]
+0:out0 -> 1:in0 [style=""]
+0:out1 -> 2:in0 [style=""]
+1 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1">0</td></tr><tr><td align="text" border="0" colspan="1"></td></tr></table>>]
+2 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1">0</td></tr><tr><td align="text" border="0" colspan="1"></td></tr></table>>]
+hier0 [shape=plain label="0"]
+hier0 -> hier1  [style = "dashed"] 
+hier0 -> hier2  [style = "dashed"] 
+hier1 [shape=plain label="1"]
+hier2 [shape=plain label="2"]
 }
 "#;
         assert_eq!(dot, expected);
@@ -184,10 +281,10 @@ mod tests {
         println!("\n{}\n", dot);
         let expected = r#"digraph {
 0 [shape=plain label=<<table border="1"><tr><td align="text" border="0" colspan="2">node1</td></tr><tr><td port="out0" align="text" colspan="1" cellpadding="1">0: out 0</td><td port="out1" align="text" colspan="1" cellpadding="1">1: out 1</td></tr></table>>]
-1 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1">0: in 0</td></tr><tr><td align="text" border="0" colspan="1">node2</td></tr></table>>]
-2 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1">0: in 0</td></tr><tr><td align="text" border="0" colspan="1">node3</td></tr></table>>]
 0:out0 -> 1:in0 [style=""]
 0:out1 -> 2:in0 [style=""]
+1 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1">0: in 0</td></tr><tr><td align="text" border="0" colspan="1">node2</td></tr></table>>]
+2 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1">0: in 0</td></tr><tr><td align="text" border="0" colspan="1">node3</td></tr></table>>]
 }
 "#;
         assert_eq!(dot, expected);

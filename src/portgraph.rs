@@ -11,7 +11,7 @@
 //! at runtime using [`PortGraph::set_num_ports`].
 
 use std::{
-    iter::FusedIterator,
+    iter::{Flatten, FusedIterator},
     mem::{replace, take},
     num::{NonZeroU16, NonZeroU32},
 };
@@ -595,6 +595,49 @@ impl PortGraph {
         let start = port_list.index();
         let stop = start + node_meta.incoming() as usize + node_meta.outgoing() as usize;
         NodeLinks(self.port_link[start..stop].iter())
+    }
+
+    /// Iterates over neighbour nodes in the given `direction`.
+    /// May contain duplicates if the graph has multiple links between nodes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use portgraph::PortGraph;
+    /// # use portgraph::Direction;
+    ///
+    /// let mut graph = PortGraph::new();
+    ///
+    /// let a = graph.add_node(0, 1);
+    /// let b = graph.add_node(2, 1);
+    ///
+    /// graph.link_nodes(a, 0, b, 0).unwrap();
+    /// graph.link_nodes(b, 0, b, 1).unwrap();
+    ///
+    /// assert!(graph.neighbours(a, Direction::Outgoing).eq([b]));
+    /// assert!(graph.neighbours(b, Direction::Incoming).eq([a,b]));
+    /// ```
+    #[inline]
+    pub fn neighbours(&self, node: NodeIndex, direction: Direction) -> Neighbours<'_> {
+        Neighbours::from_node_links(self, self.links(node, direction))
+    }
+
+    /// Iterates over the input neighbours of the `node`. Shorthand for [`PortGraph::links`].
+    #[inline]
+    pub fn input_neighbours(&self, node: NodeIndex) -> Neighbours<'_> {
+        self.neighbours(node, Direction::Incoming)
+    }
+
+    /// Iterates over the output neighbours of the `node`. Shorthand for [`PortGraph::links`].
+    #[inline]
+    pub fn output_neighbours(&self, node: NodeIndex) -> Neighbours<'_> {
+        self.neighbours(node, Direction::Outgoing)
+    }
+
+    /// Iterates over the input and output neighbours of the `node` in sequence.
+    #[inline]
+    pub fn all_neighbours(&self, node: NodeIndex) -> Neighbours<'_> {
+        Neighbours::from_node_links(self, self.all_links(node))
     }
 
     /// Returns whether the port graph contains the `node`.
@@ -1416,6 +1459,53 @@ impl<'a> DoubleEndedIterator for NodeLinks<'a> {
 
 impl<'a> FusedIterator for NodeLinks<'a> {}
 
+/// Iterator over the neighbours of a node, created by
+/// [`PortGraph::neighbours`]. May return duplicate entries if the graph has
+/// multiple links between the same pair of nodes.
+#[derive(Clone)]
+pub struct Neighbours<'a> {
+    graph: &'a PortGraph,
+    linked_ports: Flatten<NodeLinks<'a>>,
+}
+
+impl<'a> Neighbours<'a> {
+    /// Create a new iterator over the neighbours of a node, from an iterator
+    /// over the links.
+    pub fn from_node_links(graph: &'a PortGraph, links: NodeLinks<'a>) -> Self {
+        Self {
+            graph,
+            linked_ports: links.flatten(),
+        }
+    }
+}
+
+impl<'a> Iterator for Neighbours<'a> {
+    type Item = NodeIndex;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.linked_ports
+            .next()
+            .map(|port| self.graph.port_node(port).unwrap())
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.linked_ports.size_hint()
+    }
+}
+
+impl<'a> DoubleEndedIterator for Neighbours<'a> {
+    #[inline]
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.linked_ports
+            .next_back()
+            .map(|port| self.graph.port_node(port).unwrap())
+    }
+}
+
+impl<'a> FusedIterator for Neighbours<'a> {}
+
 /// Error generated when linking ports.
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 #[allow(missing_docs)]
@@ -1576,6 +1666,44 @@ pub mod test {
         g.unlink_port(node0_output);
         g.remove_node(node1);
         assert!(g.link_ports(node1_output, node0_input).is_err());
+    }
+
+    #[test]
+    fn link_iterators() {
+        let mut g = PortGraph::new();
+        let node0 = g.add_node(1, 2);
+        let node1 = g.add_node(2, 1);
+        let node1_input0 = g.input(node1, 0).unwrap();
+        let node1_input1 = g.input(node1, 1).unwrap();
+
+        assert!(g.input_links(node0).eq([None]));
+        assert!(g.output_links(node0).eq([None, None]));
+        assert!(g.all_links(node0).eq([None, None, None]));
+        assert!(g.input_neighbours(node0).eq([]));
+        assert!(g.output_neighbours(node0).eq([]));
+        assert!(g.all_neighbours(node0).eq([]));
+
+        g.link_nodes(node0, 0, node1, 0).unwrap();
+
+        assert!(g.input_links(node0).eq([None]));
+        assert!(g.output_links(node0).eq([Some(node1_input0), None]));
+        assert!(g.all_links(node0).eq([None, Some(node1_input0), None]));
+        assert!(g.input_neighbours(node0).eq([]));
+        assert!(g.output_neighbours(node0).eq([node1]));
+        assert!(g.all_neighbours(node0).eq([node1]));
+
+        g.link_nodes(node0, 1, node1, 1).unwrap();
+
+        assert!(g.input_links(node0).eq([None]));
+        assert!(g
+            .output_links(node0)
+            .eq([Some(node1_input0), Some(node1_input1)]));
+        assert!(g
+            .all_links(node0)
+            .eq([None, Some(node1_input0), Some(node1_input1)]));
+        assert!(g.input_neighbours(node0).eq([]));
+        assert!(g.output_neighbours(node0).eq([node1, node1]));
+        assert!(g.all_neighbours(node0).eq([node1, node1]));
     }
 
     #[test]

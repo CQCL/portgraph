@@ -6,4 +6,4 @@ mod toposort;
 
 pub use dominators::{dominators, DominatorTree};
 pub use post_order::{postorder, PostOrder};
-pub use toposort::{toposort, TopoSort};
+pub use toposort::{toposort, toposort_filtered, TopoSort};

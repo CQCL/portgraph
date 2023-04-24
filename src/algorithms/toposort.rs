@@ -30,13 +30,15 @@ pub fn toposort(
     TopoSort::new(graph, source, direction, None, None)
 }
 
-/// Returns an iterator over a [`PortGraph`] in topological order, filtering the
-/// nodes and ports to consider.
+/// Returns an iterator over a [`PortGraph`] in topological order, applying a
+/// filter to the nodes and ports. No filtered nodes are returned, and neither
+/// are any nodes only accessible via filtered nodes or filtered ports.
 ///
 /// If the filter closures return false for a node or port, it is skipped.
 ///
-/// Optimized for full graph traversal, i.e. when all nodes are reachable from the source nodes.
-/// It uses O(n) memory, where n is the number of ports in the graph.
+/// Optimized for full graph traversal, i.e. when all nodes are reachable from
+/// the source nodes. It uses O(n) memory, where n is the number of ports in the
+/// graph.
 ///
 /// Implements [Kahn's
 /// algorithm](https://en.wikipedia.org/wiki/Topological_sorting#Kahn's_algorithm).
@@ -240,22 +242,27 @@ mod test {
         let node_b = graph.add_node(3, 2);
         let node_c = graph.add_node(3, 2);
         let node_d = graph.add_node(3, 2);
+        let node_e = graph.add_node(3, 2);
 
         // Add two edges between node A and B
         graph.link_nodes(node_a, 0, node_b, 0).unwrap();
         graph.link_nodes(node_a, 1, node_b, 1).unwrap();
+        graph.link_nodes(node_a, 2, node_e, 0).unwrap();
         graph.link_nodes(node_b, 0, node_c, 0).unwrap();
         graph.link_nodes(node_c, 0, node_d, 0).unwrap();
 
         // Run a topological sort on the graph starting at node A.
         let topo = toposort(&graph, [node_a, node_d], Direction::Outgoing);
-        assert_eq!(topo.collect::<Vec<_>>(), [node_a, node_d, node_b, node_c]);
+        assert_eq!(
+            topo.collect::<Vec<_>>(),
+            [node_a, node_d, node_b, node_e, node_c]
+        );
 
         let topo_filtered = toposort_filtered(
             &graph,
             [node_a, node_d],
             Direction::Outgoing,
-            |n| n != node_d,
+            |n| ![node_d, node_e].contains(&n),
             |p| Some(p) != graph.output(node_b, 0),
         );
         assert_eq!(topo_filtered.collect::<Vec<_>>(), [node_a, node_b]);

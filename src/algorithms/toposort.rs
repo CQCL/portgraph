@@ -62,7 +62,7 @@ pub fn toposort(
 ///     [node_a, node_d],
 ///     Direction::Outgoing,
 ///     |n| n != node_d,
-///     |p| Some(p) != graph.output(node_a, 1),
+///     |_, p| Some(p) != graph.output(node_a, 1),
 /// );
 /// assert_eq!(topo.collect::<Vec<_>>(), [node_a, node_b]);
 /// ```
@@ -71,7 +71,7 @@ pub fn toposort_filtered<'graph>(
     source: impl IntoIterator<Item = NodeIndex>,
     direction: Direction,
     node_filter: impl FnMut(NodeIndex) -> bool + 'graph,
-    port_filter: impl FnMut(PortIndex) -> bool + 'graph,
+    port_filter: impl FnMut(NodeIndex, PortIndex) -> bool + 'graph,
 ) -> TopoSort {
     TopoSort::new(
         graph,
@@ -102,7 +102,7 @@ pub struct TopoSort<'graph> {
     node_filter: Option<Box<dyn FnMut(NodeIndex) -> bool + 'graph>>,
     /// A filter closure for the ports to visit. If the closure returns false,
     /// the port is skipped.
-    port_filter: Option<Box<dyn FnMut(PortIndex) -> bool + 'graph>>,
+    port_filter: Option<Box<dyn FnMut(NodeIndex, PortIndex) -> bool + 'graph>>,
 }
 
 impl<'graph> TopoSort<'graph> {
@@ -113,7 +113,7 @@ impl<'graph> TopoSort<'graph> {
         source: impl IntoIterator<Item = NodeIndex>,
         direction: Direction,
         mut node_filter: Option<Box<dyn FnMut(NodeIndex) -> bool + 'graph>>,
-        port_filter: Option<Box<dyn FnMut(PortIndex) -> bool + 'graph>>,
+        port_filter: Option<Box<dyn FnMut(NodeIndex, PortIndex) -> bool + 'graph>>,
     ) -> Self {
         let mut remaining_ports = BitVec::with_capacity(graph.port_capacity());
         remaining_ports.resize(graph.port_capacity(), true);
@@ -162,7 +162,7 @@ impl<'graph> TopoSort<'graph> {
                 self.remaining_ports[p.index()]
             } else if !self.remaining_ports[p.index()] {
                 true
-            } else if self.graph.port_link(p).is_none() || self.ignore_port(p) {
+            } else if self.graph.port_link(p).is_none() || self.ignore_port(node, p) {
                 // If the port is not linked or should be ignored, mark it as visited.
                 self.remaining_ports.set(p.index(), false);
                 true
@@ -183,11 +183,11 @@ impl<'graph> TopoSort<'graph> {
 
     /// Returns `true` if the port should be ignored.
     #[inline]
-    fn ignore_port(&mut self, port: PortIndex) -> bool {
+    fn ignore_port(&mut self, node: NodeIndex, port: PortIndex) -> bool {
         !self
             .port_filter
             .as_mut()
-            .map_or(true, |filter| filter(port))
+            .map_or(true, |filter| filter(node, port))
     }
 }
 
@@ -200,7 +200,7 @@ impl<'graph> Iterator for TopoSort<'graph> {
         for port in self.graph.ports(node, self.direction) {
             self.remaining_ports.set(port.index(), false);
 
-            if self.ignore_port(port) {
+            if self.ignore_port(node, port) {
                 continue;
             }
 
@@ -263,7 +263,7 @@ mod test {
             [node_a, node_d],
             Direction::Outgoing,
             |n| ![node_d, node_e].contains(&n),
-            |p| Some(p) != graph.output(node_b, 0),
+            |_, p| Some(p) != graph.output(node_b, 0),
         );
         assert_eq!(topo_filtered.collect::<Vec<_>>(), [node_a, node_b]);
     }

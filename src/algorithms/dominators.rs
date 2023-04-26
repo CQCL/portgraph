@@ -41,11 +41,14 @@ pub fn dominators(graph: &PortGraph, entry: NodeIndex, direction: Direction) -> 
 }
 
 /// Returns a dominator tree for a [`PortGraph`], where each node is dominated
-/// by its parent.
+/// by its parent, applying a filter to the nodes and ports.
+///
+/// If the filter predicate returns `false` for a node or port, it is ignored
+/// when computing the dominator tree.
 ///
 /// # Example
 ///
-/// The following example runs the dominator algorithm on the following branching graph:
+/// This example runs the dominator algorithm on the following branching graph:
 /// a ─┬> b ┐
 ///    │    ├─> c ─> e
 /// f ─┴> d ┴────────^

@@ -362,11 +362,12 @@ impl<'a> Iterator for NodeConnections<'a> {
 impl<'a> DoubleEndedIterator for NodeConnections<'a> {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.port_links
-            .try_rfold((), |_, next| {
-                Self::get_next(self.graph, self.target, next).map_or(Ok(()), Err)
-            })
-            .err()
+        while let Some(next) = self.port_links.next_back() {
+            if let Some(next) = Self::get_next(self.graph, self.target, next) {
+                return Some(next);
+            }
+        }
+        None
     }
 }
 

@@ -10,21 +10,21 @@
 //! The number of ports of a node is set at creation time, but can be modified
 //! at runtime using [`PortGraph::set_num_ports`].
 
-use std::{
-    iter::{Flatten, FusedIterator},
-    mem::{replace, take},
-    num::{NonZeroU16, NonZeroU32},
-    ops::Range,
-};
+mod iter;
+
+use std::mem::{replace, take};
+use std::num::{NonZeroU16, NonZeroU32};
+use thiserror::Error;
 
 use crate::{Direction, NodeIndex, PortIndex, PortOffset};
-use thiserror::Error;
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+
+pub use crate::portgraph::iter::*;
 
 /// An unlabelled port graph.
 ///
@@ -320,21 +320,64 @@ impl PortGraph {
         Some(linked)
     }
 
+    /// Returns an iterator over every pair of matching ports connecting `from`
+    /// with `to`.
+    ///
+    /// # Example
+    /// ```
+    /// # use portgraph::{PortGraph, NodeIndex, PortIndex, Direction};
+    /// let mut g = PortGraph::new();
+    /// let a = g.add_node(0, 2);
+    /// let b = g.add_node(2, 0);
+    ///
+    /// g.link_nodes(a, 0, b, 0).unwrap();
+    /// g.link_nodes(a, 1, b, 1).unwrap();
+    ///
+    /// let mut connections = g.get_connections(a, b);
+    /// assert_eq!(connections.next(), Some((g.output(a,0).unwrap(), g.input(b,0).unwrap())));
+    /// assert_eq!(connections.next(), Some((g.output(a,1).unwrap(), g.input(b,1).unwrap())));
+    /// assert_eq!(connections.next(), None);
+    /// ```
+    #[must_use]
+    #[inline]
+    pub fn get_connections(&self, from: NodeIndex, to: NodeIndex) -> NodeConnections<'_> {
+        NodeConnections::new(self, to, self.outputs(from), self.output_links(from))
+    }
+
     /// Checks whether there is a directed link between the two nodes and
     /// returns the first matching pair of ports.
+    ///
+    /// # Example
+    /// ```
+    /// # use portgraph::{PortGraph, NodeIndex, PortIndex, Direction};
+    /// let mut g = PortGraph::new();
+    /// let a = g.add_node(0, 2);
+    /// let b = g.add_node(2, 0);
+    ///
+    /// g.link_nodes(a, 0, b, 0).unwrap();
+    /// g.link_nodes(a, 1, b, 1).unwrap();
+    ///
+    /// assert_eq!(g.get_connection(a, b), Some((g.output(a,0).unwrap(), g.input(b,0).unwrap())));
+    /// ```
     #[must_use]
     #[inline]
     pub fn get_connection(&self, from: NodeIndex, to: NodeIndex) -> Option<(PortIndex, PortIndex)> {
-        self.outputs(from)
-            .filter_map(|from_port| {
-                self.port_link(from_port)
-                    .filter(|to_port| self.port_node(*to_port) == Some(to))
-                    .map(|to_port| (from_port, to_port))
-            })
-            .next()
+        self.get_connections(from, to).next()
     }
 
     /// Checks whether there is a directed link between the two nodes.
+    ///
+    /// # Example
+    /// ```
+    /// # use portgraph::{PortGraph, NodeIndex, PortIndex, Direction};
+    /// let mut g = PortGraph::new();
+    /// let a = g.add_node(0, 2);
+    /// let b = g.add_node(2, 0);
+    ///
+    /// g.link_nodes(a, 0, b, 0).unwrap();
+    ///
+    /// assert!(g.connected(a, b));
+    /// ```
     #[must_use]
     #[inline]
     pub fn connected(&self, from: NodeIndex, to: NodeIndex) -> bool {
@@ -1292,298 +1335,6 @@ enum PortEntry {
     Port(PortMeta),
 }
 
-/// Iterator over the ports of a node.
-/// See [`PortGraph::inputs`], [`PortGraph::outputs`], and [`PortGraph::all_ports`].
-#[derive(Debug, Clone)]
-pub struct NodePorts {
-    index: NonZeroU32,
-    length: usize,
-}
-
-impl Iterator for NodePorts {
-    type Item = PortIndex;
-
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        self.length = self.length.checked_sub(1)?;
-        let port = PortIndex(self.index);
-        // can never saturate
-        self.index = self.index.saturating_add(1);
-        Some(port)
-    }
-
-    fn nth(&mut self, n: usize) -> Option<Self::Item> {
-        self.length = self.length.checked_sub(n + 1)?;
-        let index = self.index.saturating_add(n as u32);
-        self.index = index.saturating_add(1);
-        Some(PortIndex(index))
-    }
-
-    fn count(self) -> usize {
-        self.length
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.length, Some(self.length))
-    }
-}
-
-impl ExactSizeIterator for NodePorts {
-    fn len(&self) -> usize {
-        self.length
-    }
-}
-
-impl DoubleEndedIterator for NodePorts {
-    #[inline]
-    fn next_back(&mut self) -> Option<Self::Item> {
-        self.length = self.length.checked_sub(1)?;
-        let port = PortIndex(self.index.saturating_add(self.length as u32));
-        Some(port)
-    }
-}
-
-impl FusedIterator for NodePorts {}
-
-impl Default for NodePorts {
-    fn default() -> Self {
-        Self {
-            index: NonZeroU32::new(1).unwrap(),
-            length: 0,
-        }
-    }
-}
-
-/// Iterator over the nodes of a graph, created by [`PortGraph::nodes_iter`].
-#[derive(Clone)]
-pub struct Nodes<'a> {
-    iter: std::iter::Enumerate<std::slice::Iter<'a, NodeEntry>>,
-    len: usize,
-}
-
-impl<'a> Iterator for Nodes<'a> {
-    type Item = NodeIndex;
-
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.find_map(|(index, node_meta)| match node_meta {
-            NodeEntry::Free(_) => None,
-            NodeEntry::Node(_) => {
-                self.len -= 1;
-                Some(NodeIndex::new(index))
-            }
-        })
-    }
-
-    #[inline]
-    fn count(self) -> usize {
-        self.len
-    }
-
-    #[inline]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.len, Some(self.len))
-    }
-}
-
-impl<'a> ExactSizeIterator for Nodes<'a> {
-    fn len(&self) -> usize {
-        self.len
-    }
-}
-
-impl<'a> DoubleEndedIterator for Nodes<'a> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        if self.len == 0 {
-            return None;
-        }
-
-        while let Some((index, node_meta)) = self.iter.next_back() {
-            if let NodeEntry::Node(_) = node_meta {
-                self.len -= 1;
-                return Some(NodeIndex::new(index));
-            }
-        }
-
-        None
-    }
-}
-
-impl<'a> FusedIterator for Nodes<'a> {}
-
-/// Iterator over the ports of a graph, created by [`PortGraph::ports_iter`].
-#[derive(Clone)]
-pub struct Ports<'a> {
-    iter: std::iter::Enumerate<std::slice::Iter<'a, PortEntry>>,
-    len: usize,
-}
-
-impl<'a> Iterator for Ports<'a> {
-    type Item = PortIndex;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.len == 0 {
-            return None;
-        }
-
-        for (index, port_entry) in &mut self.iter {
-            if let PortEntry::Port(_) = port_entry {
-                self.len -= 1;
-                return Some(PortIndex::new(index));
-            }
-        }
-
-        None
-    }
-
-    fn count(self) -> usize {
-        self.len
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.len, Some(self.len))
-    }
-}
-
-/// Iterator over the port offsets of a node. See [`PortGraph::input_offsets`],
-/// [`PortGraph::output_offsets`], and [`PortGraph::all_port_offsets`].
-#[derive(Clone)]
-pub struct NodePortOffsets {
-    incoming: Range<u16>,
-    // Outgoing port offsets can go up to u16::MAX, hence the u32
-    outgoing: Range<u32>,
-}
-
-impl Iterator for NodePortOffsets {
-    type Item = PortOffset;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(i) = self.incoming.next() {
-            return Some(PortOffset::new_incoming(i as usize));
-        }
-        if let Some(i) = self.outgoing.next() {
-            return Some(PortOffset::new_outgoing(i as usize));
-        }
-        None
-    }
-
-    fn count(self) -> usize {
-        self.len()
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.len(), Some(self.len()))
-    }
-}
-
-impl ExactSizeIterator for NodePortOffsets {
-    fn len(&self) -> usize {
-        self.incoming.len() + self.outgoing.len()
-    }
-}
-
-impl DoubleEndedIterator for NodePortOffsets {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        if let Some(i) = self.outgoing.next_back() {
-            return Some(PortOffset::new_outgoing(i as usize));
-        }
-        if let Some(i) = self.incoming.next_back() {
-            return Some(PortOffset::new_incoming(i as usize));
-        }
-        None
-    }
-}
-
-impl FusedIterator for NodePortOffsets {}
-
-/// Iterator over the links of a node, created by [`PortGraph::links`]. Returns
-/// the port indices linked to each port, or `None` if the corresponding port is
-/// not connected.
-#[derive(Clone)]
-pub struct NodeLinks<'a>(std::slice::Iter<'a, Option<PortIndex>>);
-
-impl<'a> Iterator for NodeLinks<'a> {
-    type Item = Option<PortIndex>;
-
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        self.0.next().copied()
-    }
-
-    #[inline]
-    fn nth(&mut self, n: usize) -> Option<Self::Item> {
-        self.0.nth(n).copied()
-    }
-
-    #[inline]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.0.size_hint()
-    }
-}
-
-impl<'a> ExactSizeIterator for NodeLinks<'a> {
-    #[inline]
-    fn len(&self) -> usize {
-        self.0.len()
-    }
-}
-
-impl<'a> DoubleEndedIterator for NodeLinks<'a> {
-    #[inline]
-    fn next_back(&mut self) -> Option<Self::Item> {
-        self.0.next_back().copied()
-    }
-}
-
-impl<'a> FusedIterator for NodeLinks<'a> {}
-
-/// Iterator over the neighbours of a node, created by
-/// [`PortGraph::neighbours`]. May return duplicate entries if the graph has
-/// multiple links between the same pair of nodes.
-#[derive(Clone)]
-pub struct Neighbours<'a> {
-    graph: &'a PortGraph,
-    linked_ports: Flatten<NodeLinks<'a>>,
-}
-
-impl<'a> Neighbours<'a> {
-    /// Create a new iterator over the neighbours of a node, from an iterator
-    /// over the links.
-    pub fn from_node_links(graph: &'a PortGraph, links: NodeLinks<'a>) -> Self {
-        Self {
-            graph,
-            linked_ports: links.flatten(),
-        }
-    }
-}
-
-impl<'a> Iterator for Neighbours<'a> {
-    type Item = NodeIndex;
-
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        self.linked_ports
-            .next()
-            .map(|port| self.graph.port_node(port).unwrap())
-    }
-
-    #[inline]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.linked_ports.size_hint()
-    }
-}
-
-impl<'a> DoubleEndedIterator for Neighbours<'a> {
-    #[inline]
-    fn next_back(&mut self) -> Option<Self::Item> {
-        self.linked_ports
-            .next_back()
-            .map(|port| self.graph.port_node(port).unwrap())
-    }
-}
-
-impl<'a> FusedIterator for Neighbours<'a> {}
-
 /// Error generated when linking ports.
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 #[allow(missing_docs)]
@@ -1691,12 +1442,14 @@ pub mod test {
     #[test]
     fn link_ports() {
         let mut g = PortGraph::new();
-        let node0 = g.add_node(1, 1);
-        let node1 = g.add_node(1, 1);
+        let node0 = g.add_node(2, 1);
+        let node1 = g.add_node(1, 2);
         let node0_input = g.input(node0, 0).unwrap();
+        let node0_input2 = g.input(node0, 1).unwrap();
         let node0_output = g.output(node0, 0).unwrap();
         let node1_input = g.input(node1, 0).unwrap();
         let node1_output = g.output(node1, 0).unwrap();
+        let node1_output2 = g.output(node1, 1).unwrap();
         assert_eq!(g.link_count(), 0);
         assert!(!g.connected(node0, node1));
         assert!(!g.connected(node1, node0));
@@ -1704,28 +1457,40 @@ pub mod test {
         g.link_ports(node0_output, node1_input).unwrap();
         assert_eq!(g.link_count(), 1);
         assert_eq!(
-            g.get_connection(node0, node1),
-            Some((node0_output, node1_input))
+            g.get_connections(node0, node1).collect::<Vec<_>>(),
+            vec![(node0_output, node1_input)]
         );
         assert!(!g.connected(node1, node0));
 
         g.link_nodes(node1, 0, node0, 0).unwrap();
         assert_eq!(g.link_count(), 2);
         assert_eq!(
-            g.get_connection(node0, node1),
-            Some((node0_output, node1_input))
+            g.get_connections(node0, node1).collect::<Vec<_>>(),
+            vec![(node0_output, node1_input)]
         );
         assert_eq!(
-            g.get_connection(node1, node0),
-            Some((node1_output, node0_input))
+            g.get_connections(node1, node0).collect::<Vec<_>>(),
+            vec![(node1_output, node0_input)]
         );
 
         g.unlink_port(node0_output);
         assert_eq!(g.link_count(), 1);
         assert!(!g.connected(node0, node1));
         assert_eq!(
-            g.get_connection(node1, node0),
-            Some((node1_output, node0_input))
+            g.get_connections(node1, node0).collect::<Vec<_>>(),
+            vec![(node1_output, node0_input)]
+        );
+
+        g.link_nodes(node1, 1, node0, 1).unwrap();
+        assert_eq!(g.link_count(), 2);
+        assert!(!g.connected(node0, node1));
+        assert_eq!(
+            g.get_connections(node1, node0).collect::<Vec<_>>(),
+            vec![(node1_output, node0_input), (node1_output2, node0_input2)]
+        );
+        assert_eq!(
+            g.get_connections(node1, node0).rev().collect::<Vec<_>>(),
+            vec![(node1_output2, node0_input2), (node1_output, node0_input)]
         );
     }
 

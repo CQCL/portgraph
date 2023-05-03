@@ -12,7 +12,7 @@ keywords = ["data-structure", "graph"]
 categories = ["data-structures"]
 
 edition = "2021"
-rust-version = "1.68"
+rust-version = "1.69"
 
 [lib]
 bench = false
@@ -37,7 +37,7 @@ proptest = ["dep:proptest", "dep:rand"]
 [dev-dependencies]
 criterion = { version = "0.4.0", features = ["html_reports"] }
 rmp-serde = "1.1.1"
-rstest = "0.16.0"
+rstest = "0.17.0"
 
 [[bench]]
 name = "bench_main"

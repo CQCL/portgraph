@@ -64,7 +64,7 @@ jobs:
     strategy:
       matrix:
         include:
-          #- rust: 1.68.0  # Update once MSRV != stable
+          #- rust: 1.69.0  # Update once MSRV != stable
           - rust: stable
             cache: true
           - rust: beta

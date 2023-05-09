@@ -259,6 +259,7 @@ pub struct IndexError {
 
 /// Port offset in a node
 #[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub enum PortOffset {
     /// Input to a node
     ///

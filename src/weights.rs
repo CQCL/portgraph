@@ -40,11 +40,15 @@
 
 use std::ops::{Index, IndexMut};
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 use crate::{NodeIndex, PortIndex, SecondaryMap};
 
 /// Graph component that encodes node and port weights.
 /// Based on two [`SecondaryMap`] containers.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct Weights<N, P> {
     /// Node weights.
     pub nodes: SecondaryMap<NodeIndex, N>,

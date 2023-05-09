@@ -12,7 +12,6 @@
 //! ```
 //! # use portgraph::{PortGraph, NodeIndex, PortIndex};
 //! # use portgraph::weights::Weights;
-//!
 //! let mut graph = PortGraph::new();
 //! let mut weights = Weights::<usize, isize>::new();
 //!
@@ -28,10 +27,14 @@
 //! /// Unset weights return the default value.
 //! assert_eq!(weights[in0], 0);
 //!
-//! // Graph operations that modify the keys use callbacks to update the weights.
-//! graph.set_num_ports(node, 1, 3, |old, new| {if let Some(new) = new {weights.ports.swap(old, new);}});
+//! // Graph operations that modify the keys have callbacks to update the weights.
+//! graph.set_num_ports(node, 1, 3, |old, new| {
+//!     if let Some(new) = new {
+//!         weights.ports.swap(old, new);
+//!     }
+//! });
 //!
-//! // The map does not track item removals, but the user can shrink the map manually.
+//! // The map does not track item removals, but the user can shrink it manually.
 //! graph.remove_node(node);
 //! weights.nodes.shrink_to(graph.node_count());
 //! weights.ports.shrink_to(graph.port_count());

@@ -782,6 +782,7 @@ impl PortGraph {
     }
 
     /// Returns the allocated port capacity for a specific node.
+    ///
     /// Changes to the number of ports of the node will not reallocate
     /// until the number of ports exceeds this capacity.
     #[inline]

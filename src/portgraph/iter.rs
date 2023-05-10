@@ -2,7 +2,6 @@
 
 use std::{
     iter::{Flatten, FusedIterator, Zip},
-    num::NonZeroU32,
     ops::Range,
 };
 
@@ -11,10 +10,9 @@ use crate::{NodeIndex, PortIndex, PortOffset};
 
 /// Iterator over the ports of a node.
 /// See [`PortGraph::inputs`], [`PortGraph::outputs`], and [`PortGraph::all_ports`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct NodePorts {
-    pub(super) index: NonZeroU32,
-    pub(super) length: usize,
+    pub(super) indices: Range<usize>,
 }
 
 impl Iterator for NodePorts {
@@ -22,54 +20,39 @@ impl Iterator for NodePorts {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.length = self.length.checked_sub(1)?;
-        let port = PortIndex(self.index);
-        // can never saturate
-        self.index = self.index.saturating_add(1);
-        Some(port)
+        self.indices.next().map(PortIndex::new)
     }
 
+    #[inline]
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
-        self.length = self.length.checked_sub(n + 1)?;
-        let index = self.index.saturating_add(n as u32);
-        self.index = index.saturating_add(1);
-        Some(PortIndex(index))
+        self.indices.nth(n).map(PortIndex::new)
     }
 
+    #[inline]
     fn count(self) -> usize {
-        self.length
+        self.indices.count()
     }
 
+    #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.length, Some(self.length))
+        self.indices.size_hint()
     }
 }
 
 impl ExactSizeIterator for NodePorts {
     fn len(&self) -> usize {
-        self.length
+        self.indices.len()
     }
 }
 
 impl DoubleEndedIterator for NodePorts {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.length = self.length.checked_sub(1)?;
-        let port = PortIndex(self.index.saturating_add(self.length as u32));
-        Some(port)
+        self.indices.next_back().map(PortIndex::new)
     }
 }
 
 impl FusedIterator for NodePorts {}
-
-impl Default for NodePorts {
-    fn default() -> Self {
-        Self {
-            index: NonZeroU32::new(1).unwrap(),
-            length: 0,
-        }
-    }
-}
 
 /// Iterator over the nodes of a graph, created by [`PortGraph::nodes_iter`].
 #[derive(Clone)]

@@ -116,18 +116,12 @@ impl PortGraph {
         assert!(incoming + outgoing <= u16::MAX as usize);
 
         let node = self.alloc_node();
-        let (port_list, capacity) = if incoming + outgoing > 0 {
-            self.alloc_ports(node, incoming, outgoing)
+        let node_meta = if incoming + outgoing > 0 {
+            self.alloc_ports(node, incoming, outgoing, 0)
         } else {
-            (PortIndex::default(), 0)
+            NodeMeta::default()
         };
-
-        self.node_meta[node.index()] = NodeEntry::Node(NodeMeta::new(
-            port_list,
-            incoming as u16,
-            outgoing as u16,
-            capacity,
-        ));
+        self.node_meta[node.index()] = NodeEntry::Node(node_meta);
 
         self.node_count += 1;
         self.port_count += incoming + outgoing;
@@ -156,42 +150,50 @@ impl PortGraph {
 
     /// Allocates a slab of ports. Returns the index of the first port, and the
     /// number of ports in the slab.
-    ///
-    /// TODO: Over-allocate by a factor
     #[inline]
     fn alloc_ports(
         &mut self,
         node: NodeIndex,
         incoming: usize,
         outgoing: usize,
-    ) -> (PortIndex, u16) {
-        let size = incoming + outgoing;
+        extra_capacity: usize,
+    ) -> NodeMeta {
+        let requested = incoming + outgoing + extra_capacity;
         let meta_incoming = PortEntry::Port(PortMeta::new(node, Direction::Incoming));
         let meta_outgoing = PortEntry::Port(PortMeta::new(node, Direction::Outgoing));
+        let meta_empty = PortEntry::Free;
 
-        match self.port_free.get(size - 1).copied().flatten() {
+        match self.port_free.get(requested - 1).copied().flatten() {
             Some(port) => {
+                // TODO: Over-allocate if there are similarly-sized free slabs.
+                let capacity = requested;
+
                 let free_next = take(&mut self.port_link[port.index()]);
-                self.port_free[size - 1] = free_next;
+                self.port_free[requested - 1] = free_next;
 
-                let i = port.index();
-                self.port_meta[i + incoming..i + size].fill(meta_outgoing);
-                self.port_meta[i..i + incoming].fill(meta_incoming);
-                self.port_link[i..i + size].fill(None);
+                let node_meta =
+                    NodeMeta::new(port, incoming as u16, outgoing as u16, capacity as u16);
+                self.port_meta[node_meta.incoming_ports()].fill(meta_incoming);
+                self.port_meta[node_meta.outgoing_ports()].fill(meta_outgoing);
+                self.port_meta[node_meta.unused_ports()].fill(meta_empty);
+                self.port_link[port.index()..port.index() + capacity].fill(None);
 
-                (port, size as u16)
+                node_meta
             }
             None => {
                 debug_assert_eq!(self.port_meta.len(), self.port_link.len());
                 let old_len = self.port_meta.len();
                 let port = PortIndex::new(old_len);
+                let capacity = requested;
 
-                self.port_meta.reserve(size);
+                self.port_meta.reserve(requested);
                 self.port_meta.resize(old_len + incoming, meta_incoming);
-                self.port_meta.resize(old_len + size, meta_outgoing);
-                self.port_link.resize(old_len + size, None);
+                self.port_meta
+                    .resize(old_len + incoming + outgoing, meta_outgoing);
+                self.port_meta.resize(old_len + capacity, meta_empty);
+                self.port_link.resize(old_len + capacity, None);
 
-                (port, size as u16)
+                NodeMeta::new(port, incoming as u16, outgoing as u16, capacity as u16)
             }
         }
     }
@@ -848,30 +850,24 @@ impl PortGraph {
         }
         let new_meta = if new_total > 0 {
             // We need to allocate more space and copy the old ports.
-            let (new_port_list, new_capacity) = self.alloc_ports(node, incoming, outgoing);
+            //
+            // TODO: Over-allocate by a factor
+            let new_meta = self.alloc_ports(node, incoming, outgoing, 0);
 
-            let incoming_rekeys = (0..old_incoming).zip(0..incoming);
-            let outgoing_rekeys = (old_incoming..old_total).zip(incoming..new_total);
-            for (old, new) in incoming_rekeys.chain(outgoing_rekeys) {
-                let old_index = old_port_list.index() + old;
-                let new_index = new_port_list.index() + new;
-                let old_port = PortIndex::new(old_index);
-                let new_port = PortIndex::new(new_index);
+            for dir in Direction::BOTH {
+                let rekeys = node_meta.ports(dir).zip(new_meta.ports(dir));
+                for (old, new) in rekeys {
+                    if let Some(link) = self.port_link[old] {
+                        self.port_link[link.index()] = Some(PortIndex::new(new));
+                    }
+                    self.port_link[new] = self.port_link[old].take();
+                    self.port_meta[new] = self.port_meta[old];
 
-                if let Some(link) = self.port_link[old_index] {
-                    self.port_link[link.index()] = Some(new_port);
+                    rekey(PortIndex::new(old), Some(PortIndex::new(new)));
                 }
-                self.port_link[new_index] = self.port_link[old_index].take();
-                self.port_meta[new_index] = self.port_meta[old_index];
-
-                rekey(old_port, Some(new_port));
             }
-            NodeMeta::new(
-                new_port_list,
-                incoming as u16,
-                outgoing as u16,
-                new_capacity,
-            )
+
+            new_meta
         } else {
             // All ports are dropped. We can release the port list.
             NodeMeta::new(PortIndex::default(), 0, 0, 0)
@@ -1213,6 +1209,20 @@ impl NodeMeta {
         let start = self.port_list.index() + self.incoming() as usize;
         let end = start + self.outgoing() as usize;
         start..end
+    }
+
+    /// Returns a range over the unused pre-allocated port indices of this node.
+    #[inline]
+    pub fn unused_ports(&self) -> Range<usize> {
+        let start = self.port_list.index() + self.port_count();
+        let end = self.port_list.index() + self.capacity();
+        start..end
+    }
+}
+
+impl Default for NodeMeta {
+    fn default() -> Self {
+        Self::new(PortIndex::default(), 0, 0, 0)
     }
 }
 

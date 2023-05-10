@@ -28,7 +28,6 @@
 //! ```
 //! use portgraph::{PortGraph, Direction};
 //! use portgraph::algorithms::toposort;
-//! use portgraph::substitute::Rewrite;
 //!
 //! // Create a graph with two nodes, each with two input and two output ports
 //! let mut graph = PortGraph::new();
@@ -46,7 +45,6 @@
 //! // Run a topological sort on the graph starting at node A.
 //! let topo = toposort(&graph, [node_a], Direction::Outgoing);
 //! assert_eq!(topo.collect::<Vec<_>>(), [node_a, node_b]);
-//!
 //! ```
 //!
 //! # Features
@@ -263,9 +261,9 @@ pub struct IndexError {
 pub enum PortOffset {
     /// Input to a node
     ///
-    /// The index is shifted by one to allow the null pointer optimization.
+    /// The index is shifted by one to allow for [null pointer optimizations].
     ///
-    /// TODO: Check if this is actually necessary.
+    /// [null pointer optimizations]: https://doc.rust-lang.org/std/option/#representation
     Incoming(NonZeroU16),
     /// Output from a node.
     Outgoing(u16),

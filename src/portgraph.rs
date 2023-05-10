@@ -164,14 +164,13 @@ impl PortGraph {
         extra_capacity: usize,
     ) -> NodeMeta {
         let requested = incoming + outgoing + extra_capacity;
-        let meta_incoming = PortEntry::Port(PortMeta::new(node, Direction::Incoming));
-        let meta_outgoing = PortEntry::Port(PortMeta::new(node, Direction::Outgoing));
-        let meta_empty = PortEntry::Free;
-
         if requested == 0 {
             return NodeMeta::default();
         }
 
+        let meta_incoming = PortEntry::Port(PortMeta::new(node, Direction::Incoming));
+        let meta_outgoing = PortEntry::Port(PortMeta::new(node, Direction::Outgoing));
+        let meta_empty = PortEntry::Free;
         match self.port_free.get(requested - 1).copied().flatten() {
             Some(port) => {
                 // TODO: Over-allocate if there are similarly-sized free slabs.
@@ -185,6 +184,7 @@ impl PortGraph {
                 self.port_meta[node_meta.incoming_ports()].fill(meta_incoming);
                 self.port_meta[node_meta.outgoing_ports()].fill(meta_outgoing);
                 self.port_meta[node_meta.unused_ports()].fill(meta_empty);
+
                 self.port_link[port.index()..port.index() + capacity].fill(None);
 
                 node_meta
@@ -200,6 +200,7 @@ impl PortGraph {
                 self.port_meta
                     .resize(old_len + incoming + outgoing, meta_outgoing);
                 self.port_meta.resize(old_len + capacity, meta_empty);
+
                 self.port_link.resize(old_len + capacity, None);
 
                 NodeMeta::new(port, incoming as u16, outgoing as u16, capacity as u16)
@@ -239,14 +240,14 @@ impl PortGraph {
         self.node_count -= 1;
 
         if node_meta.capacity() > 0 {
-            let port_list = node_meta.port_list();
+            let first_port = node_meta.first_port();
             let size = node_meta.capacity();
             self.port_count -= node_meta.port_count();
 
-            assert!(port_list.index() + size <= self.port_link.len());
-            assert!(port_list.index() + size <= self.port_meta.len());
+            assert!(first_port.index() + size <= self.port_link.len());
+            assert!(first_port.index() + size <= self.port_meta.len());
 
-            self.free_ports(port_list, size);
+            self.free_ports(first_port, size);
         }
     }
 
@@ -458,7 +459,7 @@ impl PortGraph {
             NodeEntry::Node(node_meta) => node_meta,
         };
 
-        let port_offset = port.index().wrapping_sub(node_meta.port_list().index());
+        let port_offset = port.index().wrapping_sub(node_meta.first_port().index());
 
         match port_meta.direction() {
             Direction::Incoming => Some(PortOffset::new_incoming(port_offset)),
@@ -843,7 +844,7 @@ impl PortGraph {
         let old_outgoing = node_meta.outgoing() as usize;
         let old_capacity = node_meta.capacity();
         let old_total = old_incoming + old_outgoing;
-        let old_port_list = node_meta.port_list();
+        let old_first_port = node_meta.first_port();
         if old_incoming == incoming && old_outgoing == outgoing {
             // Nothing to do
             return;
@@ -886,7 +887,7 @@ impl PortGraph {
         }
 
         self.node_meta[node.index()] = NodeEntry::Node(new_meta);
-        self.free_ports(old_port_list, old_capacity);
+        self.free_ports(old_first_port, old_capacity);
 
         self.port_count = self.port_count - old_total + new_total;
     }
@@ -974,7 +975,7 @@ impl PortGraph {
             let NodeEntry::Node(node_meta) = *node_entry else {
                 unreachable!("port must be attached to a valid node")
             };
-            if node_meta.port_list() == old_port {
+            if node_meta.first_port() == old_port {
                 // Update the node's port list, and reduce the capacity to match
                 // the number of ports.
                 *node_entry = NodeEntry::Node(NodeMeta::new(
@@ -1048,7 +1049,7 @@ impl PortGraph {
     {
         let node_meta = self.node_meta_valid(node).expect("Node must be valid");
         let new_meta = NodeMeta::new(
-            node_meta.port_list(),
+            node_meta.first_port(),
             incoming as u16,
             outgoing as u16,
             node_meta.capacity() as u16,
@@ -1115,7 +1116,7 @@ impl Default for PortGraph {
 struct NodeMeta {
     /// The index of the first port in the port list.
     /// If the node has no ports, this will point to the index 0.
-    port_list: PortIndex,
+    first_port: PortIndex,
     /// The number of incoming ports plus 1.
     /// We use the `NonZeroU16` here to ensure that `NodeEntry` is 8 bytes.
     incoming: NonZeroU16,
@@ -1134,13 +1135,13 @@ impl NodeMeta {
     const MAX_OUTGOING: usize = u16::MAX as usize;
 
     #[inline]
-    pub fn new(port_list: PortIndex, incoming: u16, outgoing: u16, capacity: u16) -> Self {
+    pub fn new(first_port: PortIndex, incoming: u16, outgoing: u16, capacity: u16) -> Self {
         assert!(incoming <= Self::MAX_INCOMING as u16);
         assert!(outgoing <= Self::MAX_OUTGOING as u16);
         assert!(incoming.saturating_add(outgoing) <= capacity);
-        assert!(capacity > 0 || port_list.index() == 0);
+        assert!(capacity > 0 || first_port.index() == 0);
         Self {
-            port_list,
+            first_port,
             // SAFETY: The value cannot be zero, and won't overflow.
             incoming: unsafe { NonZeroU16::new_unchecked(incoming + 1) },
             outgoing,
@@ -1149,8 +1150,8 @@ impl NodeMeta {
     }
 
     #[inline]
-    pub fn port_list(&self) -> PortIndex {
-        self.port_list
+    pub fn first_port(&self) -> PortIndex {
+        self.first_port
     }
 
     /// Returns the number of incoming ports.
@@ -1188,7 +1189,7 @@ impl NodeMeta {
     /// Returns a range over the port indices of this node.
     #[inline]
     pub fn all_ports(&self) -> Range<usize> {
-        let start = self.port_list.index();
+        let start = self.first_port.index();
         let end = start + self.incoming() as usize + self.outgoing() as usize;
         start..end
     }
@@ -1205,7 +1206,7 @@ impl NodeMeta {
     /// Returns a range over the incoming port indices of this node.
     #[inline]
     pub fn incoming_ports(&self) -> Range<usize> {
-        let start = self.port_list.index();
+        let start = self.first_port.index();
         let end = start + self.incoming() as usize;
         start..end
     }
@@ -1213,7 +1214,7 @@ impl NodeMeta {
     /// Returns a range over the outgoing port indices of this node.
     #[inline]
     pub fn outgoing_ports(&self) -> Range<usize> {
-        let start = self.port_list.index() + self.incoming() as usize;
+        let start = self.first_port.index() + self.incoming() as usize;
         let end = start + self.outgoing() as usize;
         start..end
     }
@@ -1221,8 +1222,8 @@ impl NodeMeta {
     /// Returns a range over the unused pre-allocated port indices of this node.
     #[inline]
     pub fn unused_ports(&self) -> Range<usize> {
-        let start = self.port_list.index() + self.port_count();
-        let end = self.port_list.index() + self.capacity();
+        let start = self.first_port.index() + self.port_count();
+        let end = self.first_port.index() + self.capacity();
         start..end
     }
 }

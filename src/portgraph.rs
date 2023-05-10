@@ -111,9 +111,18 @@ impl PortGraph {
     /// assert!(g.contains_node(node));
     /// ```
     pub fn add_node(&mut self, incoming: usize, outgoing: usize) -> NodeIndex {
-        assert!(incoming <= NodeMeta::MAX_INCOMING);
-        assert!(outgoing <= NodeMeta::MAX_OUTGOING);
-        assert!(incoming + outgoing <= u16::MAX as usize);
+        assert!(
+            incoming <= NodeMeta::MAX_INCOMING,
+            "Incoming port count exceeds maximum."
+        );
+        assert!(
+            outgoing <= NodeMeta::MAX_OUTGOING,
+            "Outgoing port count exceeds maximum."
+        );
+        assert!(
+            incoming + outgoing <= u16::MAX as usize,
+            "Total port count exceeds maximum u16::MAX."
+        );
 
         let node = self.alloc_node();
         let node_meta = self.alloc_ports(node, incoming, outgoing, 0);
@@ -818,8 +827,14 @@ impl PortGraph {
     ) where
         F: FnMut(PortIndex, Option<PortIndex>),
     {
-        assert!(incoming < NodeMeta::MAX_INCOMING);
-        assert!(outgoing < NodeMeta::MAX_OUTGOING);
+        assert!(
+            incoming <= NodeMeta::MAX_INCOMING,
+            "Incoming port count exceeds maximum."
+        );
+        assert!(
+            outgoing <= NodeMeta::MAX_OUTGOING,
+            "Outgoing port count exceeds maximum."
+        );
 
         let new_total = incoming + outgoing;
 
@@ -873,8 +888,7 @@ impl PortGraph {
         self.node_meta[node.index()] = NodeEntry::Node(new_meta);
         self.free_ports(old_port_list, old_capacity);
 
-        self.port_count -= old_total;
-        self.port_count += new_total;
+        self.port_count = self.port_count - old_total + new_total;
     }
 
     /// Compacts the storage of nodes in the portgraph so that all nodes are stored consecutively.

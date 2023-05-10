@@ -116,11 +116,7 @@ impl PortGraph {
         assert!(incoming + outgoing <= u16::MAX as usize);
 
         let node = self.alloc_node();
-        let node_meta = if incoming + outgoing > 0 {
-            self.alloc_ports(node, incoming, outgoing, 0)
-        } else {
-            NodeMeta::default()
-        };
+        let node_meta = self.alloc_ports(node, incoming, outgoing, 0);
         self.node_meta[node.index()] = NodeEntry::Node(node_meta);
 
         self.node_count += 1;
@@ -162,6 +158,10 @@ impl PortGraph {
         let meta_incoming = PortEntry::Port(PortMeta::new(node, Direction::Incoming));
         let meta_outgoing = PortEntry::Port(PortMeta::new(node, Direction::Outgoing));
         let meta_empty = PortEntry::Free;
+
+        if requested == 0 {
+            return NodeMeta::default();
+        }
 
         match self.port_free.get(requested - 1).copied().flatten() {
             Some(port) => {
@@ -848,30 +848,27 @@ impl PortGraph {
             self.resize_ports_inplace(node, incoming, outgoing, rekey);
             return;
         }
-        let new_meta = if new_total > 0 {
-            // We need to allocate more space and copy the old ports.
-            //
-            // TODO: Over-allocate by a factor
-            let new_meta = self.alloc_ports(node, incoming, outgoing, 0);
+        // Allocate a new slab of ports. If `new_total` is 0, we just free the
+        // old slab.
+        //
+        // TODO: Fine-tune overallocation factor
+        let target_capacity = new_total.next_power_of_two();
+        let new_meta = self.alloc_ports(node, incoming, outgoing, target_capacity - new_total);
 
-            for dir in Direction::BOTH {
-                let rekeys = node_meta.ports(dir).zip(new_meta.ports(dir));
-                for (old, new) in rekeys {
-                    if let Some(link) = self.port_link[old] {
-                        self.port_link[link.index()] = Some(PortIndex::new(new));
-                    }
-                    self.port_link[new] = self.port_link[old].take();
-                    self.port_meta[new] = self.port_meta[old];
-
-                    rekey(PortIndex::new(old), Some(PortIndex::new(new)));
+        // Move the port data.
+        for dir in Direction::BOTH {
+            let rekeys = node_meta.ports(dir).zip(new_meta.ports(dir));
+            for (old, new) in rekeys {
+                if let Some(link) = self.port_link[old] {
+                    self.port_link[link.index()] = Some(PortIndex::new(new));
                 }
-            }
+                self.port_link[new] = self.port_link[old].take();
+                self.port_meta[new] = self.port_meta[old];
 
-            new_meta
-        } else {
-            // All ports are dropped. We can release the port list.
-            NodeMeta::new(PortIndex::default(), 0, 0, 0)
-        };
+                rekey(PortIndex::new(old), Some(PortIndex::new(new)));
+            }
+        }
+
         self.node_meta[node.index()] = NodeEntry::Node(new_meta);
         self.free_ports(old_port_list, old_capacity);
 
@@ -1022,14 +1019,9 @@ impl PortGraph {
     /// Every time a port is moved, the `rekey` function will be called with its old and new index.
     /// If the port is removed, the new index will be `None`.
     ///
-    /// TODO: Although it probably isn't used often, this will come in handy
-    /// once we have preallocated port capacity, higher than the number of
-    /// ports.
-    ///
     /// # Panics
-    /// If `incoming + outgoing` is not equal to the total number of ports of
-    /// the node.
-    #[cold]
+    ///
+    /// If `incoming + outgoing` is more than the allocated port capacity.
     fn resize_ports_inplace<F>(
         &mut self,
         node: NodeIndex,

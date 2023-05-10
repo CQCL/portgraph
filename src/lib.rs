@@ -248,6 +248,12 @@ impl std::fmt::Debug for PortIndex {
     }
 }
 
+impl Default for PortIndex {
+    fn default() -> Self {
+        PortIndex::new(0)
+    }
+}
+
 /// Error indicating a `NodeIndex`, `PortIndex`, or `Direction` is too large.
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 #[error("the index {index} is too large.")]

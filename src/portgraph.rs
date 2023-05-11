@@ -265,6 +265,9 @@ impl PortGraph {
         if size > self.port_free.len() {
             self.port_free.resize(size, None);
         }
+        if size == 0 {
+            return;
+        }
 
         let ports_free = &mut self.port_free[size - 1];
 
@@ -1726,6 +1729,13 @@ pub mod test {
         assert!(g.connected(b, b));
         assert!(g.connected(b, c));
         assert!(g.connected(c, a));
+
+        // Grow an empty node
+        let d = g.add_node(0, 0);
+        g.set_num_ports(d, 2, 3, |_, _| {});
+        assert_eq!(g.port_count(), 17);
+        g.set_num_ports(d, 0, 0, |_, _| {});
+        assert_eq!(g.port_count(), 12);
     }
 
     #[cfg(feature = "serde")]

@@ -1,3 +1,11 @@
+## v0.2.2 (2023-05-11)
+
+This is a bugfix release that fixes a panic when growing the number of ports in an empty node.
+
+- Fix a panic on `set_num_ports` ([#40][])
+
+  [#40]: https://github.com/CQCL/portgraph/issues/40
+
 ## v0.2.1 (2023-05-10)
 
 - Implemented serialization on Weights and PortOffset ([#36][])

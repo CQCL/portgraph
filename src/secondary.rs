@@ -46,7 +46,7 @@
 
 use std::{
     marker::PhantomData,
-    mem::MaybeUninit,
+    mem::{self, MaybeUninit},
     ops::{Index, IndexMut},
 };
 
@@ -133,6 +133,32 @@ where
     #[inline]
     pub fn capacity(&self) -> usize {
         self.data.capacity()
+    }
+
+    /// Remove key `old` and optionally move to key `new`.
+    ///
+    /// This method is useful for rekey callbacks such as in
+    /// [`PortGraph::set_num_ports`] and [`PortGraph::compact_nodes`].
+    ///
+    /// [`PortGraph::set_num_ports`]: crate::portgraph::PortGraph::set_num_ports
+    /// [`PortGraph::compact_nodes`]: crate::portgraph::PortGraph::compact_nodes
+    pub fn rekey(&mut self, old: K, new: Option<K>)
+    where
+        V: Default,
+    {
+        if old.into() < self.data.len() {
+            let val = mem::take(self.get_mut(old));
+            let Some(new) = new else { return };
+            if new.into() >= self.data.len() {
+                self.resize_for_get_mut(new.into() + 1);
+            }
+            self.data[new.into()] = val;
+        } else {
+            let Some(new) = new else { return };
+            if new.into() < self.data.len() {
+                self.data[new.into()] = Default::default();
+            }
+        }
     }
 
     /// Immutably borrows the value at a `key`.

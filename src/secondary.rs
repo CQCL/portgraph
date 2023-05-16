@@ -139,7 +139,7 @@ where
     ///
     /// This method is useful for rekey callbacks such as in
     /// [`PortGraph::set_num_ports`] and [`PortGraph::compact_nodes`].
-    /// 
+    ///
     /// [`PortGraph::set_num_ports`]: crate::portgraph::PortGraph::set_num_ports
     /// [`PortGraph::compact_nodes`]: crate::portgraph::PortGraph::compact_nodes
     pub fn rekey(&mut self, old: K, new: Option<K>)

@@ -851,7 +851,13 @@ impl PortGraph {
         if old_incoming == incoming && old_outgoing == outgoing {
             // Nothing to do
             return;
+        } else if (1..old_capacity).contains(&new_total) {
+            // Special case when we can avoid reallocations by shifting the
+            // ports in the pre-allocated slab.
+            self.resize_ports_inplace(node, incoming, outgoing, rekey);
+            return;
         }
+
         // Disconnect any port to be removed.
         for port in self
             .inputs(node)
@@ -860,13 +866,6 @@ impl PortGraph {
         {
             self.unlink_port(port);
             rekey(port, None);
-        }
-
-        if 0 < new_total && new_total <= old_capacity {
-            // Special case when we can avoid reallocations by shifting the
-            // ports in the pre-allocated slab.
-            self.resize_ports_inplace(node, incoming, outgoing, rekey);
-            return;
         }
         // Allocate a new slab of ports. If `new_total` is 0, we just free the
         // old slab.
@@ -1098,7 +1097,8 @@ impl PortGraph {
             }
         }
         // Empty ports that are no longer used.
-        for port in new_meta.port_count()..node_meta.port_count() {
+        for port_offset in new_meta.port_count()..node_meta.port_count() {
+            let port = new_meta.first_port().index() + port_offset;
             self.port_link[port] = None;
             self.port_meta[port] = PortEntry::Free;
         }
@@ -1736,6 +1736,18 @@ pub mod test {
         assert_eq!(g.port_count(), 17);
         g.set_num_ports(d, 0, 0, |_, _| {});
         assert_eq!(g.port_count(), 12);
+
+        // Check links after resizing
+        g.clear();
+        let n0 = g.add_node(0, 2);
+        let n1 = g.add_node(2, 1);
+        g.link_nodes(n0, 0, n1, 0).unwrap();
+
+        g.set_num_ports(n1, 1, 1, |_, _| {});
+
+        let o = g.output(n0, 0).unwrap();
+        let i = g.port_link(o).unwrap();
+        assert!(g.port_node(i).is_some());
     }
 
     #[cfg(feature = "serde")]

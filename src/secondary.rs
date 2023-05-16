@@ -146,18 +146,19 @@ where
     where
         V: Default,
     {
-        let val = (old.into() < self.data.len()).then(|| mem::take(self.get_mut(old)));
-        let Some(new) = new else { return };
-        let Some(val) = val else {
+        if old.into() < self.data.len() {
+            let val = mem::take(self.get_mut(old));
+            let Some(new) = new else { return };
+            if new.into() >= self.data.len() {
+                self.resize_for_get_mut(new.into() + 1);
+            }
+            self.data[new.into()] = val;
+        } else {
+            let Some(new) = new else { return };
             if new.into() < self.data.len() {
                 self.data[new.into()] = Default::default();
             }
-            return
-        };
-        if new.into() >= self.data.len() {
-            self.resize_for_get_mut(new.into() + 1);
         }
-        self.data[new.into()] = val;
     }
 
     /// Immutably borrows the value at a `key`.

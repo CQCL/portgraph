@@ -1,3 +1,11 @@
+## v0.2.3 (2023-05-17)
+
+- Add a `rekey` method to `SecondaryMap` ([#44][])
+- Fix `set_num_ports` deleting links ([#43][])
+
+  [#43]: https://github.com/CQCL/portgraph/issues/43
+  [#44]: https://github.com/CQCL/portgraph/issues/44
+
 ## v0.2.2 (2023-05-11)
 
 This is a bugfix release that fixes a panic when growing the number of ports in an empty node.

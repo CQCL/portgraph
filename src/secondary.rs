@@ -55,12 +55,24 @@ use serde::{Deserialize, Serialize};
 
 /// A dense map from keys to values with default fallbacks.
 ///
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct SecondaryMap<K, V> {
     data: Vec<V>,
     phantom: PhantomData<K>,
     default: V,
+}
+
+impl<K: PartialEq, V: PartialEq> PartialEq for SecondaryMap<K, V> {
+    fn eq(&self, other: &Self) -> bool {
+        if self.default != other.default {
+            return false;
+        }
+        let common_len = std::cmp::min(self.data.len(), other.data.len());
+        self.data[..common_len] == other.data[..common_len]
+            && self.data[common_len..].iter().all(|v| v == &self.default)
+            && other.data[common_len..].iter().all(|v| v == &other.default)
+    }
 }
 
 impl<K, V> SecondaryMap<K, V>
@@ -381,5 +393,17 @@ mod test {
         map[1] = 0x11;
         map[3] = 0x13;
         assert_eq!(crate::portgraph::test::ser_roundtrip(&map), map);
+    }
+
+    #[test]
+    fn eq_ignores_defaults() {
+        let mut a = SecondaryMap::<usize, usize>::new();
+        let mut b = SecondaryMap::<usize, usize>::new();
+        a[4] = 0;
+        assert_eq!(a, b);
+        b[42] = 0;
+        assert_eq!(a, b);
+        b[40] = 24;
+        assert_ne!(a, b);
     }
 }

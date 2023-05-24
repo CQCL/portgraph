@@ -698,13 +698,13 @@ impl PortGraph {
         Neighbours::from_node_links(self, self.links(node, direction))
     }
 
-    /// Iterates over the input neighbours of the `node`. Shorthand for [`PortGraph::links`].
+    /// Iterates over the input neighbours of the `node`. Shorthand for [`PortGraph::neighbours`].
     #[inline]
     pub fn input_neighbours(&self, node: NodeIndex) -> Neighbours<'_> {
         self.neighbours(node, Direction::Incoming)
     }
 
-    /// Iterates over the output neighbours of the `node`. Shorthand for [`PortGraph::links`].
+    /// Iterates over the output neighbours of the `node`. Shorthand for [`PortGraph::neighbours`].
     #[inline]
     pub fn output_neighbours(&self, node: NodeIndex) -> Neighbours<'_> {
         self.neighbours(node, Direction::Outgoing)

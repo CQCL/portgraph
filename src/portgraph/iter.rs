@@ -15,6 +15,14 @@ pub struct NodePorts {
     pub(super) indices: Range<usize>,
 }
 
+impl NodePorts {
+    /// Return the leftover ports in the iterator as a range of integer indexes.
+    #[inline]
+    pub fn as_range(&self) -> Range<usize> {
+        self.indices.clone()
+    }
+}
+
 impl Iterator for NodePorts {
     type Item = PortIndex;
 

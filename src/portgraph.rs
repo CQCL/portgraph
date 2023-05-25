@@ -1104,6 +1104,9 @@ impl PortGraph {
         }
 
         self.node_meta[node.index()] = NodeEntry::Node(new_meta);
+
+        self.port_count -= node_meta.incoming() as usize + node_meta.outgoing() as usize;
+        self.port_count += incoming + outgoing;
     }
 }
 
@@ -1679,6 +1682,16 @@ pub mod test {
         assert_eq!(g.link_count(), 4);
         assert_eq!(g.node_count(), 4);
         assert_eq!(g.port_count(), 13);
+
+        g.set_num_ports(x, 0, 3, |_, _| {});
+
+        assert_eq!(g.link_count(), 4);
+        assert_eq!(g.node_count(), 4);
+        assert_eq!(g.port_count(), 11);
+        assert!(g.connected(a, b));
+        assert!(g.connected(b, b));
+        assert!(g.connected(b, c));
+        assert!(g.connected(c, a));
 
         g.set_num_ports(x, 0, 0, |_, _| {});
 

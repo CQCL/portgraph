@@ -6,6 +6,7 @@
 //! is intended to be used alongside [`PortGraph`].
 //!
 //! [`PortGraph`]: crate::portgraph::PortGraph
+//! [`SecondaryMap`]: crate::SecondaryMap
 //!
 //! # Example
 //!
@@ -49,7 +50,7 @@ use serde::{Deserialize, Serialize};
 use crate::{NodeIndex, PortIndex, UnmanagedMap};
 
 /// Graph component that encodes node and port weights.
-/// Based on two [`SecondaryMap`] containers.
+/// Based on two [`UnmanagedMap`] containers.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct Weights<N, P> {

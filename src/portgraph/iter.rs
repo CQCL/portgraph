@@ -5,7 +5,10 @@ use std::{
     ops::Range,
 };
 
-use crate::portgraph::{NodeEntry, PortEntry, PortGraph};
+use crate::{
+    portgraph::{NodeEntry, PortEntry, PortGraph},
+    Direction,
+};
 use crate::{NodeIndex, PortIndex, PortOffset};
 
 /// Iterator over the ports of a node.
@@ -130,18 +133,13 @@ impl<'a> Iterator for Ports<'a> {
     type Item = PortIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.len == 0 {
-            return None;
-        }
-
-        for (index, port_entry) in &mut self.iter {
-            if let PortEntry::Port(_) = port_entry {
+        self.iter.find_map(|(index, port_entry)| match port_entry {
+            PortEntry::Port(_) => {
                 self.len -= 1;
-                return Some(PortIndex::new(index));
+                Some(PortIndex::new(index))
             }
-        }
-
-        None
+            _ => None,
+        })
     }
 
     fn count(self) -> usize {
@@ -153,6 +151,20 @@ impl<'a> Iterator for Ports<'a> {
     }
 }
 
+impl<'a> DoubleEndedIterator for Ports<'a> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        while let Some((index, port_entry)) = self.iter.next_back() {
+            if let PortEntry::Port(_) = port_entry {
+                self.len -= 1;
+                return Some(PortIndex::new(index));
+            }
+        }
+        None
+    }
+}
+
+impl<'a> FusedIterator for Ports<'a> {}
+
 /// Iterator over the port offsets of a node. See [`PortGraph::input_offsets`],
 /// [`PortGraph::output_offsets`], and [`PortGraph::all_port_offsets`].
 #[derive(Clone)]
@@ -160,6 +172,17 @@ pub struct NodePortOffsets {
     pub(super) incoming: Range<u16>,
     // Outgoing port offsets can go up to u16::MAX, hence the u32
     pub(super) outgoing: Range<u32>,
+}
+
+impl NodePortOffsets {
+    /// Return the leftover ports in the iterator as a range of integer indexes.
+    #[inline]
+    pub fn as_range(&self, dir: Direction) -> Range<usize> {
+        match dir {
+            Direction::Incoming => self.incoming.start as usize..self.incoming.end as usize,
+            Direction::Outgoing => self.outgoing.start as usize..self.outgoing.end as usize,
+        }
+    }
 }
 
 impl Iterator for NodePortOffsets {

@@ -1,3 +1,12 @@
+## v0.2.4 (2023-05-25)
+
+- Add `as_range` methods to `NodePorts` and `NodePortOffsets` ([#49][], [#50][])
+- Fix equality comparison between secondary maps with different capacity ([#48][])
+
+  [#48]: https://github.com/CQCL/portgraph/issues/48
+  [#49]: https://github.com/CQCL/portgraph/issues/49
+  [#50]: https://github.com/CQCL/portgraph/issues/50
+
 ## v0.2.3 (2023-05-17)
 
 - Add a `rekey` method to `SecondaryMap` ([#44][])

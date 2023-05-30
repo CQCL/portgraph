@@ -122,6 +122,8 @@ where
 {
     /// Initialises a new topological sort of a portgraph in a specified direction
     /// starting at a collection of `source` nodes.
+    ///
+    /// If the default value of `Map` is not `false`, this requires O(#ports) time.
     fn new(
         graph: &'graph PortGraph,
         source: impl IntoIterator<Item = NodeIndex>,
@@ -136,6 +138,13 @@ where
         } else {
             source.into_iter().collect()
         };
+
+        // If the default value of `Map` is not `false`, we must mark all ports as not visited.
+        if visited_ports.default_value() {
+            for port in graph.ports_iter() {
+                visited_ports.set(port, false);
+            }
+        }
 
         // Mark all the candidate ports as visited, so we don't visit them again.
         for node in candidate_nodes.iter() {

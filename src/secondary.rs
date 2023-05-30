@@ -19,8 +19,6 @@ pub trait SecondaryMap<K, V> {
         V: 'a;
 
     /// Creates a new secondary map.
-    ///
-    /// This does not allocate any memory until a value is modified.
     fn new() -> Self;
 
     /// Creates a new secondary map with specified capacity.
@@ -49,17 +47,9 @@ pub trait SecondaryMap<K, V> {
     fn get(&self, key: K) -> &V;
 
     /// Sets the value at a `key`.
-    ///
-    /// When the value is not present, the secondary map is resized to accommodate it.
-    /// To avoid frequent resizing, use [`SecondaryMap::ensure_capacity`] to keep the
-    /// capacity of the secondary map in line with the size of the key space.
     fn set(&mut self, key: K, val: V);
 
     /// Takes the value at a `key`, leaving `default()` behind.
-    ///
-    /// When the value is not present, the secondary map is resized to accommodate it.
-    /// To avoid frequent resizing, use [`SecondaryMap::ensure_capacity`] to keep the
-    /// capacity of the secondary map in line with the size of the key space.
     fn take(&mut self, key: K) -> V;
 
     /// Remove key `old` and optionally move to key `new`.
@@ -149,7 +139,7 @@ where
     #[inline]
     fn take(&mut self, key: K) -> bool {
         let key = key.into();
-        if key >= BitVec::len(self) {
+        if key < BitVec::len(self) {
             BitSlice::replace(self, key, false)
         } else {
             false

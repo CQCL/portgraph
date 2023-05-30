@@ -315,6 +315,9 @@ where
 {
     type Iter<'a> = UnmanagedIter<'a, K, V> where Self: 'a, K: 'a, V: 'a;
 
+    /// Creates a new secondary map.
+    ///
+    /// This does not allocate any memory until a value is modified.
     #[inline]
     fn new() -> Self {
         Self::with_default(Default::default())
@@ -359,6 +362,11 @@ where
         UnmanagedMap::get(self, key)
     }
 
+    /// Sets the value at a `key`.
+    ///
+    /// When the value is not present, the secondary map is resized to accommodate it.
+    /// To avoid frequent resizing, use [`SecondaryMap::ensure_capacity`] to keep the
+    /// capacity of the secondary map in line with the size of the key space.
     #[inline]
     fn set(&mut self, key: K, val: V) {
         self[key] = val;

@@ -1,10 +1,13 @@
 use super::postorder_filtered;
-use crate::secondary::SecondaryMap;
-use crate::{Direction, NodeIndex, PortGraph, PortIndex};
+use crate::unmanaged::UnmanagedDenseMap;
+use crate::{Direction, NodeIndex, PortGraph, PortIndex, SecondaryMap};
 use std::cmp::Ordering;
 
 /// Returns a dominator tree for a [`PortGraph`], where each node is dominated
 /// by its parent.
+///
+/// The `Map` type parameter specifies the type of the secondary map that is used
+/// to store the dominator tree data. The default is [`UnmanagedDenseMap`].
 ///
 /// # Example
 ///
@@ -14,7 +17,7 @@ use std::cmp::Ordering;
 ///    ┗> d ┛
 ///
 /// ```
-/// # use portgraph::{algorithms::dominators, Direction, PortGraph};
+/// # use portgraph::{algorithms::{dominators, DominatorTree}, Direction, PortGraph};
 /// let mut graph = PortGraph::with_capacity(5, 10);
 /// let a = graph.add_node(0,2);
 /// let b = graph.add_node(1,1);
@@ -28,7 +31,7 @@ use std::cmp::Ordering;
 /// graph.link_nodes(d, 0, c, 1).unwrap();
 /// graph.link_nodes(c, 0, e, 0).unwrap();
 ///
-/// let tree = dominators(&graph, a, Direction::Outgoing);
+/// let tree: DominatorTree = dominators(&graph, a, Direction::Outgoing);
 /// assert_eq!(tree.root(), a);
 /// assert_eq!(tree.immediate_dominator(a), None);
 /// assert_eq!(tree.immediate_dominator(b), Some(a));
@@ -36,7 +39,14 @@ use std::cmp::Ordering;
 /// assert_eq!(tree.immediate_dominator(d), Some(a));
 /// assert_eq!(tree.immediate_dominator(e), Some(c));
 /// ```
-pub fn dominators(graph: &PortGraph, entry: NodeIndex, direction: Direction) -> DominatorTree {
+pub fn dominators<Map>(
+    graph: &PortGraph,
+    entry: NodeIndex,
+    direction: Direction,
+) -> DominatorTree<Map>
+where
+    Map: SecondaryMap<NodeIndex, Option<NodeIndex>>,
+{
     DominatorTree::new(graph, entry, direction, |_| true, |_, _| true)
 }
 
@@ -46,15 +56,18 @@ pub fn dominators(graph: &PortGraph, entry: NodeIndex, direction: Direction) -> 
 /// If the filter predicate returns `false` for a node or port, it is ignored
 /// when computing the dominator tree.
 ///
+/// The `Map` type parameter specifies the type of the secondary map that is
+/// used to store the dominator tree data. The default is [`UnmanagedDenseMap`]. For
+/// dominator trees over sparse node indices, `HashMap` or `BTreeMap` may be
+/// more efficient.
+///
 /// # Example
 ///
 /// This example runs the dominator algorithm on the following branching graph:
-/// a ─┬> b ┐
-///    │    ├─> c ─> e
-/// f ─┴> d ┴────────^
+/// a ─┬> b ┐ │    ├─> c ─> e f ─┴> d ┴────────^
 ///
 /// ```
-/// # use portgraph::{algorithms::dominators_filtered, Direction, PortGraph};
+/// # use portgraph::{algorithms::{dominators_filtered, DominatorTree}, Direction, PortGraph};
 /// let mut graph = PortGraph::with_capacity(5, 10);
 /// let a = graph.add_node(0,2);
 /// let b = graph.add_node(1,1);
@@ -71,7 +84,7 @@ pub fn dominators(graph: &PortGraph, entry: NodeIndex, direction: Direction) -> 
 /// graph.link_nodes(d, 1, e, 1).unwrap();
 /// graph.link_nodes(f, 0, d, 1).unwrap();
 ///
-/// let tree = dominators_filtered(
+/// let tree: DominatorTree = dominators_filtered(
 ///     &graph,
 ///     a,
 ///     Direction::Outgoing,
@@ -86,26 +99,32 @@ pub fn dominators(graph: &PortGraph, entry: NodeIndex, direction: Direction) -> 
 /// assert_eq!(tree.immediate_dominator(e), Some(c));
 /// assert_eq!(tree.immediate_dominator(f), None);
 /// ```
-pub fn dominators_filtered(
+pub fn dominators_filtered<Map>(
     graph: &PortGraph,
     entry: NodeIndex,
     direction: Direction,
     node_filter: impl FnMut(NodeIndex) -> bool,
     port_filter: impl FnMut(NodeIndex, PortIndex) -> bool,
-) -> DominatorTree {
+) -> DominatorTree<Map>
+where
+    Map: SecondaryMap<NodeIndex, Option<NodeIndex>>,
+{
     DominatorTree::new(graph, entry, direction, node_filter, port_filter)
 }
 
 /// A dominator tree for a [`PortGraph`].
 ///
 /// See [`dominators`] for more information.
-pub struct DominatorTree {
+pub struct DominatorTree<Map = UnmanagedDenseMap<NodeIndex, Option<NodeIndex>>> {
     root: NodeIndex,
     /// The immediate dominator of each node.
-    idom: SecondaryMap<NodeIndex, Option<NodeIndex>>,
+    idom: Map,
 }
 
-impl DominatorTree {
+impl<Map> DominatorTree<Map>
+where
+    Map: SecondaryMap<NodeIndex, Option<NodeIndex>>,
+{
     fn new(
         graph: &PortGraph,
         entry: NodeIndex,
@@ -115,7 +134,7 @@ impl DominatorTree {
     ) -> Self {
         // We traverse the graph in post order starting at the `entry` node.
         // We associate each node that we encounter with its index within the traversal.
-        let mut node_to_index = SecondaryMap::with_capacity(graph.node_capacity());
+        let mut node_to_index = UnmanagedDenseMap::with_capacity(graph.node_capacity());
         let mut index_to_node = Vec::with_capacity(graph.node_capacity());
 
         for (index, node) in postorder_filtered(
@@ -178,11 +197,11 @@ impl DominatorTree {
         }
 
         // Translate into a secondary map with `NodeIndex`s.
-        let mut idom = SecondaryMap::with_capacity(graph.node_capacity());
+        let mut idom = Map::with_capacity(graph.node_capacity());
 
         for (index, dominator) in dominators.into_iter().take(num_nodes - 1).enumerate() {
             debug_assert_ne!(dominator, usize::MAX);
-            idom[index_to_node[index]] = Some(index_to_node[dominator]);
+            idom.set(index_to_node[index], Some(index_to_node[dominator]));
         }
 
         Self { root: entry, idom }
@@ -197,7 +216,7 @@ impl DominatorTree {
     #[inline]
     /// Returns the immediate dominator of a node.
     pub fn immediate_dominator(&self, node: NodeIndex) -> Option<NodeIndex> {
-        self.idom[node]
+        *self.idom.get(node)
     }
 }
 
@@ -235,7 +254,7 @@ mod tests {
         graph.link_nodes(c, 0, e, 0).unwrap();
 
         // From `a`
-        let tree = dominators(&graph, a, Direction::Outgoing);
+        let tree: DominatorTree = dominators(&graph, a, Direction::Outgoing);
         assert_eq!(tree.root(), a);
         assert_eq!(tree.immediate_dominator(a), None);
         assert_eq!(tree.immediate_dominator(b), Some(a));
@@ -244,7 +263,7 @@ mod tests {
         assert_eq!(tree.immediate_dominator(e), Some(c));
 
         // Backwards from `c`
-        let tree = dominators(&graph, c, Direction::Incoming);
+        let tree: DominatorTree = dominators(&graph, c, Direction::Incoming);
         assert_eq!(tree.root(), c);
         assert_eq!(tree.immediate_dominator(a), Some(c));
         assert_eq!(tree.immediate_dominator(b), Some(c));
@@ -275,7 +294,7 @@ mod tests {
         graph.link_nodes(f, 0, d, 1).unwrap();
 
         // From `a`
-        let tree = dominators_filtered(
+        let tree: DominatorTree = dominators_filtered(
             &graph,
             a,
             Direction::Outgoing,
@@ -291,7 +310,7 @@ mod tests {
         assert_eq!(tree.immediate_dominator(f), None);
 
         // Backwards from `c`
-        let tree = dominators(&graph, c, Direction::Incoming);
+        let tree: DominatorTree = dominators(&graph, c, Direction::Incoming);
         assert_eq!(tree.root(), c);
         assert_eq!(tree.immediate_dominator(a), Some(c));
         assert_eq!(tree.immediate_dominator(b), Some(c));
@@ -323,7 +342,7 @@ mod tests {
         graph.link_nodes(d, 1, e, 1).unwrap();
         graph.link_nodes(e, 0, d, 2).unwrap();
 
-        let dominators = dominators(&graph, entry, Direction::Outgoing);
+        let dominators: DominatorTree = dominators(&graph, entry, Direction::Outgoing);
 
         assert_eq!(dominators.root(), entry);
         assert_eq!(dominators.immediate_dominator(entry), None);

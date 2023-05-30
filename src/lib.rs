@@ -68,6 +68,7 @@ pub mod hierarchy;
 pub mod portgraph;
 pub mod secondary;
 pub mod substitute;
+pub mod unmanaged;
 pub mod weights;
 
 #[cfg(feature = "pyo3")]
@@ -82,6 +83,8 @@ pub use crate::hierarchy::Hierarchy;
 pub use crate::portgraph::{LinkError, PortGraph};
 #[doc(inline)]
 pub use crate::secondary::SecondaryMap;
+#[doc(inline)]
+pub use crate::unmanaged::UnmanagedDenseMap;
 #[doc(inline)]
 pub use crate::weights::Weights;
 

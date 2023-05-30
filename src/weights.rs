@@ -6,6 +6,7 @@
 //! is intended to be used alongside [`PortGraph`].
 //!
 //! [`PortGraph`]: crate::portgraph::PortGraph
+//! [`SecondaryMap`]: crate::SecondaryMap
 //!
 //! # Example
 //!
@@ -46,17 +47,17 @@ use std::ops::{Index, IndexMut};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use crate::{NodeIndex, PortIndex, SecondaryMap};
+use crate::{NodeIndex, PortIndex, UnmanagedDenseMap};
 
 /// Graph component that encodes node and port weights.
-/// Based on two [`SecondaryMap`] containers.
+/// Based on two [`UnmanagedDenseMap`] containers.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct Weights<N, P> {
     /// Node weights.
-    pub nodes: SecondaryMap<NodeIndex, N>,
+    pub nodes: UnmanagedDenseMap<NodeIndex, N>,
     /// Port weights.
-    pub ports: SecondaryMap<PortIndex, P>,
+    pub ports: UnmanagedDenseMap<PortIndex, P>,
 }
 
 impl<N, P> Weights<N, P>
@@ -70,8 +71,8 @@ where
     #[inline]
     pub fn new() -> Self {
         Self {
-            nodes: SecondaryMap::new(),
-            ports: SecondaryMap::new(),
+            nodes: UnmanagedDenseMap::new(),
+            ports: UnmanagedDenseMap::new(),
         }
     }
 
@@ -79,8 +80,8 @@ where
     #[inline]
     pub fn with_capacity(nodes: usize, ports: usize) -> Self {
         Self {
-            nodes: SecondaryMap::with_capacity(nodes),
-            ports: SecondaryMap::with_capacity(ports),
+            nodes: UnmanagedDenseMap::with_capacity(nodes),
+            ports: UnmanagedDenseMap::with_capacity(ports),
         }
     }
 }
@@ -93,8 +94,8 @@ where
     #[inline]
     fn default() -> Self {
         Self {
-            nodes: SecondaryMap::new(),
-            ports: SecondaryMap::new(),
+            nodes: UnmanagedDenseMap::new(),
+            ports: UnmanagedDenseMap::new(),
         }
     }
 }

@@ -1,151 +1,52 @@
-//! A dense key-value map used to store graph weights.
-//!
-//! This map does not allocate any memory until a value is modified, returning
-//! references to the default value instead.
-//!
-//! This structure is intended to be used alongside [`PortGraph`], as it does
-//! not keep track of the valid keys.
-//!
-//! For simple cases where the nodes and ports have a single weight each, see
-//! [`Weights`].
-//!
-//! [`PortGraph`]: crate::portgraph::PortGraph
-//! [`Weights`]: crate::weights::Weights
-//!
-//! # Example
-//!
-//! ```
-//! # use portgraph::{PortGraph, NodeIndex, PortIndex};
-//! # use portgraph::secondary::SecondaryMap;
-//!
-//! let mut graph = PortGraph::new();
-//! let mut node_weights = SecondaryMap::<NodeIndex, usize>::new();
-//! let mut port_weights = SecondaryMap::<PortIndex, isize>::new();
-//!
-//! // The weights must be set manually.
-//! let node = graph.add_node(2, 2);
-//! let [in0, in1, ..] = graph.inputs(node).collect::<Vec<_>>()[..] else { unreachable!() };
-//! let [out0, out1, ..] = graph.outputs(node).collect::<Vec<_>>()[..] else { unreachable!() };
-//! node_weights[node] = 42;
-//! port_weights[in1] = 2;
-//! port_weights[out0] = -1;
-//! port_weights[out1] = -2;
-//!
-//! /// Unset weights return the default value.
-//! assert_eq!(port_weights[in0], 0);
-//!
-//! // Graph operations that modify the keys use callbacks to update the weights.
-//! graph.set_num_ports(node, 1, 3, |old, new| {if let Some(new) = new {port_weights.swap(old, new);}});
-//!
-//! // The map does not track item removals, but the user can shrink the map manually.
-//! graph.remove_node(node);
-//! node_weights.shrink_to(graph.node_count());
-//! port_weights.shrink_to(graph.port_count());
-//!
-//! ```
+//! TODO
 
-use std::{
-    marker::PhantomData,
-    mem::{self, MaybeUninit},
-    ops::{Index, IndexMut},
+use std::iter::FusedIterator;
+
+use bitvec::{
+    slice::{BitSlice, IterOnes},
+    vec::BitVec,
 };
 
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-
-/// A dense map from keys to values with default fallbacks.
+/// A map from keys to values that does not manage it's indices.
 ///
-#[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct SecondaryMap<K, V> {
-    data: Vec<V>,
-    phantom: PhantomData<K>,
-    default: V,
-}
-
-impl<K: PartialEq, V: PartialEq> PartialEq for SecondaryMap<K, V> {
-    fn eq(&self, other: &Self) -> bool {
-        if self.default != other.default {
-            return false;
-        }
-        let common_len = std::cmp::min(self.data.len(), other.data.len());
-        self.data[..common_len] == other.data[..common_len]
-            && self.data[common_len..].iter().all(|v| v == &self.default)
-            && other.data[common_len..].iter().all(|v| v == &other.default)
-    }
-}
-
-impl<K, V> SecondaryMap<K, V>
-where
-    K: Into<usize> + Copy,
-    V: Clone,
-{
-    /// Creates a new secondary map.
-    ///
-    /// This does not allocate any memory until a value is modified.
-    #[inline]
-    pub fn new() -> Self
+/// Querying a key that has not been set returns a default value.
+pub trait SecondaryMap<K, V> {
+    /// An iterator over the non-default entries of the secondary map.
+    type Iter<'a>: Iterator<Item = (K, &'a V)> + 'a
     where
-        V: Default,
-    {
-        Self::with_default(Default::default())
-    }
+        Self: 'a,
+        K: 'a,
+        V: 'a;
 
-    /// Creates a new secondary map, specifying the default element.
-    ///
-    /// This does not allocate any memory until a value is modified.
-    #[inline]
-    pub fn with_default(default: V) -> Self {
-        Self {
-            data: Vec::new(),
-            phantom: PhantomData,
-            default,
-        }
-    }
+    /// Creates a new secondary map.
+    fn new() -> Self;
 
     /// Creates a new secondary map with specified capacity.
-    #[inline]
-    pub fn with_capacity(capacity: usize) -> Self
-    where
-        V: Default,
-    {
-        Self::with_capacity_and_default(capacity, Default::default())
-    }
+    fn with_capacity(capacity: usize) -> Self;
 
-    /// Creates a new secondary map with specified capacity and default element.
-    #[inline]
-    pub fn with_capacity_and_default(capacity: usize, default: V) -> Self {
-        Self {
-            data: Vec::with_capacity(capacity),
-            phantom: PhantomData,
-            default,
-        }
-    }
+    /// Returns the default value for the secondary map.
+    /// Any key that has not been set will return this value.
+    fn default_value(&self) -> V;
 
     /// Increases the capacity of the secondary map to `capacity`.
-    ///
-    /// Does nothing when the capacity of the secondary map is already sufficient.
-    pub fn ensure_capacity(&mut self, capacity: usize) {
-        if capacity > self.data.capacity() {
-            self.data.reserve(capacity - self.data.capacity());
-            self.data.resize(capacity, self.default.clone());
-        }
-    }
+    fn ensure_capacity(&mut self, capacity: usize);
 
-    /// Reduces the capacity of the secondary map to `capacity`.
-    /// Stored values higher than `capacity` are dropped.
-    ///
-    /// Does nothing when the capacity of the secondary map is already lower.
-    pub fn shrink_to(&mut self, capacity: usize) {
-        self.data.truncate(capacity);
-        self.data.shrink_to_fit();
-    }
+    /// Resizes the secondary map to `new_len`.
+    fn resize(&mut self, new_len: usize);
 
     /// Returns the maximum index the secondary map can contain without allocating.
-    #[inline]
-    pub fn capacity(&self) -> usize {
-        self.data.capacity()
-    }
+    fn capacity(&self) -> usize;
+
+    /// Immutably borrows the value at a `key`.
+    ///
+    /// Returns a borrow of the default value when no value has been set for the `key`.
+    fn get(&self, key: K) -> &V;
+
+    /// Sets the value at a `key`.
+    fn set(&mut self, key: K, val: V);
+
+    /// Takes the value at a `key`, leaving `default()` behind.
+    fn take(&mut self, key: K) -> V;
 
     /// Remove key `old` and optionally move to key `new`.
     ///
@@ -154,256 +55,170 @@ where
     ///
     /// [`PortGraph::set_num_ports`]: crate::portgraph::PortGraph::set_num_ports
     /// [`PortGraph::compact_nodes`]: crate::portgraph::PortGraph::compact_nodes
-    pub fn rekey(&mut self, old: K, new: Option<K>)
-    where
-        V: Default,
-    {
-        if old.into() < self.data.len() {
-            let val = mem::take(self.get_mut(old));
-            let Some(new) = new else { return };
-            if new.into() >= self.data.len() {
-                self.resize_for_get_mut(new.into() + 1);
-            }
-            self.data[new.into()] = val;
-        } else {
-            let Some(new) = new else { return };
-            if new.into() < self.data.len() {
-                self.data[new.into()] = Default::default();
-            }
-        }
-    }
-
-    /// Immutably borrows the value at a `key`.
-    ///
-    /// Returns a borrow of the default value when no value has been set for the `key`.
-    #[inline]
-    pub fn get(&self, key: K) -> &V {
-        self.data.get(key.into()).unwrap_or(&self.default)
-    }
-
-    /// Mutably borrows the value at a `key`.
-    ///
-    /// When the value is not present, the secondary map is resized to accommodate it.
-    /// To avoid frequent resizing, use [`SecondaryMap::ensure_capacity`] to keep the
-    /// capacity of the secondary map in line with the size of the key space.
-    #[inline]
-    pub fn get_mut(&mut self, key: K) -> &mut V {
-        let index = key.into();
-
-        if index >= self.data.len() {
-            self.resize_for_get_mut(index + 1);
-        }
-
-        &mut self.data[index]
-    }
-
-    /// Mutably borrows the value at a `key`.
-    ///
-    /// Returns `None` when the `key` is beyond the capacity of the secondary map.
-    #[inline]
-    pub fn try_get_mut(&mut self, key: K) -> Option<&mut V> {
-        self.data.get_mut(key.into())
-    }
-
-    /// Mutably borrows the values of a disjoint list of keys.
-    ///
-    /// Returns `None` when two keys coincide.
-    pub fn get_disjoint_mut<const N: usize>(&mut self, keys: [K; N]) -> Option<[&mut V; N]>
-    where
-        K: Eq,
-    {
-        // Ensure that there is enough capacity
-        if let Some(max_index) = keys.iter().map(|i| (*i).into()).max() {
-            if max_index >= self.data.len() {
-                self.resize_for_get_mut(max_index + 1);
-            }
-        };
-
-        // Collect pointers for all indices
-        let mut ptrs: [MaybeUninit<*mut V>; N] = [MaybeUninit::uninit(); N];
-
-        // NOTE: This is a quadratic check. That is not a problem for very small
-        // `N` but it would be nice if it could be avoided. See
-        // https://docs.rs/slotmap/latest/slotmap/struct.SlotMap.html#method.get_disjoint_mut
-        // for a linear time implementation. Unfortunately their trick is not
-        // applicable here since we do not have the extra tagging bit available.
-        let data = self.data.as_mut_ptr();
-        for (i, key) in keys.iter().enumerate() {
-            if keys[(i + 1)..].iter().any(|other| key == other) {
-                return None;
-            }
-
-            let offset = (*key).into();
-            if offset >= self.data.len() {
-                return None;
-            }
-            // SAFETY: The offset is within the bounds of the underlying array.
-            let ptr: *mut V = unsafe { data.add(offset) };
-            ptrs[i].write(ptr);
-        }
-
-        // SAFETY: The pointers come from valid borrows into the underlying
-        // array and we have checked their disjointness.
-        let refs = unsafe { ptrs.map(|p| &mut *p.assume_init()) };
-        Some(refs)
-    }
-
-    /// Must be called with `len` greater than `self.data.len()`.
-    #[cold]
-    fn resize_for_get_mut(&mut self, len: usize) {
-        self.data.resize(len, self.default.clone());
-    }
+    fn rekey(&mut self, old: K, new: Option<K>);
 
     /// Swaps the values of two keys.
-    ///
-    /// Allocates more memory when necessary to fit the keys.
+    fn swap(&mut self, key0: K, key1: K);
+
+    /// Returns an iterator over the non-default entries of the secondary map.
+    fn iter<'a>(&'a self) -> Self::Iter<'a>
+    where
+        K: 'a,
+        V: 'a;
+}
+
+impl<K> SecondaryMap<K, bool> for BitVec
+where
+    K: Into<usize> + TryFrom<usize>,
+{
+    type Iter<'a> = BitVecIter<'a, K> where Self: 'a, K: 'a;
+
     #[inline]
-    pub fn swap(&mut self, key0: K, key1: K) {
-        let index0 = key0.into();
-        let index1 = key1.into();
-        let max_index = std::cmp::max(index0, index1);
+    fn new() -> Self {
+        BitVec::new()
+    }
 
-        if max_index >= self.data.len() {
-            self.resize_for_get_mut(max_index + 1);
+    #[inline]
+    fn with_capacity(capacity: usize) -> Self {
+        BitVec::with_capacity(capacity)
+    }
+
+    #[inline]
+    fn default_value(&self) -> bool {
+        false
+    }
+
+    #[inline]
+    fn ensure_capacity(&mut self, capacity: usize) {
+        BitVec::reserve(self, capacity.saturating_sub(self.capacity()));
+    }
+
+    #[inline]
+    fn resize(&mut self, new_len: usize) {
+        BitVec::resize(self, new_len, false)
+    }
+
+    #[inline]
+    fn capacity(&self) -> usize {
+        BitVec::capacity(self)
+    }
+
+    #[inline]
+    fn get(&self, key: K) -> &bool {
+        // We can't return a reference to the internal bitflags, so we have to
+        // create static bools.
+        if BitSlice::get(self, key.into()).map_or(false, |f| *f) {
+            &true
+        } else {
+            &false
         }
+    }
 
-        self.data.swap(index0, index1);
+    #[inline]
+    fn set(&mut self, key: K, val: bool) {
+        let key = key.into();
+        if key >= BitVec::len(self) {
+            if val {
+                BitVec::resize(self, key + 1, false);
+                BitSlice::set(self, key, true);
+            }
+        } else {
+            BitSlice::set(self, key, val);
+        }
+    }
+
+    #[inline]
+    fn take(&mut self, key: K) -> bool {
+        let key = key.into();
+        if key < BitVec::len(self) {
+            BitSlice::replace(self, key, false)
+        } else {
+            false
+        }
+    }
+
+    #[inline]
+    fn rekey(&mut self, old: K, new: Option<K>) {
+        let val = self.take(old);
+        if let Some(new) = new {
+            self.set(new, val);
+        }
+    }
+
+    #[inline]
+    fn swap(&mut self, key0: K, key1: K) {
+        let key0: usize = key0.into();
+        let key1: usize = key1.into();
+        let val0 = *self.get(key0);
+        let val1 = *self.get(key1);
+        if val0 != val1 {
+            self.set(key0, val1);
+            self.set(key1, val0);
+        }
+    }
+
+    #[inline]
+    fn iter<'a>(&'a self) -> Self::Iter<'a>
+    where
+        K: 'a,
+    {
+        BitVecIter {
+            iter: BitSlice::iter_ones(self),
+            phantom: std::marker::PhantomData,
+        }
     }
 }
 
-impl<K, V> Default for SecondaryMap<K, V>
+/// Iterator over non-default entries of a bit vector secondary map.
+#[derive(Debug, Clone, Default)]
+pub struct BitVecIter<'a, K> {
+    iter: IterOnes<'a, usize, bitvec::order::Lsb0>,
+    phantom: std::marker::PhantomData<K>,
+}
+
+impl<'a, K> Iterator for BitVecIter<'a, K>
 where
-    K: Into<usize> + Copy,
-    V: Clone + Default,
+    K: TryFrom<usize>,
 {
-    fn default() -> Self {
-        Self::new()
+    type Item = (K, &'a bool);
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter
+            .next()
+            .map(|i| (i.try_into().ok().unwrap(), &true))
+    }
+
+    #[inline]
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        self.iter
+            .nth(n)
+            .map(|i| (i.try_into().ok().unwrap(), &true))
+    }
+
+    #[inline]
+    fn count(self) -> usize {
+        self.iter.count()
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.iter.size_hint()
     }
 }
 
-impl<K, V> Index<K> for SecondaryMap<K, V>
+impl<'a, K> DoubleEndedIterator for BitVecIter<'a, K>
 where
-    K: Into<usize> + Copy,
-    V: Clone,
+    K: TryFrom<usize>,
 {
-    type Output = V;
-
-    fn index(&self, key: K) -> &Self::Output {
-        self.get(key)
+    #[inline]
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.iter
+            .next_back()
+            .map(|i| (i.try_into().ok().unwrap(), &true))
     }
 }
 
-impl<K, V> IndexMut<K> for SecondaryMap<K, V>
-where
-    K: Into<usize> + Copy,
-    V: Clone,
-{
-    fn index_mut(&mut self, key: K) -> &mut Self::Output {
-        self.get_mut(key)
-    }
-}
+impl<'a, K> FusedIterator for BitVecIter<'a, K> where K: TryFrom<usize> {}
 
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn test_capacity() {
-        let mut map: SecondaryMap<usize, usize> = SecondaryMap::new();
-
-        assert_eq!(map.capacity(), 0);
-
-        map.ensure_capacity(10);
-        assert!(map.capacity() >= 10);
-
-        let prev_capacity = map.capacity();
-        map.ensure_capacity(5);
-        assert_eq!(map.capacity(), prev_capacity);
-
-        map.ensure_capacity(15);
-        assert!(map.capacity() >= 15);
-
-        map.shrink_to(5);
-        assert!(map.capacity() >= 5);
-
-        let prev_capacity = map.capacity();
-        map.shrink_to(10);
-        assert_eq!(map.capacity(), prev_capacity);
-    }
-
-    #[test]
-    fn test_get_mut() {
-        let mut map: SecondaryMap<usize, i32> = SecondaryMap::with_default(4);
-
-        let value = map.get_mut(0);
-        assert_eq!(value, &4);
-        *value = 1;
-        assert_eq!(map.get_mut(0), &1);
-
-        let value = map.try_get_mut(10);
-        assert_eq!(value, None);
-
-        let value = map.get_mut(10);
-        assert_eq!(value, &mut 4);
-        *value = 2;
-        assert_eq!(map.try_get_mut(10), Some(&mut 2));
-    }
-
-    #[test]
-    fn test_get_disjoint_mut() {
-        let mut map: SecondaryMap<usize, i32> = SecondaryMap::new();
-
-        let values = map.get_disjoint_mut([0, 1, 2]);
-        assert_eq!(values, Some([&mut 0, &mut 0, &mut 0]));
-        let values = values.unwrap();
-        *values[0] = 1;
-        *values[1] = 2;
-        *values[2] = 3;
-        assert_eq!(
-            map.get_disjoint_mut([0, 1, 2]),
-            Some([&mut 1, &mut 2, &mut 3])
-        );
-
-        let values = map.get_disjoint_mut([0, 1, 0]);
-        assert_eq!(values, None);
-    }
-
-    #[test]
-    fn test_swap() {
-        let mut map: SecondaryMap<usize, i32> = SecondaryMap::new();
-        map[0] = 0x10;
-        map[1] = 0x11;
-        map[3] = 0x13;
-
-        map.swap(0, 1);
-        assert_eq!(map[0], 0x11);
-        assert_eq!(map[1], 0x10);
-
-        map.swap(10, 3);
-        assert_eq!(map[3], 0);
-        assert_eq!(map[10], 0x13);
-    }
-
-    #[cfg(feature = "serde")]
-    #[test]
-    fn secondary_serialize() {
-        let mut map: SecondaryMap<usize, i32> = SecondaryMap::new();
-        assert_eq!(crate::portgraph::test::ser_roundtrip(&map), map);
-        map[0] = 0x10;
-        map[1] = 0x11;
-        map[3] = 0x13;
-        assert_eq!(crate::portgraph::test::ser_roundtrip(&map), map);
-    }
-
-    #[test]
-    fn eq_ignores_defaults() {
-        let mut a = SecondaryMap::<usize, usize>::new();
-        let mut b = SecondaryMap::<usize, usize>::new();
-        a[4] = 0;
-        assert_eq!(a, b);
-        b[42] = 0;
-        assert_eq!(a, b);
-        b[40] = 24;
-        assert_ne!(a, b);
-    }
-}
+// TODO: Implementations for HashSet, BTreeSet, HashMap, BTreeMap.

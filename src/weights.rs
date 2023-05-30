@@ -50,7 +50,7 @@ use serde::{Deserialize, Serialize};
 use crate::{NodeIndex, PortIndex, UnmanagedDenseMap};
 
 /// Graph component that encodes node and port weights.
-/// Based on two [`UnmanagedMap`] containers.
+/// Based on two [`UnmanagedDenseMap`] containers.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct Weights<N, P> {

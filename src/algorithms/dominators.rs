@@ -7,7 +7,7 @@ use std::cmp::Ordering;
 /// by its parent.
 ///
 /// The `Map` type parameter specifies the type of the secondary map that is used
-/// to store the dominator tree data. The default is [`UnmanagedMap`].
+/// to store the dominator tree data. The default is [`UnmanagedDenseMap`].
 ///
 /// # Example
 ///
@@ -57,7 +57,7 @@ where
 /// when computing the dominator tree.
 ///
 /// The `Map` type parameter specifies the type of the secondary map that is
-/// used to store the dominator tree data. The default is [`UnmanagedMap`]. For
+/// used to store the dominator tree data. The default is [`UnmanagedDenseMap`]. For
 /// dominator trees over sparse node indices, `HashMap` or `BTreeMap` may be
 /// more efficient.
 ///

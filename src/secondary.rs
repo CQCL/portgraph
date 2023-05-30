@@ -31,10 +31,6 @@ pub trait SecondaryMap<K, V> {
     /// Increases the capacity of the secondary map to `capacity`.
     fn ensure_capacity(&mut self, capacity: usize);
 
-    /// Reduces the capacity of the secondary map to `capacity`.
-    /// Stored values higher than `capacity` may be dropped.
-    fn shrink_to(&mut self, capacity: usize);
-
     /// Resizes the secondary map to `new_len`.
     fn resize(&mut self, new_len: usize);
 
@@ -95,11 +91,6 @@ where
     #[inline]
     fn ensure_capacity(&mut self, capacity: usize) {
         BitVec::reserve(self, capacity.saturating_sub(self.capacity()));
-    }
-
-    #[inline]
-    fn shrink_to(&mut self, capacity: usize) {
-        BitVec::resize(self, capacity, false)
     }
 
     #[inline]

@@ -339,11 +339,6 @@ where
     }
 
     #[inline]
-    fn shrink_to(&mut self, capacity: usize) {
-        UnmanagedDenseMap::shrink_to(self, capacity)
-    }
-
-    #[inline]
     fn resize(&mut self, new_len: usize) {
         match self.data.len().cmp(&new_len) {
             Ordering::Less => self.ensure_capacity(new_len),

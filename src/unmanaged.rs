@@ -16,11 +16,11 @@
 //!
 //! ```
 //! # use portgraph::{PortGraph, NodeIndex, PortIndex};
-//! # use portgraph::unmanaged::UnmanagedMap;
+//! # use portgraph::unmanaged::UnmanagedDenseMap;
 //!
 //! let mut graph = PortGraph::new();
-//! let mut node_weights = UnmanagedMap::<NodeIndex, usize>::new();
-//! let mut port_weights = UnmanagedMap::<PortIndex, isize>::new();
+//! let mut node_weights = UnmanagedDenseMap::<NodeIndex, usize>::new();
+//! let mut port_weights = UnmanagedDenseMap::<PortIndex, isize>::new();
 //!
 //! // The weights must be set manually.
 //! let node = graph.add_node(2, 2);
@@ -62,13 +62,13 @@ use crate::SecondaryMap;
 ///
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct UnmanagedMap<K, V> {
+pub struct UnmanagedDenseMap<K, V> {
     data: Vec<V>,
     phantom: PhantomData<K>,
     default: V,
 }
 
-impl<K: PartialEq, V: PartialEq> PartialEq for UnmanagedMap<K, V> {
+impl<K: PartialEq, V: PartialEq> PartialEq for UnmanagedDenseMap<K, V> {
     fn eq(&self, other: &Self) -> bool {
         if self.default != other.default {
             return false;
@@ -80,7 +80,7 @@ impl<K: PartialEq, V: PartialEq> PartialEq for UnmanagedMap<K, V> {
     }
 }
 
-impl<K, V> UnmanagedMap<K, V>
+impl<K, V> UnmanagedDenseMap<K, V>
 where
     K: Into<usize> + Copy,
     V: Clone,
@@ -276,7 +276,7 @@ where
     }
 }
 
-impl<K, V> Default for UnmanagedMap<K, V>
+impl<K, V> Default for UnmanagedDenseMap<K, V>
 where
     K: Into<usize> + Copy,
     V: Clone + Default,
@@ -286,7 +286,7 @@ where
     }
 }
 
-impl<K, V> Index<K> for UnmanagedMap<K, V>
+impl<K, V> Index<K> for UnmanagedDenseMap<K, V>
 where
     K: Into<usize> + Copy,
     V: Clone,
@@ -298,7 +298,7 @@ where
     }
 }
 
-impl<K, V> IndexMut<K> for UnmanagedMap<K, V>
+impl<K, V> IndexMut<K> for UnmanagedDenseMap<K, V>
 where
     K: Into<usize> + Copy,
     V: Clone,
@@ -308,7 +308,7 @@ where
     }
 }
 
-impl<K, V> SecondaryMap<K, V> for UnmanagedMap<K, V>
+impl<K, V> SecondaryMap<K, V> for UnmanagedDenseMap<K, V>
 where
     K: Into<usize> + TryFrom<usize> + Copy,
     V: Clone + Default,
@@ -335,12 +335,12 @@ where
 
     #[inline]
     fn ensure_capacity(&mut self, capacity: usize) {
-        UnmanagedMap::ensure_capacity(self, capacity)
+        UnmanagedDenseMap::ensure_capacity(self, capacity)
     }
 
     #[inline]
     fn shrink_to(&mut self, capacity: usize) {
-        UnmanagedMap::shrink_to(self, capacity)
+        UnmanagedDenseMap::shrink_to(self, capacity)
     }
 
     #[inline]
@@ -354,12 +354,12 @@ where
 
     #[inline]
     fn capacity(&self) -> usize {
-        UnmanagedMap::capacity(self)
+        UnmanagedDenseMap::capacity(self)
     }
 
     #[inline]
     fn get(&self, key: K) -> &V {
-        UnmanagedMap::get(self, key)
+        UnmanagedDenseMap::get(self, key)
     }
 
     /// Sets the value at a `key`.
@@ -380,12 +380,12 @@ where
 
     #[inline]
     fn rekey(&mut self, old: K, new: Option<K>) {
-        UnmanagedMap::rekey(self, old, new)
+        UnmanagedDenseMap::rekey(self, old, new)
     }
 
     #[inline]
     fn swap(&mut self, key0: K, key1: K) {
-        UnmanagedMap::swap(self, key0, key1)
+        UnmanagedDenseMap::swap(self, key0, key1)
     }
 
     fn iter<'a>(&'a self) -> Self::Iter<'a>
@@ -458,7 +458,7 @@ mod test {
 
     #[test]
     fn test_capacity() {
-        let mut map: UnmanagedMap<usize, usize> = UnmanagedMap::new();
+        let mut map: UnmanagedDenseMap<usize, usize> = UnmanagedDenseMap::new();
 
         assert_eq!(map.capacity(), 0);
 
@@ -482,7 +482,7 @@ mod test {
 
     #[test]
     fn test_get_mut() {
-        let mut map: UnmanagedMap<usize, i32> = UnmanagedMap::with_default(4);
+        let mut map: UnmanagedDenseMap<usize, i32> = UnmanagedDenseMap::with_default(4);
 
         let value = map.get_mut(0);
         assert_eq!(value, &4);
@@ -500,7 +500,7 @@ mod test {
 
     #[test]
     fn test_get_disjoint_mut() {
-        let mut map: UnmanagedMap<usize, i32> = UnmanagedMap::new();
+        let mut map: UnmanagedDenseMap<usize, i32> = UnmanagedDenseMap::new();
 
         let values = map.get_disjoint_mut([0, 1, 2]);
         assert_eq!(values, Some([&mut 0, &mut 0, &mut 0]));
@@ -519,7 +519,7 @@ mod test {
 
     #[test]
     fn test_swap() {
-        let mut map: UnmanagedMap<usize, i32> = UnmanagedMap::new();
+        let mut map: UnmanagedDenseMap<usize, i32> = UnmanagedDenseMap::new();
         map[0] = 0x10;
         map[1] = 0x11;
         map[3] = 0x13;
@@ -536,7 +536,7 @@ mod test {
     #[cfg(feature = "serde")]
     #[test]
     fn secondary_serialize() {
-        let mut map: UnmanagedMap<usize, i32> = UnmanagedMap::new();
+        let mut map: UnmanagedDenseMap<usize, i32> = UnmanagedDenseMap::new();
         assert_eq!(crate::portgraph::test::ser_roundtrip(&map), map);
         map[0] = 0x10;
         map[1] = 0x11;
@@ -546,8 +546,8 @@ mod test {
 
     #[test]
     fn eq_ignores_defaults() {
-        let mut a = UnmanagedMap::<usize, usize>::new();
-        let mut b = UnmanagedMap::<usize, usize>::new();
+        let mut a = UnmanagedDenseMap::<usize, usize>::new();
+        let mut b = UnmanagedDenseMap::<usize, usize>::new();
         a[4] = 0;
         assert_eq!(a, b);
         b[42] = 0;

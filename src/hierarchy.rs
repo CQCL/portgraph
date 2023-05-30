@@ -53,7 +53,7 @@ use std::iter::FusedIterator;
 use std::mem::{replace, take};
 use thiserror::Error;
 
-use crate::unmanaged::UnmanagedMap;
+use crate::unmanaged::UnmanagedDenseMap;
 use crate::NodeIndex;
 
 #[cfg(feature = "serde")]
@@ -68,21 +68,21 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct Hierarchy {
-    data: UnmanagedMap<NodeIndex, NodeData>,
+    data: UnmanagedDenseMap<NodeIndex, NodeData>,
 }
 
 impl Hierarchy {
     /// Creates a new empty layout.
     pub fn new() -> Self {
         Self {
-            data: UnmanagedMap::new(),
+            data: UnmanagedDenseMap::new(),
         }
     }
 
     /// Creates a new empty layout with the given capacity.
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            data: UnmanagedMap::with_capacity(capacity),
+            data: UnmanagedDenseMap::with_capacity(capacity),
         }
     }
 }

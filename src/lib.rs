@@ -84,7 +84,7 @@ pub use crate::portgraph::{LinkError, PortGraph};
 #[doc(inline)]
 pub use crate::secondary::SecondaryMap;
 #[doc(inline)]
-pub use crate::unmanaged::UnmanagedMap;
+pub use crate::unmanaged::UnmanagedDenseMap;
 #[doc(inline)]
 pub use crate::weights::Weights;
 

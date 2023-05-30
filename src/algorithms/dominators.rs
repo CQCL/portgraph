@@ -1,5 +1,5 @@
 use super::postorder_filtered;
-use crate::unmanaged::UnmanagedMap;
+use crate::unmanaged::UnmanagedDenseMap;
 use crate::{Direction, NodeIndex, PortGraph, PortIndex, SecondaryMap};
 use std::cmp::Ordering;
 
@@ -115,7 +115,7 @@ where
 /// A dominator tree for a [`PortGraph`].
 ///
 /// See [`dominators`] for more information.
-pub struct DominatorTree<Map = UnmanagedMap<NodeIndex, Option<NodeIndex>>> {
+pub struct DominatorTree<Map = UnmanagedDenseMap<NodeIndex, Option<NodeIndex>>> {
     root: NodeIndex,
     /// The immediate dominator of each node.
     idom: Map,
@@ -134,7 +134,7 @@ where
     ) -> Self {
         // We traverse the graph in post order starting at the `entry` node.
         // We associate each node that we encounter with its index within the traversal.
-        let mut node_to_index = UnmanagedMap::with_capacity(graph.node_capacity());
+        let mut node_to_index = UnmanagedDenseMap::with_capacity(graph.node_capacity());
         let mut index_to_node = Vec::with_capacity(graph.node_capacity());
 
         for (index, node) in postorder_filtered(

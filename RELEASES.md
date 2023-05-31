@@ -1,3 +1,22 @@
+## v0.3.0 (2023-05-31)
+
+### Breaking changes
+
+- Renamed `SecondaryMap` to `UnmanagedDenseMap` ([#52][])
+
+### New features
+
+- Added a `SecondaryMap` generic trait, implemented by `UnmanagedDenseMap` and `BitVec` ([#52][])
+- Added a generic `Map : SecondaryMap` type parameter to the dominators and toposort algorithms,
+  allowing more efficient executions on partially explored graphs ([#52][])
+
+### Fixes
+
+- Fix incorrect port count update when resizing ports in-place ([#53][])
+
+  [#51]: https://github.com/CQCL/portgraph/issues/51
+  [#53]: https://github.com/CQCL/portgraph/issues/53
+
 ## v0.2.4 (2023-05-25)
 
 - Add `as_range` methods to `NodePorts` and `NodePortOffsets` ([#49][], [#50][])

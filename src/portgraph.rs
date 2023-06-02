@@ -829,7 +829,7 @@ impl PortGraph {
         outgoing: usize,
         mut rekey: F,
     ) where
-        F: FnMut(PortIndex, Option<PortIndex>),
+        F: FnMut(PortIndex, PortOperation),
     {
         assert!(
             incoming <= NodeMeta::MAX_INCOMING,
@@ -864,8 +864,8 @@ impl PortGraph {
             .skip(incoming)
             .chain(self.outputs(node).skip(outgoing))
         {
-            self.unlink_port(port);
-            rekey(port, None);
+            let old_link = self.unlink_port(port);
+            rekey(port, PortOperation::Removed { old_link });
         }
         // Allocate a new slab of ports. If `new_total` is 0, we just free the
         // old slab.
@@ -884,7 +884,8 @@ impl PortGraph {
                 self.port_link[new] = self.port_link[old].take();
                 self.port_meta[new] = self.port_meta[old];
 
-                rekey(PortIndex::new(old), Some(PortIndex::new(new)));
+                let new_index = PortIndex::new(new);
+                rekey(PortIndex::new(old), PortOperation::Moved { new_index });
             }
         }
 
@@ -1047,7 +1048,7 @@ impl PortGraph {
         outgoing: usize,
         mut rekey: F,
     ) where
-        F: FnMut(PortIndex, Option<PortIndex>),
+        F: FnMut(PortIndex, PortOperation),
     {
         let node_meta = self.node_meta_valid(node).expect("Node must be valid");
         let new_meta = NodeMeta::new(
@@ -1063,18 +1064,18 @@ impl PortGraph {
             .skip(incoming)
             .chain(self.outputs(node).skip(outgoing))
         {
-            self.unlink_port(port);
-            rekey(port, None);
+            let old_link = self.unlink_port(port);
+            rekey(port, PortOperation::Removed { old_link });
         }
 
         let move_port = |(old, new)| {
-            let old_port = PortIndex::new(old);
-            let new_port = PortIndex::new(new);
+            let old_index = PortIndex::new(old);
+            let new_index = PortIndex::new(new);
             self.port_link[new] = self.port_link[old];
             self.port_meta[new] = self.port_meta[old];
-            rekey(old_port, Some(new_port));
+            rekey(old_index, PortOperation::Moved { new_index });
             if let Some(link) = self.port_link[new] {
-                self.port_link[link.index()] = Some(new_port);
+                self.port_link[link.index()] = Some(new_index);
             }
         };
 
@@ -1393,6 +1394,31 @@ pub enum LinkError {
     /// The port cannot be linked in this direction.
     #[error("port {port:?} had an unexpected direction {dir:?} during a link operation")]
     UnexpectedDirection { port: PortIndex, dir: Direction },
+}
+
+/// Operations applied to a port, used by the callback in [`PortGraph::set_num_ports`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PortOperation {
+    /// The port was moved to a new position.
+    Moved {
+        /// New index for the port
+        new_index: PortIndex,
+    },
+    /// The port was removed.
+    Removed {
+        /// The old link from the port, if any.
+        old_link: Option<PortIndex>,
+    },
+}
+
+impl PortOperation {
+    /// Return the new index of the port, if it was moved
+    pub fn new_index(&self) -> Option<PortIndex> {
+        match self {
+            PortOperation::Moved { new_index } => Some(*new_index),
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]

@@ -151,6 +151,12 @@ impl<'a> Iterator for Ports<'a> {
     }
 }
 
+impl<'a> ExactSizeIterator for Ports<'a> {
+    fn len(&self) -> usize {
+        self.len
+    }
+}
+
 impl<'a> DoubleEndedIterator for Ports<'a> {
     fn next_back(&mut self) -> Option<Self::Item> {
         while let Some((index, port_entry)) = self.iter.next_back() {

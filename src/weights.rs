@@ -29,10 +29,8 @@
 //! assert_eq!(weights[in0], 0);
 //!
 //! // Graph operations that modify the keys have callbacks to update the weights.
-//! graph.set_num_ports(node, 1, 3, |old, new| {
-//!     if let Some(new) = new {
-//!         weights.ports.swap(old, new);
-//!     }
+//! graph.set_num_ports(node, 1, 3, |old, op| {
+//!     op.new_index().map(|new| weights.ports.swap(old, new));
 //! });
 //!
 //! // The map does not track item removals, but the user can shrink it manually.

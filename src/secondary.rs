@@ -46,7 +46,14 @@ pub trait SecondaryMap<K, V> {
     fn set(&mut self, key: K, val: V);
 
     /// Takes the value at a `key`, leaving `default()` behind.
+    #[must_use = "Use `SecondaryMap::remove` if the stored value is not needed."]
     fn take(&mut self, key: K) -> V;
+
+    /// Removes the value at a `key`, leaving `default()` behind.
+    #[inline]
+    fn remove(&mut self, key: K) {
+        let _ = self.take(key);
+    }
 
     /// Remove key `old` and optionally move to key `new`.
     ///

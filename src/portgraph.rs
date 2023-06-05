@@ -284,7 +284,7 @@ impl PortGraph {
         self.port_link[ports.index()] = replace(ports_free, Some(ports));
     }
 
-    /// Link an output port to an input port.
+    /// Link an output and an input port.
     ///
     /// # Example
     ///
@@ -303,10 +303,9 @@ impl PortGraph {
     ///
     /// # Errors
     ///
-    ///  - When `port_from` or `port_to` does not exist.
-    ///  - When `port_from` is not an output port.
-    ///  - When `port_to` is not an input port.
-    ///  - When `port_from` or `port_to` is already linked.
+    ///  - If `port_from` or `port_to` does not exist.
+    ///  - If `port_from` and `port_to` have the same direction.
+    ///  - If `port_from` or `port_to` is already linked.
     pub fn link_ports(
         &mut self,
         port_from: PortIndex,
@@ -320,15 +319,12 @@ impl PortGraph {
             return Err(LinkError::UnknownPort{port: port_from});
         };
 
-        if meta_from.direction() != Direction::Outgoing {
-            return Err(LinkError::UnexpectedDirection {
-                port: port_from,
-                dir: meta_from.direction(),
-            });
-        } else if meta_to.direction() != Direction::Incoming {
-            return Err(LinkError::UnexpectedDirection {
-                port: port_to,
-                dir: meta_to.direction(),
+        if meta_from.direction() == meta_to.direction() {
+            return Err(LinkError::IncompatibleDirections {
+                port_from,
+                port_to,
+                dir_from: meta_from.direction(),
+                dir_to: meta_to.direction(),
             });
         }
 
@@ -419,23 +415,53 @@ impl PortGraph {
     }
 
     /// Links two nodes at an input and output port offsets.
+    ///
+    /// # Errors
+    ///
+    ///  - If the ports and nodes do not exist.
+    ///  - If the ports have the same direction.
+    ///  - If the ports are already linked.
     pub fn link_nodes(
         &mut self,
         from: NodeIndex,
-        from_offset: usize,
+        from_output: usize,
         to: NodeIndex,
-        to_offset: usize,
+        to_input: usize,
+    ) -> Result<(PortIndex, PortIndex), LinkError> {
+        self.link_offsets(
+            from,
+            PortOffset::new_outgoing(from_output),
+            to,
+            PortOffset::new_incoming(to_input),
+        )
+    }
+
+    /// Links two nodes at an input and output port offsets.
+    ///
+    /// # Errors
+    ///
+    ///  - If the ports and nodes do not exist.
+    ///  - If the ports have the same direction.
+    ///  - If the ports are already linked.
+    pub fn link_offsets(
+        &mut self,
+        from: NodeIndex,
+        from_offset: PortOffset,
+        to: NodeIndex,
+        to_offset: PortOffset,
     ) -> Result<(PortIndex, PortIndex), LinkError> {
         let from_port = self
-            .output(from, from_offset)
+            .port_index(from, from_offset)
             .ok_or(LinkError::UnknownOffset {
                 node: from,
-                offset: PortOffset::new_outgoing(from_offset),
+                offset: from_offset,
             })?;
-        let to_port = self.input(to, to_offset).ok_or(LinkError::UnknownOffset {
-            node: to,
-            offset: PortOffset::new_incoming(to_offset),
-        })?;
+        let to_port = self
+            .port_index(to, to_offset)
+            .ok_or(LinkError::UnknownOffset {
+                node: to,
+                offset: to_offset,
+            })?;
         self.link_ports(from_port, to_port)?;
         Ok((from_port, to_port))
     }
@@ -1391,9 +1417,14 @@ pub enum LinkError {
     /// The port offset is invalid.
     #[error("unknown port offset {} in node {node:?} in direction {:?}", offset.index(), offset.direction())]
     UnknownOffset { node: NodeIndex, offset: PortOffset },
-    /// The port cannot be linked in this direction.
-    #[error("port {port:?} had an unexpected direction {dir:?} during a link operation")]
-    UnexpectedDirection { port: PortIndex, dir: Direction },
+    /// The ports have the same direction so they cannot be linked.
+    #[error("Cannot link ports with direction {dir_from:?} and {dir_to:?}. In ports {port_from:?} and {port_to:?}")]
+    IncompatibleDirections {
+        port_from: PortIndex,
+        port_to: PortIndex,
+        dir_from: Direction,
+        dir_to: Direction,
+    },
 }
 
 /// Operations applied to a port, used by the callback in [`PortGraph::set_num_ports`].

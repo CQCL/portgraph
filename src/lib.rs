@@ -162,6 +162,17 @@ impl NodeIndex {
     pub fn index(self) -> usize {
         self.into()
     }
+
+    /// Constant implementation of TryFrom<usize>
+    #[inline]
+    const fn try_from_usize(index: usize) -> Result<Self, IndexError> {
+        if index > Self::MAX {
+            Err(IndexError { index })
+        } else {
+            // SAFETY: The value cannot be zero
+            Ok(Self(unsafe { NonZeroU32::new_unchecked(1 + index as u32) }))
+        }
+    }
 }
 
 impl From<NodeIndex> for usize {
@@ -176,12 +187,7 @@ impl TryFrom<usize> for NodeIndex {
 
     #[inline]
     fn try_from(index: usize) -> Result<Self, Self::Error> {
-        if index > Self::MAX {
-            Err(IndexError { index })
-        } else {
-            // SAFETY: The value cannot be zero
-            Ok(Self(unsafe { NonZeroU32::new_unchecked(1 + index as u32) }))
-        }
+        Self::try_from_usize(index)
     }
 }
 
@@ -191,6 +197,15 @@ impl std::fmt::Debug for NodeIndex {
         write!(f, "NodeIndex({})", self.index())
     }
 }
+
+impl_static_default!(
+    NodeIndex,
+    match NodeIndex::try_from_usize(0) {
+        Ok(index) => index,
+        // Zero is always a valid index
+        Err(_) => unreachable!(),
+    }
+);
 
 /// Index of a port within a `PortGraph`.
 ///
@@ -221,6 +236,17 @@ impl PortIndex {
     pub fn index(self) -> usize {
         self.into()
     }
+
+    /// Constant implementation of TryFrom<usize>
+    #[inline]
+    const fn try_from_usize(index: usize) -> Result<Self, IndexError> {
+        if index > Self::MAX {
+            Err(IndexError { index })
+        } else {
+            // SAFETY: The value cannot be zero
+            Ok(Self(unsafe { NonZeroU32::new_unchecked(1 + index as u32) }))
+        }
+    }
 }
 
 impl From<PortIndex> for usize {
@@ -235,12 +261,7 @@ impl TryFrom<usize> for PortIndex {
 
     #[inline]
     fn try_from(index: usize) -> Result<Self, Self::Error> {
-        if index > Self::MAX {
-            Err(IndexError { index })
-        } else {
-            // SAFETY: The value cannot be zero
-            Ok(Self(unsafe { NonZeroU32::new_unchecked(1 + index as u32) }))
-        }
+        Self::try_from_usize(index)
     }
 }
 
@@ -256,6 +277,15 @@ impl Default for PortIndex {
         PortIndex::new(0)
     }
 }
+
+impl_static_default!(
+    PortIndex,
+    match PortIndex::try_from_usize(0) {
+        Ok(index) => index,
+        // Zero is always a valid index
+        Err(_) => unreachable!(),
+    }
+);
 
 /// Error indicating a `NodeIndex`, `PortIndex`, or `Direction` is too large.
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
@@ -281,7 +311,7 @@ pub enum PortOffset {
 impl PortOffset {
     /// Creates a new port offset.
     #[inline(always)]
-    pub fn new(direction: Direction, offset: usize) -> Self {
+    pub const fn new(direction: Direction, offset: usize) -> Self {
         match direction {
             Direction::Incoming => Self::new_incoming(offset),
             Direction::Outgoing => Self::new_outgoing(offset),
@@ -290,7 +320,7 @@ impl PortOffset {
 
     /// Creates a new incoming port offset.
     #[inline(always)]
-    pub fn new_incoming(offset: usize) -> Self {
+    pub const fn new_incoming(offset: usize) -> Self {
         assert!(offset < u16::MAX as usize);
         // SAFETY: The value cannot be zero
         let offset = unsafe { NonZeroU16::new_unchecked(offset.saturating_add(1) as u16) };
@@ -299,14 +329,14 @@ impl PortOffset {
 
     /// Creates a new outgoing port offset.
     #[inline(always)]
-    pub fn new_outgoing(offset: usize) -> Self {
+    pub const fn new_outgoing(offset: usize) -> Self {
         assert!(offset <= u16::MAX as usize);
         PortOffset::Outgoing(offset as u16)
     }
 
     /// Returns the direction of the port.
     #[inline(always)]
-    pub fn direction(self) -> Direction {
+    pub const fn direction(self) -> Direction {
         match self {
             PortOffset::Incoming(_) => Direction::Incoming,
             PortOffset::Outgoing(_) => Direction::Outgoing,
@@ -315,7 +345,7 @@ impl PortOffset {
 
     /// Returns the offset of the port.
     #[inline(always)]
-    pub fn index(self) -> usize {
+    pub const fn index(self) -> usize {
         match self {
             PortOffset::Incoming(offset) => (offset.get() - 1) as usize,
             PortOffset::Outgoing(offset) => offset as usize,
@@ -337,3 +367,5 @@ impl std::fmt::Debug for PortOffset {
         }
     }
 }
+
+impl_static_default!(PortOffset, PortOffset::new_outgoing(0));

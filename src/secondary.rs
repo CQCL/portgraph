@@ -1,6 +1,6 @@
 //! Trait definition for secondary maps from keys to values with default elements.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::{hash::Hash, iter::FusedIterator};
 
 use bitvec::{
@@ -333,3 +333,125 @@ where
         self.iter.size_hint()
     }
 }
+
+impl<K, V> SecondaryMap<K, V> for HashMap<K, V>
+where
+    K: Hash + Eq + Clone,
+    V: StaticDefault + Eq + Clone,
+{
+    type Iter<'a> = HashMapIter<'a, K, V> where Self: 'a, K: 'a;
+
+    #[inline]
+    fn new() -> Self {
+        HashMap::new()
+    }
+
+    #[inline]
+    fn with_capacity(capacity: usize) -> Self {
+        HashMap::with_capacity(capacity)
+    }
+
+    #[inline]
+    fn default_value(&self) -> V {
+        V::default_ref().clone()
+    }
+
+    #[inline]
+    fn ensure_capacity(&mut self, capacity: usize) {
+        HashMap::reserve(self, capacity.saturating_sub(self.capacity()));
+    }
+
+    #[inline]
+    fn resize(&mut self, _new_len: usize) {}
+
+    #[inline]
+    fn capacity(&self) -> usize {
+        HashMap::capacity(self)
+    }
+
+    #[inline]
+    fn get(&self, key: K) -> &V {
+        HashMap::get(self, &key).unwrap_or(V::default_ref())
+    }
+
+    #[inline]
+    fn set(&mut self, key: K, val: V) {
+        match &val == V::default_ref() {
+            true => HashMap::insert(self, key, val),
+            false => HashMap::remove(self, &key),
+        };
+    }
+
+    #[inline]
+    fn take(&mut self, key: K) -> V {
+        HashMap::remove(self, &key).unwrap_or(self.default_value())
+    }
+
+    #[inline]
+    fn iter<'a>(&'a self) -> Self::Iter<'a>
+    where
+        K: 'a,
+    {
+        HashMapIter {
+            iter: HashMap::iter(self),
+        }
+    }
+}
+
+/// Iterator over non-default entries of a bit vector secondary map.
+#[derive(Debug, Clone)]
+pub struct HashMapIter<'a, K, V> {
+    iter: std::collections::hash_map::Iter<'a, K, V>,
+}
+
+impl<'a, K, V> Iterator for HashMapIter<'a, K, V>
+where
+    K: Clone,
+{
+    type Item = (K, &'a V);
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().map(|(k, v)| (k.clone(), v))
+    }
+
+    #[inline]
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        self.iter.nth(n).map(|(k, v)| (k.clone(), v))
+    }
+
+    #[inline]
+    fn count(self) -> usize {
+        self.iter.count()
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.iter.size_hint()
+    }
+}
+
+/// A trait for secondary map values that can provide a static reference to a default value.
+pub trait StaticDefault: 'static {
+    /// Returns a static reference to the default value
+    fn default_ref<'a>() -> &'a Self;
+}
+
+/// Implements the `StaticDefault` trait for a type, using a const element.
+#[allow(unused_macros)]
+#[macro_export]
+macro_rules! impl_static_default {
+    ($name:ident, $default:expr) => {
+        impl $crate::secondary::StaticDefault for $name {
+            fn default_ref<'a>() -> &'a Self {
+                static DEFAULT: $name = $default;
+                &DEFAULT
+            }
+        }
+    };
+}
+#[allow(unused_imports)]
+pub use impl_static_default;
+
+impl_static_default!(bool, false);
+impl_static_default!(usize, 0);

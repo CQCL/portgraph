@@ -54,7 +54,7 @@ use std::mem::{replace, take};
 use thiserror::Error;
 
 use crate::unmanaged::UnmanagedDenseMap;
-use crate::NodeIndex;
+use crate::{impl_static_default, NodeIndex};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -486,6 +486,8 @@ impl Default for NodeData {
         Self::new()
     }
 }
+
+impl_static_default!(NodeData, NodeData::new());
 
 /// Iterator created by [`Hierarchy::children`].
 #[derive(Clone)]

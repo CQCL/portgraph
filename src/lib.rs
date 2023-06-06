@@ -53,6 +53,7 @@
 //!   graph component structures.
 //! - `pyo3` enables Python bindings.
 //!
+use const_default::ConstDefault;
 use std::num::{NonZeroU16, NonZeroU32};
 use thiserror::Error;
 
@@ -198,14 +199,13 @@ impl std::fmt::Debug for NodeIndex {
     }
 }
 
-impl_static_default!(
-    NodeIndex,
-    match NodeIndex::try_from_usize(0) {
+impl ConstDefault for NodeIndex {
+    const DEFAULT: Self = match NodeIndex::try_from_usize(0) {
         Ok(index) => index,
         // Zero is always a valid index
         Err(_) => unreachable!(),
-    }
-);
+    };
+}
 
 /// Index of a port within a `PortGraph`.
 ///
@@ -278,14 +278,13 @@ impl Default for PortIndex {
     }
 }
 
-impl_static_default!(
-    PortIndex,
-    match PortIndex::try_from_usize(0) {
+impl ConstDefault for PortIndex {
+    const DEFAULT: Self = match PortIndex::try_from_usize(0) {
         Ok(index) => index,
         // Zero is always a valid index
         Err(_) => unreachable!(),
-    }
-);
+    };
+}
 
 /// Error indicating a `NodeIndex`, `PortIndex`, or `Direction` is too large.
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
@@ -368,4 +367,6 @@ impl std::fmt::Debug for PortOffset {
     }
 }
 
-impl_static_default!(PortOffset, PortOffset::new_outgoing(0));
+impl ConstDefault for PortOffset {
+    const DEFAULT: Self = PortOffset::new_outgoing(0);
+}

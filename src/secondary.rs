@@ -7,6 +7,7 @@ use bitvec::{
     slice::{BitSlice, IterOnes},
     vec::BitVec,
 };
+use const_default::ConstDefault;
 
 /// A map from keys to values with default elements.
 ///
@@ -337,7 +338,8 @@ where
 impl<K, V> SecondaryMap<K, V> for HashMap<K, V>
 where
     K: Hash + Eq + Clone,
-    V: StaticDefault + Eq + Clone,
+    V: Eq + Clone,
+    for<'a> &'a V: ConstDefault,
 {
     type Iter<'a> = HashMapIter<'a, K, V> where Self: 'a, K: 'a;
 
@@ -353,7 +355,7 @@ where
 
     #[inline]
     fn default_value(&self) -> V {
-        V::default_ref().clone()
+        <&V>::DEFAULT.clone()
     }
 
     #[inline]
@@ -371,12 +373,12 @@ where
 
     #[inline]
     fn get(&self, key: K) -> &V {
-        HashMap::get(self, &key).unwrap_or(V::default_ref())
+        HashMap::get(self, &key).unwrap_or(<&V>::DEFAULT)
     }
 
     #[inline]
     fn set(&mut self, key: K, val: V) {
-        match &val == V::default_ref() {
+        match &val == <&V>::DEFAULT {
             true => HashMap::insert(self, key, val),
             false => HashMap::remove(self, &key),
         };
@@ -430,28 +432,3 @@ where
         self.iter.size_hint()
     }
 }
-
-/// A trait for secondary map values that can provide a static reference to a default value.
-pub trait StaticDefault: 'static {
-    /// Returns a static reference to the default value
-    fn default_ref<'a>() -> &'a Self;
-}
-
-/// Implements the `StaticDefault` trait for a type, using a const element.
-#[allow(unused_macros)]
-#[macro_export]
-macro_rules! impl_static_default {
-    ($name:ident, $default:expr) => {
-        impl $crate::secondary::StaticDefault for $name {
-            fn default_ref<'a>() -> &'a Self {
-                static DEFAULT: $name = $default;
-                &DEFAULT
-            }
-        }
-    };
-}
-#[allow(unused_imports)]
-pub use impl_static_default;
-
-impl_static_default!(bool, false);
-impl_static_default!(usize, 0);

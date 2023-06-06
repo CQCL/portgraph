@@ -49,12 +49,13 @@
 //! hierarchy.shrink_to(graph.node_count());
 //! ```
 
+use const_default::ConstDefault;
 use std::iter::FusedIterator;
 use std::mem::{replace, take};
 use thiserror::Error;
 
 use crate::unmanaged::UnmanagedDenseMap;
-use crate::{impl_static_default, NodeIndex};
+use crate::NodeIndex;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -457,7 +458,7 @@ impl Hierarchy {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, ConstDefault)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 struct NodeData {
     /// The first and last child of the node, if any.
@@ -469,25 +470,6 @@ struct NodeData {
     /// The siblings of a node, if any.
     siblings: [Option<NodeIndex>; 2],
 }
-
-impl NodeData {
-    pub const fn new() -> Self {
-        Self {
-            children: None,
-            children_count: 0u32,
-            parent: None,
-            siblings: [None; 2],
-        }
-    }
-}
-
-impl Default for NodeData {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl_static_default!(NodeData, NodeData::new());
 
 /// Iterator created by [`Hierarchy::children`].
 #[derive(Clone)]

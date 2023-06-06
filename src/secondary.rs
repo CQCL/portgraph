@@ -1,13 +1,14 @@
-//! TODO
+//! Trait definition for secondary maps from keys to values with default elements.
 
-use std::iter::FusedIterator;
+use std::collections::HashSet;
+use std::{hash::Hash, iter::FusedIterator};
 
 use bitvec::{
     slice::{BitSlice, IterOnes},
     vec::BitVec,
 };
 
-/// A map from keys to values that does not manage it's indices.
+/// A map from keys to values with default elements.
 ///
 /// Querying a key that has not been set returns a default value.
 pub trait SecondaryMap<K, V> {
@@ -30,9 +31,6 @@ pub trait SecondaryMap<K, V> {
 
     /// Increases the capacity of the secondary map to `capacity`.
     fn ensure_capacity(&mut self, capacity: usize);
-
-    /// Resizes the secondary map to `new_len`.
-    fn resize(&mut self, new_len: usize);
 
     /// Returns the maximum index the secondary map can contain without allocating.
     fn capacity(&self) -> usize;
@@ -62,10 +60,26 @@ pub trait SecondaryMap<K, V> {
     ///
     /// [`PortGraph::set_num_ports`]: crate::portgraph::PortGraph::set_num_ports
     /// [`PortGraph::compact_nodes`]: crate::portgraph::PortGraph::compact_nodes
-    fn rekey(&mut self, old: K, new: Option<K>);
+    #[inline]
+    fn rekey(&mut self, old: K, new: Option<K>) {
+        let val = self.take(old);
+        if let Some(key) = new {
+            self.set(key, val);
+        }
+    }
 
     /// Swaps the values of two keys.
-    fn swap(&mut self, key0: K, key1: K);
+    #[inline]
+    fn swap(&mut self, key0: K, key1: K)
+    where
+        K: Clone,
+        V: Clone,
+    {
+        let val0 = self.get(key0.clone()).clone();
+        let val1 = self.get(key1.clone()).clone();
+        self.set(key0, val1);
+        self.set(key1, val0);
+    }
 
     /// Returns an iterator over the non-default entries of the secondary map.
     fn iter<'a>(&'a self) -> Self::Iter<'a>
@@ -98,11 +112,6 @@ where
     #[inline]
     fn ensure_capacity(&mut self, capacity: usize) {
         BitVec::reserve(self, capacity.saturating_sub(self.capacity()));
-    }
-
-    #[inline]
-    fn resize(&mut self, new_len: usize) {
-        BitVec::resize(self, new_len, false)
     }
 
     #[inline]
@@ -228,4 +237,99 @@ where
 
 impl<'a, K> FusedIterator for BitVecIter<'a, K> where K: TryFrom<usize> {}
 
-// TODO: Implementations for HashSet, BTreeSet, HashMap, BTreeMap.
+impl<K> SecondaryMap<K, bool> for HashSet<K>
+where
+    K: Hash + Eq + Clone,
+{
+    type Iter<'a> = HashSetIter<'a, K> where Self: 'a, K: 'a;
+
+    #[inline]
+    fn new() -> Self {
+        HashSet::new()
+    }
+
+    #[inline]
+    fn with_capacity(capacity: usize) -> Self {
+        HashSet::with_capacity(capacity)
+    }
+
+    #[inline]
+    fn default_value(&self) -> bool {
+        false
+    }
+
+    #[inline]
+    fn ensure_capacity(&mut self, capacity: usize) {
+        HashSet::reserve(self, capacity.saturating_sub(self.capacity()));
+    }
+
+    #[inline]
+    fn capacity(&self) -> usize {
+        HashSet::capacity(self)
+    }
+
+    #[inline]
+    fn get(&self, key: K) -> &bool {
+        if HashSet::contains(self, &key) {
+            &true
+        } else {
+            &false
+        }
+    }
+
+    #[inline]
+    fn set(&mut self, key: K, val: bool) {
+        match val {
+            true => HashSet::insert(self, key),
+            false => HashSet::remove(self, &key),
+        };
+    }
+
+    #[inline]
+    fn take(&mut self, key: K) -> bool {
+        HashSet::take(self, &key).is_some()
+    }
+
+    #[inline]
+    fn iter<'a>(&'a self) -> Self::Iter<'a>
+    where
+        K: 'a,
+    {
+        HashSetIter {
+            iter: HashSet::iter(self),
+        }
+    }
+}
+
+/// Iterator over non-default entries of a bit vector secondary map.
+#[derive(Debug, Clone)]
+pub struct HashSetIter<'a, K> {
+    iter: std::collections::hash_set::Iter<'a, K>,
+}
+
+impl<'a, K> Iterator for HashSetIter<'a, K>
+where
+    K: Clone,
+{
+    type Item = (K, &'a bool);
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().map(|k| (k.clone(), &true))
+    }
+
+    #[inline]
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        self.iter.nth(n).map(|k| (k.clone(), &true))
+    }
+
+    #[inline]
+    fn count(self) -> usize {
+        self.iter.count()
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.iter.size_hint()
+    }
+}

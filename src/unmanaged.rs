@@ -369,10 +369,17 @@ where
         self[key] = val;
     }
 
+    /// Takes the value at a `key`, leaving `default()` behind.
+    ///
+    /// This operation does not free memory. Use
+    /// [`UnmanagedDenseMap::shrink_to`] to trim container if needed.
     #[inline]
     fn take(&mut self, key: K) -> V {
         let default = self.default.clone();
-        mem::replace(&mut self[key], default)
+        match self.try_get_mut(key) {
+            Some(val) => mem::replace(val, default),
+            None => default,
+        }
     }
 
     #[inline]

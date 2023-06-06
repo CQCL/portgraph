@@ -32,9 +32,6 @@ pub trait SecondaryMap<K, V> {
     /// Increases the capacity of the secondary map to `capacity`.
     fn ensure_capacity(&mut self, capacity: usize);
 
-    /// Resizes the secondary map to `new_len`.
-    fn resize(&mut self, new_len: usize);
-
     /// Returns the maximum index the secondary map can contain without allocating.
     fn capacity(&self) -> usize;
 
@@ -115,11 +112,6 @@ where
     #[inline]
     fn ensure_capacity(&mut self, capacity: usize) {
         BitVec::reserve(self, capacity.saturating_sub(self.capacity()));
-    }
-
-    #[inline]
-    fn resize(&mut self, new_len: usize) {
-        BitVec::resize(self, new_len, false)
     }
 
     #[inline]
@@ -270,9 +262,6 @@ where
     fn ensure_capacity(&mut self, capacity: usize) {
         HashSet::reserve(self, capacity.saturating_sub(self.capacity()));
     }
-
-    #[inline]
-    fn resize(&mut self, _new_len: usize) {}
 
     #[inline]
     fn capacity(&self) -> usize {

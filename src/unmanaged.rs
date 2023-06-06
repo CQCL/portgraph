@@ -47,7 +47,6 @@
 //! ```
 
 use std::{
-    cmp::Ordering,
     iter::{Enumerate, FusedIterator},
     marker::PhantomData,
     mem::{self, MaybeUninit},
@@ -338,15 +337,6 @@ where
     #[inline]
     fn ensure_capacity(&mut self, capacity: usize) {
         UnmanagedDenseMap::ensure_capacity(self, capacity)
-    }
-
-    #[inline]
-    fn resize(&mut self, new_len: usize) {
-        match self.data.len().cmp(&new_len) {
-            Ordering::Less => self.ensure_capacity(new_len),
-            Ordering::Greater => self.shrink_to(new_len),
-            _ => {}
-        }
     }
 
     #[inline]

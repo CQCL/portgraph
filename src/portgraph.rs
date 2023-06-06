@@ -303,39 +303,34 @@ impl PortGraph {
     ///
     /// # Errors
     ///
-    ///  - If `port_from` or `port_to` does not exist.
-    ///  - If `port_from` and `port_to` have the same direction.
-    ///  - If `port_from` or `port_to` is already linked.
-    pub fn link_ports(
-        &mut self,
-        port_from: PortIndex,
-        port_to: PortIndex,
-    ) -> Result<(), LinkError> {
-        let Some(meta_from) = self.port_meta_valid(port_from) else {
-            return Err(LinkError::UnknownPort{port: port_from});
+    ///  - If `port_a` or `port_b` does not exist.
+    ///  - If `port_a` and `port_b` have the same direction.
+    ///  - If `port_a` or `port_b` is already linked.
+    pub fn link_ports(&mut self, port_a: PortIndex, port_b: PortIndex) -> Result<(), LinkError> {
+        let Some(meta_a) = self.port_meta_valid(port_a) else {
+            return Err(LinkError::UnknownPort{port: port_a});
         };
 
-        let Some(meta_to) = self.port_meta_valid(port_to) else {
-            return Err(LinkError::UnknownPort{port: port_from});
+        let Some(meta_b) = self.port_meta_valid(port_b) else {
+            return Err(LinkError::UnknownPort{port: port_a});
         };
 
-        if meta_from.direction() == meta_to.direction() {
+        if meta_a.direction() == meta_b.direction() {
             return Err(LinkError::IncompatibleDirections {
-                port_from,
-                port_to,
-                dir_from: meta_from.direction(),
-                dir_to: meta_to.direction(),
+                port_a,
+                port_b,
+                dir: meta_a.direction(),
             });
         }
 
-        if self.port_link[port_from.index()].is_some() {
-            return Err(LinkError::AlreadyLinked { port: port_from });
-        } else if self.port_link[port_to.index()].is_some() {
-            return Err(LinkError::AlreadyLinked { port: port_to });
+        if self.port_link[port_a.index()].is_some() {
+            return Err(LinkError::AlreadyLinked { port: port_a });
+        } else if self.port_link[port_b.index()].is_some() {
+            return Err(LinkError::AlreadyLinked { port: port_b });
         }
 
-        self.port_link[port_from.index()] = Some(port_to);
-        self.port_link[port_to.index()] = Some(port_from);
+        self.port_link[port_a.index()] = Some(port_b);
+        self.port_link[port_b.index()] = Some(port_a);
         self.link_count += 1;
         Ok(())
     }
@@ -419,7 +414,6 @@ impl PortGraph {
     /// # Errors
     ///
     ///  - If the ports and nodes do not exist.
-    ///  - If the ports have the same direction.
     ///  - If the ports are already linked.
     pub fn link_nodes(
         &mut self,
@@ -445,22 +439,22 @@ impl PortGraph {
     ///  - If the ports are already linked.
     pub fn link_offsets(
         &mut self,
-        from: NodeIndex,
-        from_offset: PortOffset,
-        to: NodeIndex,
-        to_offset: PortOffset,
+        node_a: NodeIndex,
+        offset_a: PortOffset,
+        node_b: NodeIndex,
+        offset_b: PortOffset,
     ) -> Result<(PortIndex, PortIndex), LinkError> {
         let from_port = self
-            .port_index(from, from_offset)
+            .port_index(node_a, offset_a)
             .ok_or(LinkError::UnknownOffset {
-                node: from,
-                offset: from_offset,
+                node: node_a,
+                offset: offset_a,
             })?;
         let to_port = self
-            .port_index(to, to_offset)
+            .port_index(node_b, offset_b)
             .ok_or(LinkError::UnknownOffset {
-                node: to,
-                offset: to_offset,
+                node: node_b,
+                offset: offset_b,
             })?;
         self.link_ports(from_port, to_port)?;
         Ok((from_port, to_port))
@@ -1418,12 +1412,11 @@ pub enum LinkError {
     #[error("unknown port offset {} in node {node:?} in direction {:?}", offset.index(), offset.direction())]
     UnknownOffset { node: NodeIndex, offset: PortOffset },
     /// The ports have the same direction so they cannot be linked.
-    #[error("Cannot link ports with direction {dir_from:?} and {dir_to:?}. In ports {port_from:?} and {port_to:?}")]
+    #[error("Cannot link two ports with direction {dir:?}. In ports {port_a:?} and {port_b:?}")]
     IncompatibleDirections {
-        port_from: PortIndex,
-        port_to: PortIndex,
-        dir_from: Direction,
-        dir_to: Direction,
+        port_a: PortIndex,
+        port_b: PortIndex,
+        dir: Direction,
     },
 }
 

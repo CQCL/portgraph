@@ -27,7 +27,7 @@
 //!
 //! ```
 //! use portgraph::{PortGraph, Direction};
-//! use portgraph::algorithms::toposort;
+//! use portgraph::algorithms::{toposort, TopoSort};
 //!
 //! // Create a graph with two nodes, each with two input and two output ports
 //! let mut graph = PortGraph::new();
@@ -43,7 +43,7 @@
 //! graph.link_ports(port_a, port_b).unwrap();
 //!
 //! // Run a topological sort on the graph starting at node A.
-//! let topo = toposort(&graph, [node_a], Direction::Outgoing);
+//! let topo: TopoSort = toposort(&graph, [node_a], Direction::Outgoing);
 //! assert_eq!(topo.collect::<Vec<_>>(), [node_a, node_b]);
 //! ```
 //!

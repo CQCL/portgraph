@@ -15,14 +15,14 @@ use std::{collections::VecDeque, iter::FusedIterator};
 /// # Example
 ///
 /// ```
-/// # use portgraph::{algorithms::toposort, Direction, PortGraph};
+/// # use portgraph::{algorithms::{toposort, TopoSort}, Direction, PortGraph};
 /// let mut graph = PortGraph::new();
 /// let node_a = graph.add_node(2, 2);
 /// let node_b = graph.add_node(2, 2);
 /// graph.link_nodes(node_a, 0, node_b, 0).unwrap();
 ///
 /// // Run a topological sort on the graph starting at node A.
-/// let topo = toposort(&graph, [node_a], Direction::Outgoing);
+/// let topo: TopoSort = toposort(&graph, [node_a], Direction::Outgoing);
 /// assert_eq!(topo.collect::<Vec<_>>(), [node_a, node_b]);
 /// ```
 pub fn toposort<Map>(
@@ -55,7 +55,7 @@ where
 ///
 /// ```
 /// # use portgraph::{Direction, PortGraph};
-/// # use portgraph::algorithms::{toposort, toposort_filtered};
+/// # use portgraph::algorithms::{toposort, toposort_filtered, TopoSort};
 /// let mut graph = PortGraph::new();
 /// let node_a = graph.add_node(2, 2);
 /// let node_b = graph.add_node(2, 2);
@@ -65,7 +65,7 @@ where
 /// graph.link_nodes(node_a, 1, node_c, 0).unwrap();
 ///
 /// // Run a topological sort on the graph starting at node A.
-/// let topo = toposort_filtered(
+/// let topo: TopoSort = toposort_filtered(
 ///     &graph,
 ///     [node_a, node_d],
 ///     Direction::Outgoing,
@@ -215,14 +215,17 @@ where
     }
 }
 
-impl<'graph> Iterator for TopoSort<'graph> {
+impl<'graph, Map> Iterator for TopoSort<'graph, Map>
+where
+    Map: SecondaryMap<PortIndex, bool>,
+{
     type Item = NodeIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
         let node = self.candidate_nodes.pop_front()?;
 
         for port in self.graph.ports(node, self.direction) {
-            self.visited_ports.set(port.index(), true);
+            self.visited_ports.set(port, true);
 
             if self.ignore_port(node, port) {
                 continue;
@@ -234,7 +237,7 @@ impl<'graph> Iterator for TopoSort<'graph> {
                 if self.becomes_ready(target, link) {
                     self.candidate_nodes.push_back(target);
                 }
-                self.visited_ports.set(link.index(), true);
+                self.visited_ports.set(link, true);
             }
         }
 
@@ -251,7 +254,7 @@ impl<'graph> Iterator for TopoSort<'graph> {
     }
 }
 
-impl<'graph> FusedIterator for TopoSort<'graph> {}
+impl<'graph, Map> FusedIterator for TopoSort<'graph, Map> where Map: SecondaryMap<PortIndex, bool> {}
 
 #[cfg(test)]
 mod test {
@@ -276,13 +279,13 @@ mod test {
         graph.link_nodes(node_c, 0, node_d, 0).unwrap();
 
         // Run a topological sort on the graph starting at node A.
-        let topo = toposort(&graph, [node_a, node_d], Direction::Outgoing);
+        let topo: TopoSort = toposort(&graph, [node_a, node_d], Direction::Outgoing);
         assert_eq!(
             topo.collect::<Vec<_>>(),
             [node_a, node_d, node_b, node_e, node_c]
         );
 
-        let topo_filtered = toposort_filtered(
+        let topo_filtered: TopoSort = toposort_filtered(
             &graph,
             [node_a, node_d],
             Direction::Outgoing,

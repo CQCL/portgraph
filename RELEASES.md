@@ -1,14 +1,34 @@
+## v0.4.0 (2023-06-06)
+
+### Added
+
+- `SecondaryMap::remove` method to drop stored ([#59][])
+- `PortGraph::link_offsets`  ([#58][])
+- Implemented `SecondaryMap` for `HashSet`s to efficiently store sparse flags for nodes and ports ([#62][])
+- Generalized the `Iterator` impl of `TopoSort` to any `SecondaryMap` ([#63][])
+
+### Changed
+
+- Changed the `PortGraph::set_num_ports` callback to give more information using a new `PortOperation` ([#57][])
+- Allows `PortGraph::link_ports` to connect ports in any order, as long as the directions are compatible ([#58][])
+
+  [#57]: https://github.com/CQCL/portgraph/issues/57
+  [#58]: https://github.com/CQCL/portgraph/issues/58
+  [#59]: https://github.com/CQCL/portgraph/issues/59
+  [#62]: https://github.com/CQCL/portgraph/issues/62
+  [#63]: https://github.com/CQCL/portgraph/issues/63
+
 ## v0.3.0 (2023-05-31)
 
 ### Breaking changes
 
-- Renamed `SecondaryMap` to `UnmanagedDenseMap` ([#52][])
+- Renamed `SecondaryMap` to `UnmanagedDenseMap` ([#51][])
 
 ### New features
 
-- Added a `SecondaryMap` generic trait, implemented by `UnmanagedDenseMap` and `BitVec` ([#52][])
+- Added a `SecondaryMap` generic trait, implemented by `UnmanagedDenseMap` and `BitVec` ([#51][])
 - Added a generic `Map : SecondaryMap` type parameter to the dominators and toposort algorithms,
-  allowing more efficient executions on partially explored graphs ([#52][])
+  allowing more efficient executions on partially explored graphs ([#51][])
 
 ### Fixes
 

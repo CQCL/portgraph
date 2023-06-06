@@ -372,7 +372,10 @@ where
     #[inline]
     fn take(&mut self, key: K) -> V {
         let default = self.default.clone();
-        mem::replace(&mut self[key], default)
+        match self.try_get_mut(key) {
+            Some(val) => mem::replace(val, default),
+            None => default,
+        }
     }
 
     #[inline]

@@ -252,6 +252,19 @@ impl<'graph> Iterator for PostOrder<'graph> {
 
 impl<'graph> FusedIterator for PostOrder<'graph> {}
 
+impl<'graph> std::fmt::Debug for PostOrder<'graph> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PostOrder")
+            .field("graph", &self.graph)
+            .field("stack", &self.stack)
+            .field("visited", &self.visited)
+            .field("finished", &self.finished)
+            .field("direction", &self.direction)
+            .field("nodes_seen", &self.nodes_seen)
+            .finish()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

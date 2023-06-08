@@ -488,7 +488,7 @@ impl Default for NodeData {
 }
 
 /// Iterator created by [`Hierarchy::children`].
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Children<'a> {
     layout: &'a Hierarchy,
     next: Option<NodeIndex>,

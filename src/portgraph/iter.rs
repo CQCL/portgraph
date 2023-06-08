@@ -66,7 +66,7 @@ impl DoubleEndedIterator for NodePorts {
 impl FusedIterator for NodePorts {}
 
 /// Iterator over the nodes of a graph, created by [`PortGraph::nodes_iter`].
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Nodes<'a> {
     pub(super) iter: std::iter::Enumerate<std::slice::Iter<'a, NodeEntry>>,
     pub(super) len: usize,
@@ -123,7 +123,7 @@ impl<'a> DoubleEndedIterator for Nodes<'a> {
 impl<'a> FusedIterator for Nodes<'a> {}
 
 /// Iterator over the ports of a graph, created by [`PortGraph::ports_iter`].
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Ports<'a> {
     pub(super) iter: std::iter::Enumerate<std::slice::Iter<'a, PortEntry>>,
     pub(super) len: usize,
@@ -173,7 +173,7 @@ impl<'a> FusedIterator for Ports<'a> {}
 
 /// Iterator over the port offsets of a node. See [`PortGraph::input_offsets`],
 /// [`PortGraph::output_offsets`], and [`PortGraph::all_port_offsets`].
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct NodePortOffsets {
     pub(super) incoming: Range<u16>,
     // Outgoing port offsets can go up to u16::MAX, hence the u32
@@ -236,7 +236,7 @@ impl FusedIterator for NodePortOffsets {}
 /// Iterator over the links of a node, created by [`PortGraph::links`]. Returns
 /// the port indices linked to each port, or `None` if the corresponding port is
 /// not connected.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct NodeLinks<'a>(pub(super) std::slice::Iter<'a, Option<PortIndex>>);
 
 impl<'a> Iterator for NodeLinks<'a> {
@@ -277,7 +277,7 @@ impl<'a> FusedIterator for NodeLinks<'a> {}
 /// Iterator over the neighbours of a node, created by
 /// [`PortGraph::neighbours`]. May return duplicate entries if the graph has
 /// multiple links between the same pair of nodes.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Neighbours<'a> {
     graph: &'a PortGraph,
     linked_ports: Flatten<NodeLinks<'a>>,
@@ -323,7 +323,7 @@ impl<'a> FusedIterator for Neighbours<'a> {}
 
 /// Iterator over the links connecting two nodes, created by
 /// [`PortGraph::get_connections`].
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct NodeConnections<'a> {
     graph: &'a PortGraph,
     target: NodeIndex,

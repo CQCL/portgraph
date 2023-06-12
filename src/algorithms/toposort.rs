@@ -1,6 +1,6 @@
 use crate::{Direction, NodeIndex, PortGraph, PortIndex, SecondaryMap};
 use bitvec::prelude::BitVec;
-use std::{collections::VecDeque, iter::FusedIterator};
+use std::{collections::VecDeque, fmt::Debug, iter::FusedIterator};
 
 /// Returns an iterator over a [`PortGraph`] in topological order.
 ///
@@ -256,6 +256,20 @@ where
 
 impl<'graph, Map> FusedIterator for TopoSort<'graph, Map> where Map: SecondaryMap<PortIndex, bool> {}
 
+impl<'graph, Map> Debug for TopoSort<'graph, Map>
+where
+    Map: Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TopoSort")
+            .field("graph", &self.graph)
+            .field("visited_ports", &self.visited_ports)
+            .field("candidate_nodes", &self.candidate_nodes)
+            .field("direction", &self.direction)
+            .field("nodes_seen", &self.nodes_seen)
+            .finish()
+    }
+}
 #[cfg(test)]
 mod test {
     use super::*;

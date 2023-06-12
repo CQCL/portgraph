@@ -60,7 +60,7 @@ use thiserror::Error;
 use pyo3::prelude::*;
 
 #[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 pub mod algorithms;
 pub mod dot;
@@ -140,8 +140,29 @@ impl TryFrom<usize> for Direction {
 /// as a `NodeIndex` by itself.
 #[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct NodeIndex(NonZeroU32);
+
+#[cfg(feature = "serde")]
+impl Serialize for NodeIndex {
+    #[inline]
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.index().serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> Deserialize<'de> for NodeIndex {
+    #[inline]
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        usize::deserialize(deserializer).map(NodeIndex::new)
+    }
+}
 
 impl NodeIndex {
     /// Maximum allowed index. The higher bit is reserved for efficient encoding of the port graph.

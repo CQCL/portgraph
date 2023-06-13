@@ -8,7 +8,7 @@
 
 use crate::portgraph::LinkError;
 use crate::weights::Weights;
-use crate::{NodeIndex, PortGraph, PortIndex};
+use crate::{LinkView, NodeIndex, PortGraph, PortIndex, PortView};
 
 use bitvec::bitvec;
 use bitvec::prelude::BitVec;
@@ -157,8 +157,8 @@ impl BoundedSubgraph {
     pub fn from_node(graph: &PortGraph, node: NodeIndex) -> Self {
         Self {
             subgraph: [node].into_iter().collect(),
-            inputs: graph.input_links(node).flatten().collect(),
-            outputs: graph.output_links(node).flatten().collect(),
+            inputs: graph.input_links(node).map(|(_, p)| p).collect(),
+            outputs: graph.output_links(node).map(|(_, p)| p).collect(),
         }
     }
 
@@ -389,7 +389,7 @@ mod tests {
     use std::error::Error;
 
     use crate::substitute::{BoundedSubgraph, OpenGraph, Rewrite, WeightedRewrite};
-    use crate::{PortGraph, Weights};
+    use crate::{LinkView, PortGraph, PortView, Weights};
 
     #[test]
     fn test_remove_subgraph() -> Result<(), Box<dyn Error>> {

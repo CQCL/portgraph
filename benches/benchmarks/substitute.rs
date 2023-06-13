@@ -3,7 +3,7 @@
 use criterion::{black_box, criterion_group, BatchSize, Criterion};
 use portgraph::{
     substitute::{BoundedSubgraph, OpenGraph, Rewrite, WeightedRewrite},
-    NodeIndex, PortGraph,
+    LinkView, NodeIndex, PortGraph, PortView,
 };
 
 use super::generators::*;
@@ -11,8 +11,8 @@ use super::generators::*;
 /// Creates a rewrite that replaces a single node with another node.
 fn make_single_node_rewrite(graph: &PortGraph, node: NodeIndex) -> Rewrite {
     // Get the external boundary ports
-    let incoming = graph.input_links(node).flatten().collect::<Vec<_>>();
-    let outgoing = graph.output_links(node).flatten().collect::<Vec<_>>();
+    let incoming = graph.input_links(node).map(|(_, p)| p).collect::<Vec<_>>();
+    let outgoing = graph.output_links(node).map(|(_, p)| p).collect::<Vec<_>>();
 
     // Create a replacement
     let mut g2 = PortGraph::with_capacity(1, incoming.len() + outgoing.len());

@@ -56,10 +56,10 @@ pub trait SecondaryMap<K, V> {
     /// Remove key `old` and optionally move to key `new`.
     ///
     /// This method is useful for rekey callbacks such as in
-    /// [`PortGraph::set_num_ports`] and [`PortGraph::compact_nodes`].
+    /// [`PortView::set_num_ports`] and [`PortView::compact_nodes`].
     ///
-    /// [`PortGraph::set_num_ports`]: crate::portgraph::PortGraph::set_num_ports
-    /// [`PortGraph::compact_nodes`]: crate::portgraph::PortGraph::compact_nodes
+    /// [`PortView::set_num_ports`]: crate::PortView::set_num_ports
+    /// [`PortView::compact_nodes`]: crate::PortView::compact_nodes
     #[inline]
     fn rekey(&mut self, old: K, new: Option<K>) {
         let val = self.take(old);

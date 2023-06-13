@@ -26,7 +26,7 @@
 //! # Example
 //!
 //! ```
-//! use portgraph::{PortGraph, Direction};
+//! use portgraph::{PortGraph, Direction, PortView, LinkView};
 //! use portgraph::algorithms::{toposort, TopoSort};
 //!
 //! // Create a graph with two nodes, each with two input and two output ports

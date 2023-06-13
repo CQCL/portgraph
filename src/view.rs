@@ -33,9 +33,9 @@ pub trait PortView {
     /// # Example
     ///
     /// ```
-    /// # use portgraph::multiportgraph::MultiPortGraph;
     /// # use portgraph::{Direction, PortView, LinkView, MultiView};
-    /// let mut g = MultiPortGraph::new();
+    /// # use portgraph::PortGraph;
+    /// let mut g = PortGraph::new();
     /// let node = g.add_node(4, 3);
     /// assert_eq!(g.inputs(node).count(), 4);
     /// assert_eq!(g.outputs(node).count(), 3);
@@ -49,9 +49,9 @@ pub trait PortView {
     /// # Example
     ///
     /// ```
-    /// # use portgraph::multiportgraph::MultiPortGraph;
     /// # use portgraph::{Direction, PortView, LinkView, MultiView};
-    /// let mut g = MultiPortGraph::new();
+    /// # use portgraph::PortGraph;
+    /// let mut g = PortGraph::new();
     /// let node0 = g.add_node(1, 1);
     /// let node1 = g.add_node(1, 1);
     /// g.link_ports(g.outputs(node0).nth(0).unwrap(), g.inputs(node1).nth(0).unwrap());
@@ -87,6 +87,24 @@ pub trait PortView {
     #[must_use]
     fn all_ports(&self, node: NodeIndex) -> Self::NodePorts<'_>;
 
+    /// Iterates over all the input ports of the `node`.
+    ///
+    /// Shorthand for [`PortView::ports`].
+    #[must_use]
+    #[inline]
+    fn inputs(&self, node: NodeIndex) -> Self::NodePorts<'_> {
+        self.ports(node, Direction::Incoming)
+    }
+
+    /// Iterates over all the output ports of the `node`.
+    ///
+    /// Shorthand for [`PortView::ports`].
+    #[must_use]
+    #[inline]
+    fn outputs(&self, node: NodeIndex) -> Self::NodePorts<'_> {
+        self.ports(node, Direction::Outgoing)
+    }
+
     /// Returns the input port at the given offset in the `node`.
     ///
     /// Shorthand for [`PortView::port_index`].
@@ -98,18 +116,6 @@ pub trait PortView {
     /// Shorthand for [`PortView::port_index`].
     #[must_use]
     fn output(&self, node: NodeIndex, offset: usize) -> Option<PortIndex>;
-
-    /// Iterates over all the input ports of the `node`.
-    ///
-    /// Shorthand for [`PortView::ports`].
-    #[must_use]
-    fn inputs(&self, node: NodeIndex) -> Self::NodePorts<'_>;
-
-    /// Iterates over all the output ports of the `node`.
-    ///
-    /// Shorthand for [`PortView::ports`].
-    #[must_use]
-    fn outputs(&self, node: NodeIndex) -> Self::NodePorts<'_>;
 
     /// Returns the number of input ports of the `node`.
     ///
@@ -134,6 +140,18 @@ pub trait PortView {
     fn num_ports(&self, node: NodeIndex, direction: Direction) -> usize;
 
     /// Iterates over all the port offsets of the `node` in the given `direction`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use portgraph::PortGraph;
+    /// # use portgraph::{Direction, PortOffset, PortView, LinkView};
+    /// let mut graph = PortGraph::new();
+    /// let node = graph.add_node(0, 2);
+    ///
+    /// assert!(graph.links(node, Direction::Incoming).eq([]));
+    /// assert!(graph.port_offsets(node, Direction::Outgoing).eq([PortOffset::new_outgoing(0), PortOffset::new_outgoing(1)]));
+    /// ```
     #[must_use]
     fn port_offsets(&self, node: NodeIndex, direction: Direction) -> Self::NodePortOffsets<'_>;
 
@@ -250,7 +268,7 @@ pub trait PortView {
 /// Operations pertaining the adjacency of nodes in a port graph.
 pub trait LinkView: PortView {
     /// The identifier for the endpoints of a link.
-    type LinkEndpoint: Into<PortIndex>;
+    type LinkEndpoint: Into<PortIndex> + Copy;
 
     /// Iterator over the neighbours of a node.
     type Neighbours<'a>: Iterator<Item = NodeIndex>
@@ -279,16 +297,16 @@ pub trait LinkView: PortView {
     /// # Example
     ///
     /// ```
-    /// # use portgraph::multiportgraph::MultiPortGraph;
+    /// # use portgraph::PortGraph;
     /// # use portgraph::{Direction, PortView, LinkView, MultiView};
-    /// let mut g = MultiPortGraph::new();
+    /// let mut g = PortGraph::new();
     /// let node0 = g.add_node(0, 1);
     /// let node1 = g.add_node(1, 0);
     /// let node0_output = g.output(node0, 0).unwrap();
     /// let node1_input = g.input(node1, 0).unwrap();
     /// g.link_ports(node0_output, node1_input).unwrap();
-    /// assert_eq!(g.port_link(node0_output).unwrap().port(), node1_input);
-    /// assert_eq!(g.port_link(node1_input).unwrap().port(), node0_output);
+    /// assert_eq!(g.port_link(node0_output), Some(node1_input));
+    /// assert_eq!(g.port_link(node1_input), Some(node0_output));
     /// ```
     ///
     /// # Errors
@@ -349,31 +367,26 @@ pub trait LinkView: PortView {
         self.link_ports(from_port, to_port)
     }
 
-    /// Unlinks all connections to the `port`. Return `false` if the port was not linked.
-    fn unlink_port(&mut self, port: PortIndex) -> bool;
+    /// Unlinks all connections to the `port`. If the port was connected,
+    /// returns one of the ports it was connected to.
+    fn unlink_port(&mut self, port: PortIndex) -> Option<Self::LinkEndpoint>;
 
     /// Returns an iterator over every pair of matching ports connecting `from`
     /// with `to`.
     ///
     /// # Example
     /// ```
-    /// # use portgraph::multiportgraph::{MultiPortGraph, SubportIndex};
-    /// # use portgraph::{NodeIndex, PortIndex, Direction, PortView, LinkView, MultiView};
-    /// # use itertools::Itertools;
-    /// let mut g = MultiPortGraph::new();
+    /// # use portgraph::{PortGraph, NodeIndex, PortIndex, Direction, PortView, LinkView};
+    /// let mut g = PortGraph::new();
     /// let a = g.add_node(0, 2);
     /// let b = g.add_node(2, 0);
     ///
     /// g.link_nodes(a, 0, b, 0).unwrap();
-    /// g.link_nodes(a, 0, b, 1).unwrap();
     /// g.link_nodes(a, 1, b, 1).unwrap();
     ///
     /// let mut connections = g.get_connections(a, b);
-    /// let (out0, out1) = g.outputs(a).collect_tuple().unwrap();
-    /// let (in0, in1) = g.inputs(b).collect_tuple().unwrap();
-    /// assert_eq!(connections.next().unwrap(), (SubportIndex::new_multi(out0,0), SubportIndex::new_multi(in0,0)));
-    /// assert_eq!(connections.next().unwrap(), (SubportIndex::new_multi(out0,1), SubportIndex::new_multi(in1,0)));
-    /// assert_eq!(connections.next().unwrap(), (SubportIndex::new_multi(out1,0), SubportIndex::new_multi(in1,1)));
+    /// assert_eq!(connections.next(), Some((g.output(a,0).unwrap(), g.input(b,0).unwrap())));
+    /// assert_eq!(connections.next(), Some((g.output(a,1).unwrap(), g.input(b,1).unwrap())));
     /// assert_eq!(connections.next(), None);
     /// ```
     #[must_use]
@@ -384,18 +397,15 @@ pub trait LinkView: PortView {
     ///
     /// # Example
     /// ```
-    /// # use portgraph::multiportgraph::{MultiPortGraph, SubportIndex};
-    /// # use portgraph::{NodeIndex, PortIndex, Direction, PortView, LinkView, MultiView};
-    /// let mut g = MultiPortGraph::new();
+    /// # use portgraph::{NodeIndex, PortIndex, Direction, PortView, LinkView, PortGraph};
+    /// let mut g = PortGraph::new();
     /// let a = g.add_node(0, 2);
     /// let b = g.add_node(2, 0);
     ///
     /// g.link_nodes(a, 0, b, 0).unwrap();
     /// g.link_nodes(a, 1, b, 1).unwrap();
     ///
-    /// let out0 = g.output(a, 0).unwrap();
-    /// let in0 = g.input(b, 0).unwrap();
-    /// assert_eq!(g.get_connection(a, b), Some((SubportIndex::new_multi(out0,0), SubportIndex::new_multi(in0,0))));
+    /// assert_eq!(g.get_connection(a, b), Some((g.output(a,0).unwrap(), g.input(b,0).unwrap())));
     /// ```
     #[must_use]
     fn get_connection(
@@ -410,9 +420,8 @@ pub trait LinkView: PortView {
     ///
     /// # Example
     /// ```
-    /// # use portgraph::multiportgraph::MultiPortGraph;
-    /// # use portgraph::{NodeIndex, PortIndex, Direction, PortView, LinkView, MultiView};
-    /// let mut g = MultiPortGraph::new();
+    /// # use portgraph::{PortGraph, NodeIndex, PortIndex, Direction, PortView, LinkView};
+    /// let mut g = PortGraph::new();
     /// let a = g.add_node(0, 2);
     /// let b = g.add_node(2, 0);
     ///
@@ -440,6 +449,26 @@ pub trait LinkView: PortView {
 
     /// Iterates over the connected links of the `node` in the given
     /// `direction`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use portgraph::{PortGraph, PortView, LinkView, MultiView};
+    /// # use portgraph::Direction;
+    ///
+    /// let mut graph = PortGraph::new();
+    ///
+    /// let node_a = graph.add_node(0, 2);
+    /// let node_b = graph.add_node(1, 0);
+    ///
+    /// let port_a = graph.outputs(node_a).next().unwrap();
+    /// let port_b = graph.inputs(node_b).next().unwrap();
+    ///
+    /// graph.link_ports(port_a, port_b).unwrap();
+    ///
+    /// assert!(graph.links(node_a, Direction::Outgoing).eq([(port_a, port_b)]));
+    /// assert!(graph.links(node_b, Direction::Incoming).eq([(port_b, port_a)]));
+    /// ```
     #[must_use]
     fn links(&self, node: NodeIndex, direction: Direction) -> Self::NodeLinks<'_>;
 
@@ -465,6 +494,24 @@ pub trait LinkView: PortView {
 
     /// Iterates over neighbour nodes in the given `direction`.
     /// May contain duplicates if the graph has multiple links between nodes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use portgraph::{PortGraph, PortView, LinkView};
+    /// # use portgraph::Direction;
+    ///
+    /// let mut graph = PortGraph::new();
+    ///
+    /// let a = graph.add_node(0, 1);
+    /// let b = graph.add_node(2, 1);
+    ///
+    /// graph.link_nodes(a, 0, b, 0).unwrap();
+    /// graph.link_nodes(b, 0, b, 1).unwrap();
+    ///
+    /// assert!(graph.neighbours(a, Direction::Outgoing).eq([b]));
+    /// assert!(graph.neighbours(b, Direction::Incoming).eq([a,b]));
+    /// ```
     #[must_use]
     fn neighbours(&self, node: NodeIndex, direction: Direction) -> Self::Neighbours<'_>;
 

@@ -169,16 +169,6 @@ impl PortView for MultiPortGraph {
     }
 
     #[inline]
-    fn inputs(&self, node: NodeIndex) -> Self::NodePorts<'_> {
-        self.graph.inputs(node)
-    }
-
-    #[inline]
-    fn outputs(&self, node: NodeIndex) -> Self::NodePorts<'_> {
-        self.graph.outputs(node)
-    }
-
-    #[inline]
     fn num_ports(&self, node: NodeIndex, direction: Direction) -> usize {
         self.graph.num_ports(node, direction)
     }
@@ -284,7 +274,7 @@ impl PortView for MultiPortGraph {
         for (port, old_link) in dropped_ports {
             if self.is_multiport(port) {
                 let link = old_link.expect("Multiport node has no link");
-                self.remove_copy_node(port, link)
+                self.remove_copy_node(port, link);
             }
         }
     }
@@ -346,16 +336,15 @@ impl LinkView for MultiPortGraph {
         Ok((multiport_a, multiport_b))
     }
 
-    fn unlink_port(&mut self, port: PortIndex) -> bool {
+    fn unlink_port(&mut self, port: PortIndex) -> Option<SubportIndex> {
         if self.is_multiport(port) {
             let link = self
                 .graph
                 .port_link(port)
                 .expect("MultiPortGraph error: a port marked as multiport has no link.");
-            self.remove_copy_node(port, link);
-            true
+            self.remove_copy_node(port, link)
         } else {
-            self.graph.unlink_port(port).is_some()
+            self.graph.unlink_port(port).map(SubportIndex::new_unique)
         }
     }
 
@@ -415,7 +404,8 @@ impl MultiView for MultiPortGraph {
         let to_index = self
             .get_subport_index(subport_to)
             .expect("subport_to does not exist");
-        self.graph.link_ports(from_index, to_index)
+        self.graph.link_ports(from_index, to_index)?;
+        Ok(())
     }
 
     fn unlink_subport(&mut self, subport: Self::SubportIndex) -> Option<Self::SubportIndex> {
@@ -445,10 +435,20 @@ impl MultiView for MultiPortGraph {
 /// Internal helper methods
 impl MultiPortGraph {
     /// Remove an internal copy node.
-    fn remove_copy_node(&mut self, main_node_port: PortIndex, copy_port: PortIndex) {
+    ///
+    /// Returns one of the links, if the node was connected
+    fn remove_copy_node(
+        &mut self,
+        main_node_port: PortIndex,
+        copy_port: PortIndex,
+    ) -> Option<SubportIndex> {
         let copy_node = self.graph.port_node(copy_port).unwrap();
         let dir = self.port_direction(copy_port).unwrap();
         debug_assert!(self.copy_node.get(copy_node));
+
+        let link = self.graph.links(copy_node, dir).next();
+        let link = link.map(|(_, tgt)| self.get_subport_from_index(tgt).unwrap());
+
         let mut subports = self.graph.ports(copy_node, dir.reverse());
         self.multiport.set(copy_port, false);
         self.multiport.set(main_node_port, false);
@@ -457,6 +457,8 @@ impl MultiPortGraph {
         self.copy_node_count -= 1;
         self.subport_count -= subports.len();
         debug_assert!(subports.all(|port| !self.multiport.get(port.index())));
+
+        link
     }
 
     /// Returns a free multiport for the given port, along with its
@@ -562,9 +564,10 @@ impl MultiPortGraph {
         dir: Direction,
     ) -> Result<(), LinkError> {
         match dir {
-            Direction::Incoming => self.graph.link_ports(port2, port1),
-            Direction::Outgoing => self.graph.link_ports(port1, port2),
-        }
+            Direction::Incoming => self.graph.link_ports(port2, port1)?,
+            Direction::Outgoing => self.graph.link_ports(port1, port2)?,
+        };
+        Ok(())
     }
 
     /// Returns the PortIndex from the main node that connects to this copy node.

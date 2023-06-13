@@ -15,7 +15,7 @@
 //! # Example
 //!
 //! ```
-//! # use portgraph::{PortGraph, NodeIndex, PortIndex};
+//! # use portgraph::{PortGraph, NodeIndex, PortIndex, PortView, LinkView};
 //! # use portgraph::unmanaged::UnmanagedDenseMap;
 //!
 //! let mut graph = PortGraph::new();
@@ -156,10 +156,10 @@ where
     /// Remove key `old` and optionally move to key `new`.
     ///
     /// This method is useful for rekey callbacks such as in
-    /// [`PortGraph::set_num_ports`] and [`PortGraph::compact_nodes`].
+    /// [`PortView::set_num_ports`] and [`PortView::compact_nodes`].
     ///
-    /// [`PortGraph::set_num_ports`]: crate::portgraph::PortGraph::set_num_ports
-    /// [`PortGraph::compact_nodes`]: crate::portgraph::PortGraph::compact_nodes
+    /// [`PortView::set_num_ports`]: crate::PortView::set_num_ports
+    /// [`PortView::compact_nodes`]: crate::PortView::compact_nodes
     pub fn rekey(&mut self, old: K, new: Option<K>)
     where
         V: Default,

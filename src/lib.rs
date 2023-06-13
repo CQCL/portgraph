@@ -88,7 +88,7 @@ pub use crate::secondary::SecondaryMap;
 #[doc(inline)]
 pub use crate::unmanaged::UnmanagedDenseMap;
 #[doc(inline)]
-pub use crate::view::MultiView;
+pub use crate::view::{LinkView, MultiView, PortView};
 #[doc(inline)]
 pub use crate::weights::Weights;
 

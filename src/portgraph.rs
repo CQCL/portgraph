@@ -1306,13 +1306,32 @@ mod debug {
 
     impl<'a> std::fmt::Debug for NodeDebug<'a> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            let inputs: Vec<_> = self.0.inputs(self.1).collect();
-            let outputs: Vec<_> = self.0.outputs(self.1).collect();
+            let inputs = PortRangeDebug(self.0.inputs(self.1).as_range());
+            let outputs = PortRangeDebug(self.0.outputs(self.1).as_range());
 
             f.debug_struct("Node")
                 .field("inputs", &inputs)
                 .field("outputs", &outputs)
                 .finish()
+        }
+    }
+
+    pub struct PortRangeDebug(pub Range<usize>);
+
+    impl std::fmt::Debug for PortRangeDebug {
+        fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            if self.0.is_empty() {
+                write!(fmt, "[]")?;
+            } else if self.0.len() == 1 {
+                write!(fmt, "[")?;
+                PortIndex::new(self.0.start).fmt(fmt)?;
+                write!(fmt, "]")?;
+            } else {
+                PortIndex::new(self.0.start).fmt(fmt)?;
+                write!(fmt, "..")?;
+                PortIndex::new(self.0.end).fmt(fmt)?;
+            }
+            Ok(())
         }
     }
 

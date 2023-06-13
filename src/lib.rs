@@ -70,6 +70,7 @@ pub mod portgraph;
 pub mod secondary;
 pub mod substitute;
 pub mod unmanaged;
+pub mod view;
 pub mod weights;
 
 #[cfg(feature = "pyo3")]
@@ -86,6 +87,8 @@ pub use crate::portgraph::{LinkError, PortGraph};
 pub use crate::secondary::SecondaryMap;
 #[doc(inline)]
 pub use crate::unmanaged::UnmanagedDenseMap;
+#[doc(inline)]
+pub use crate::view::MultiView;
 #[doc(inline)]
 pub use crate::weights::Weights;
 

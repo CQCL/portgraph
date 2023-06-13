@@ -65,6 +65,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 pub mod algorithms;
 pub mod dot;
 pub mod hierarchy;
+pub mod multiportgraph;
 pub mod portgraph;
 pub mod secondary;
 pub mod substitute;

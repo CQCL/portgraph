@@ -31,13 +31,14 @@ rand = { version = "0.8.5", optional = true }
 
 [features]
 pyo3 = ["dep:pyo3"]
-serde = ["dep:serde"]
+serde = ["dep:serde", "bitvec/serde"]
 proptest = ["dep:proptest", "dep:rand"]
 
 [dev-dependencies]
 criterion = { version = "0.5.1", features = ["html_reports"] }
 rmp-serde = "1.1.1"
 rstest = "0.17.0"
+itertools = "0.10.5"
 
 [[bench]]
 name = "bench_main"

@@ -543,7 +543,7 @@ pub trait MultiView: LinkView {
     /// An index type used to identify specific connections in a multiport.
     type SubportIndex;
 
-    /// Iterator over the sub ports of each port in a node.
+    /// Iterator over all the subports of a node.
     type NodeSubports<'a>: Iterator<Item = Self::SubportIndex>
     where
         Self: 'a;
@@ -561,7 +561,7 @@ pub trait MultiView: LinkView {
         subport_to: Self::SubportIndex,
     ) -> Result<(), LinkError>;
 
-    /// Unlinks the `port` and returns the port it was linked to. Returns `None`
+    /// Unlinks the `port` and returns the subport it was linked to. Returns `None`
     /// when the port was not linked.
     fn unlink_subport(&mut self, subport: Self::SubportIndex) -> Option<Self::SubportIndex>;
 
@@ -570,15 +570,15 @@ pub trait MultiView: LinkView {
     #[must_use]
     fn subport_link(&self, subport: Self::SubportIndex) -> Option<Self::SubportIndex>;
 
-    /// Iterates over all the ports of the `node` in the given `direction`.
+    /// Iterates over all the subports of the `node` in the given `direction`.
     #[must_use]
     fn subports(&self, node: NodeIndex, direction: Direction) -> Self::NodeSubports<'_>;
 
-    /// Iterates over the input and output ports of the `node` in sequence.
+    /// Iterates over the input and output subports of the `node` in sequence.
     #[must_use]
     fn all_subports(&self, node: NodeIndex) -> Self::NodeSubports<'_>;
 
-    /// Iterates over all the input ports of the `node`.
+    /// Iterates over all the input subports of the `node`.
     ///
     /// Shorthand for [`MultiView::subports`].
     #[must_use]
@@ -587,7 +587,7 @@ pub trait MultiView: LinkView {
         self.subports(node, Direction::Incoming)
     }
 
-    /// Iterates over all the output ports of the `node`.
+    /// Iterates over all the output subports of the `node`.
     ///
     /// Shorthand for [`MultiView::subports`].
     #[must_use]

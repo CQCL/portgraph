@@ -14,6 +14,8 @@ Please read the [API documentation here][].
 
 -   `pyo3`: Enable Python bindings via pyo3.
 -   `serde`: Enable serialization and deserialization via serde.
+-   `petgraph`: Enable petgraph interoperability by implementing the
+    `petgraph::visit` traits for `PortGraph` and `MultiPortGraph`.
 
 ## Recent Changes
 

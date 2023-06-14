@@ -1,5 +1,8 @@
 //! Abstractions over portgraph representations.
 
+#[cfg(feature = "petgraph")]
+pub mod petgraph;
+
 use crate::{portgraph::PortOperation, Direction, LinkError, NodeIndex, PortIndex, PortOffset};
 
 /// Core capabilities of a graph containing nodes and ports.

@@ -14,7 +14,7 @@ pub enum NodeStyle {
 }
 
 impl NodeStyle {
-    /// Box node with label inside.
+    /// Show a node label with the default style.
     pub fn new(label: impl ToString) -> Self {
         Self::Box(label.to_string())
     }
@@ -38,9 +38,9 @@ pub enum PortStyle {
 }
 
 impl PortStyle {
-    /// Custom style
-    pub fn new(style: impl ToString) -> Self {
-        Self::Box(style.to_string())
+    /// Show a port label with the default style.
+    pub fn new(label: impl ToString) -> Self {
+        Self::Box(label.to_string())
     }
 }
 
@@ -65,7 +65,7 @@ pub enum EdgeStyle {
 }
 
 impl EdgeStyle {
-    /// Get the style as a string
+    /// Get the style as a graphviz style string
     pub fn as_str(&self) -> &str {
         match self {
             Self::Solid => "",

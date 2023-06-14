@@ -220,6 +220,9 @@ where
     /// Outputs an html table row with the ports of a node.
     ///
     /// `num_others` is the number of ports in the other direction.
+    ///
+    /// The node table is a grid with `#inputs * #outputs` columns, so each port
+    /// label should be `num_others` columns wide.
     fn get_ports_row_dot(
         &mut self,
         node: NodeIndex,

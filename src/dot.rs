@@ -26,7 +26,7 @@ impl Default for NodeStyle {
     }
 }
 
-/// Style of an edge in a dot graph. Defaults to "None".
+/// Style of an edge in a dot graph. Defaults to `Box("")`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PortStyle {
     /// Do not draw a label. Edges will be connected to the node.
@@ -50,7 +50,7 @@ impl Default for PortStyle {
     }
 }
 
-/// Style of an edge in a dot graph. Defaults to "None".
+/// Style of an edge in a dot graph. Defaults to [`EdgeStyle::Solid`].
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub enum EdgeStyle {
     /// Normal line

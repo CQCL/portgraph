@@ -312,7 +312,7 @@ impl<G: LinkView> ExactSizeIterator for EdgeRefs<'_, G> {
 
 impl<G: LinkView> FusedIterator for EdgeRefs<'_, G> {}
 
-/// Iterator over the edges of a portgraph.
+/// Iterator over the edges of a node.
 ///
 /// Used for compatibility with petgraph.
 pub struct NodeEdgeRefs<'g, G: LinkView> {

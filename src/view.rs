@@ -19,7 +19,7 @@ pub trait PortView {
     where
         Self: 'a;
 
-    /// Iterator over the sub ports of each port in a node.
+    /// Iterator over the port offsets in a node.
     type NodePortOffsets<'a>: Iterator<Item = PortOffset>
     where
         Self: 'a;

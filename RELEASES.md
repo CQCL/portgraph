@@ -1,3 +1,28 @@
+## v0.5.0 (2023-06-14)
+
+### Added
+
+- Added a MultiPortGraph structure that supports multiple connections to the same port ([#67][])
+- Added new traits `PortView`, `LinkView`, and `MultiView` to unify the
+  `PortGraph` and `MultiPortGraph` interfaces ([#68][])
+- Added a `petgraph` feature that implements petgraph's `visit` traits for interoperability ([#70][])
+- Added missing `Debug` implementations for iterators ([#65][])
+
+### Changed
+
+- Reworked the dot formatter API ([#69][])
+- The serialized format for NodeIndex and PortIndex now uses the user-facing
+  indices instead of the off-by-one values used internally ([#64][])
+- Simplified PortGraph debug information by showing the ports of a node as a range ([#66][])
+
+  [#64]: https://github.com/CQCL/portgraph/issues/64
+  [#65]: https://github.com/CQCL/portgraph/issues/65
+  [#66]: https://github.com/CQCL/portgraph/issues/66
+  [#67]: https://github.com/CQCL/portgraph/issues/67
+  [#68]: https://github.com/CQCL/portgraph/issues/68
+  [#69]: https://github.com/CQCL/portgraph/issues/69
+  [#70]: https://github.com/CQCL/portgraph/issues/70
+
 ## v0.4.0 (2023-06-06)
 
 ### Added

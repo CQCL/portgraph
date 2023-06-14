@@ -1,4 +1,4 @@
-use crate::{Direction, NodeIndex, PortGraph, PortIndex, SecondaryMap};
+use crate::{Direction, LinkView, NodeIndex, PortGraph, PortIndex, PortView, SecondaryMap};
 use bitvec::prelude::BitVec;
 use std::{collections::VecDeque, fmt::Debug, iter::FusedIterator};
 
@@ -15,7 +15,7 @@ use std::{collections::VecDeque, fmt::Debug, iter::FusedIterator};
 /// # Example
 ///
 /// ```
-/// # use portgraph::{algorithms::{toposort, TopoSort}, Direction, PortGraph};
+/// # use portgraph::{algorithms::{toposort, TopoSort}, Direction, PortGraph, PortView, LinkView};
 /// let mut graph = PortGraph::new();
 /// let node_a = graph.add_node(2, 2);
 /// let node_b = graph.add_node(2, 2);
@@ -54,7 +54,7 @@ where
 /// # Example
 ///
 /// ```
-/// # use portgraph::{Direction, PortGraph};
+/// # use portgraph::{Direction, PortGraph, PortView, LinkView};
 /// # use portgraph::algorithms::{toposort, toposort_filtered, TopoSort};
 /// let mut graph = PortGraph::new();
 /// let node_a = graph.add_node(2, 2);

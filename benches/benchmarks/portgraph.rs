@@ -5,7 +5,7 @@ use super::generators::*;
 use criterion::{
     black_box, criterion_group, AxisScale, BatchSize, BenchmarkId, Criterion, PlotConfiguration,
 };
-use portgraph::PortGraph;
+use portgraph::{PortGraph, PortView};
 
 /// Remove one every five nodes from the graph.
 fn remove_every_five(graph: &mut PortGraph) {

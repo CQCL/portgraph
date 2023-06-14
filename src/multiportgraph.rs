@@ -6,7 +6,11 @@ pub use self::iter::{
     Neighbours, NodeConnections, NodeLinks, NodeSubports, Nodes, PortLinks, Ports,
 };
 use crate::portgraph::{NodePortOffsets, NodePorts, PortOperation};
-use crate::{Direction, LinkError, NodeIndex, PortGraph, PortIndex, PortOffset, SecondaryMap};
+use crate::view::MultiView;
+use crate::{
+    Direction, LinkError, LinkView, NodeIndex, PortGraph, PortIndex, PortOffset, PortView,
+    SecondaryMap,
+};
 
 use bitvec::vec::BitVec;
 
@@ -80,46 +84,41 @@ impl MultiPortGraph {
         &self.graph
     }
 
-    /// Adds a node to the portgraph with a given number of input and output ports.
+    /// Given a node in the underlying flat portgraph, returns the main node for it.
     ///
-    /// # Panics
-    ///
-    /// Panics if the total number of ports exceeds `u16::MAX`.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// # use portgraph::multiportgraph::MultiPortGraph;
-    /// # use portgraph::Direction;
-    /// let mut g = MultiPortGraph::new();
-    /// let node = g.add_node(4, 3);
-    /// assert_eq!(g.inputs(node).count(), 4);
-    /// assert_eq!(g.outputs(node).count(), 3);
-    /// assert!(g.contains_node(node));
-    /// ```
-    pub fn add_node(&mut self, incoming: usize, outgoing: usize) -> NodeIndex {
+    /// If the node is not a copy node, returns the node itself.
+    pub fn pg_main_node(&self, node: NodeIndex) -> NodeIndex {
+        if !self.copy_node.get(node) {
+            return node;
+        }
+        self.port_node(self.copy_node_main_port(node).unwrap())
+            .unwrap()
+    }
+}
+
+impl PortView for MultiPortGraph {
+    type Nodes<'a> = Nodes<'a>
+    where
+        Self: 'a;
+
+    type Ports<'a> = Ports<'a>
+    where
+        Self: 'a;
+
+    type NodePorts<'a> = NodePorts
+    where
+        Self: 'a;
+
+    type NodePortOffsets<'a> = NodePortOffsets
+    where
+        Self: 'a;
+
+    #[inline]
+    fn add_node(&mut self, incoming: usize, outgoing: usize) -> NodeIndex {
         self.graph.add_node(incoming, outgoing)
     }
 
-    /// Remove a node from the port graph. All ports of the node will be
-    /// unlinked and removed as well. Does nothing if the node does not exist.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// # use portgraph::multiportgraph::MultiPortGraph;
-    /// # use portgraph::Direction;
-    /// let mut g = MultiPortGraph::new();
-    /// let node0 = g.add_node(1, 1);
-    /// let node1 = g.add_node(1, 1);
-    /// g.link_ports(g.outputs(node0).nth(0).unwrap(), g.inputs(node1).nth(0).unwrap());
-    /// g.link_ports(g.outputs(node1).nth(0).unwrap(), g.inputs(node0).nth(0).unwrap());
-    /// g.remove_node(node0);
-    /// assert!(!g.contains_node(node0));
-    /// assert!(g.port_link(g.outputs(node1).nth(0).unwrap()).is_none());
-    /// assert!(g.port_link(g.inputs(node1).nth(0).unwrap()).is_none());
-    /// ```
-    pub fn remove_node(&mut self, node: NodeIndex) {
+    fn remove_node(&mut self, node: NodeIndex) {
         debug_assert!(!self.copy_node.get(node));
         for port in self.graph.all_ports(node) {
             if *self.multiport.get(port) {
@@ -129,469 +128,92 @@ impl MultiPortGraph {
         self.graph.remove_node(node);
     }
 
-    /// Link an output port to an input port.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// # use portgraph::multiportgraph::MultiPortGraph;
-    /// # use portgraph::Direction;
-    /// let mut g = MultiPortGraph::new();
-    /// let node0 = g.add_node(0, 1);
-    /// let node1 = g.add_node(1, 0);
-    /// let node0_output = g.output(node0, 0).unwrap();
-    /// let node1_input = g.input(node1, 0).unwrap();
-    /// g.link_ports(node0_output, node1_input).unwrap();
-    /// assert_eq!(g.port_link(node0_output).unwrap().port(), node1_input);
-    /// assert_eq!(g.port_link(node1_input).unwrap().port(), node0_output);
-    /// ```
-    ///
-    /// # Errors
-    ///
-    ///  - If `port_a` or `port_b` does not exist.
-    ///  - If `port_a` and `port_b` have the same direction.
-    pub fn link_ports(
-        &mut self,
-        port_a: PortIndex,
-        port_b: PortIndex,
-    ) -> Result<(SubportIndex, SubportIndex), LinkError> {
-        let (multiport_a, index_a) = self.get_free_multiport(port_a)?;
-        let (multiport_b, index_b) = self.get_free_multiport(port_b)?;
-        self.graph.link_ports(index_a, index_b)?;
-        Ok((multiport_a, multiport_b))
-    }
-
-    /// Link an output subport to an input subport.
-    ///
-    /// # Errors
-    ///
-    ///  - If `subport_from` or `subport_to` does not exist.
-    ///  - If `subport_a` and `subport_b` have the same direction.
-    ///  - If `subport_from` or `subport_to` is already linked.
-    pub fn link_subports(
-        &mut self,
-        subport_from: SubportIndex,
-        subport_to: SubportIndex,
-    ) -> Result<(), LinkError> {
-        // TODO: Custom errors
-        let from_index = self
-            .get_subport_index(subport_from)
-            .expect("subport_from does not exist");
-        let to_index = self
-            .get_subport_index(subport_to)
-            .expect("subport_to does not exist");
-        self.graph.link_ports(from_index, to_index)
-    }
-
-    /// Unlinks all connections to the `port`. Return `false` if the port was not linked.
-    pub fn unlink_port(&mut self, port: PortIndex) -> bool {
-        if self.is_multiport(port) {
-            let link = self
-                .graph
-                .port_link(port)
-                .expect("MultiPortGraph error: a port marked as multiport has no link.");
-            self.remove_copy_node(port, link);
-            true
-        } else {
-            self.graph.unlink_port(port).is_some()
-        }
-    }
-
-    /// Unlinks the `port` and returns the port it was linked to. Returns `None`
-    /// when the port was not linked.
-    ///
-    /// TODO: Remove copy nodes when they are no longer needed?
-    pub fn unlink_subport(&mut self, subport: SubportIndex) -> Option<SubportIndex> {
-        let subport_index = self.get_subport_index(subport)?;
-        let link = self.graph.unlink_port(subport_index)?;
-        self.get_subport_from_index(link)
-    }
-
-    /// Returns an iterator over every pair of matching ports connecting `from`
-    /// with `to`.
-    ///
-    /// # Example
-    /// ```
-    /// # use portgraph::multiportgraph::{MultiPortGraph, SubportIndex};
-    /// # use portgraph::{NodeIndex, PortIndex, Direction};
-    /// # use itertools::Itertools;
-    /// let mut g = MultiPortGraph::new();
-    /// let a = g.add_node(0, 2);
-    /// let b = g.add_node(2, 0);
-    ///
-    /// g.link_nodes(a, 0, b, 0).unwrap();
-    /// g.link_nodes(a, 0, b, 1).unwrap();
-    /// g.link_nodes(a, 1, b, 1).unwrap();
-    ///
-    /// let mut connections = g.get_connections(a, b);
-    /// let (out0, out1) = g.outputs(a).collect_tuple().unwrap();
-    /// let (in0, in1) = g.inputs(b).collect_tuple().unwrap();
-    /// assert_eq!(connections.next().unwrap(), (SubportIndex::new_multi(out0,0), SubportIndex::new_multi(in0,0)));
-    /// assert_eq!(connections.next().unwrap(), (SubportIndex::new_multi(out0,1), SubportIndex::new_multi(in1,0)));
-    /// assert_eq!(connections.next().unwrap(), (SubportIndex::new_multi(out1,0), SubportIndex::new_multi(in1,1)));
-    /// assert_eq!(connections.next(), None);
-    /// ```
-    #[must_use]
     #[inline]
-    pub fn get_connections(&self, from: NodeIndex, to: NodeIndex) -> NodeConnections<'_> {
-        NodeConnections::new(self, to, self.output_links(from))
-    }
-
-    /// Checks whether there is a directed link between the two nodes and
-    /// returns the first matching pair of ports.
-    ///
-    /// # Example
-    /// ```
-    /// # use portgraph::multiportgraph::{MultiPortGraph, SubportIndex};
-    /// # use portgraph::{NodeIndex, PortIndex, Direction};
-    /// let mut g = MultiPortGraph::new();
-    /// let a = g.add_node(0, 2);
-    /// let b = g.add_node(2, 0);
-    ///
-    /// g.link_nodes(a, 0, b, 0).unwrap();
-    /// g.link_nodes(a, 1, b, 1).unwrap();
-    ///
-    /// let out0 = g.output(a, 0).unwrap();
-    /// let in0 = g.input(b, 0).unwrap();
-    /// assert_eq!(g.get_connection(a, b), Some((SubportIndex::new_multi(out0,0), SubportIndex::new_multi(in0,0))));
-    /// ```
-    #[must_use]
-    #[inline]
-    pub fn get_connection(
-        &self,
-        from: NodeIndex,
-        to: NodeIndex,
-    ) -> Option<(SubportIndex, SubportIndex)> {
-        self.get_connections(from, to).next()
-    }
-
-    /// Checks whether there is a directed link between the two nodes.
-    ///
-    /// # Example
-    /// ```
-    /// # use portgraph::multiportgraph::MultiPortGraph;
-    /// # use portgraph::{NodeIndex, PortIndex, Direction};
-    /// let mut g = MultiPortGraph::new();
-    /// let a = g.add_node(0, 2);
-    /// let b = g.add_node(2, 0);
-    ///
-    /// g.link_nodes(a, 0, b, 0).unwrap();
-    ///
-    /// assert!(g.connected(a, b));
-    /// ```
-    #[must_use]
-    #[inline]
-    pub fn connected(&self, from: NodeIndex, to: NodeIndex) -> bool {
-        self.get_connection(from, to).is_some()
-    }
-
-    /// Links two nodes at an input and output port offsets.
-    pub fn link_nodes(
-        &mut self,
-        from: NodeIndex,
-        from_output: usize,
-        to: NodeIndex,
-        to_input: usize,
-    ) -> Result<(SubportIndex, SubportIndex), LinkError> {
-        self.link_offsets(
-            from,
-            PortOffset::new_outgoing(from_output),
-            to,
-            PortOffset::new_incoming(to_input),
-        )
-    }
-
-    /// Links two nodes at an input and output port offsets.
-    ///
-    /// # Errors
-    ///
-    ///  - If the ports and nodes do not exist.
-    ///  - If the ports have the same direction.
-    pub fn link_offsets(
-        &mut self,
-        node_a: NodeIndex,
-        offset_a: PortOffset,
-        node_b: NodeIndex,
-        offset_b: PortOffset,
-    ) -> Result<(SubportIndex, SubportIndex), LinkError> {
-        let from_port = self
-            .port_index(node_a, offset_a)
-            .ok_or(LinkError::UnknownOffset {
-                node: node_a,
-                offset: offset_a,
-            })?;
-        let to_port = self
-            .port_index(node_b, offset_b)
-            .ok_or(LinkError::UnknownOffset {
-                node: node_b,
-                offset: offset_b,
-            })?;
-        self.link_ports(from_port, to_port)
-    }
-
-    /// Returns the direction of the `port`.
-    #[inline]
-    pub fn port_direction(&self, port: impl Into<PortIndex>) -> Option<Direction> {
+    fn port_direction(&self, port: impl Into<PortIndex>) -> Option<Direction> {
         self.graph.port_direction(port.into())
     }
 
-    /// Returns the node that the `port` belongs to.
     #[inline]
-    pub fn port_node(&self, port: impl Into<PortIndex>) -> Option<NodeIndex> {
+    fn port_node(&self, port: impl Into<PortIndex>) -> Option<NodeIndex> {
         self.graph.port_node(port.into())
     }
 
-    /// Returns the index of a `port` within its node's port list.
-    pub fn port_offset(&self, port: impl Into<PortIndex>) -> Option<PortOffset> {
+    #[inline]
+    fn port_offset(&self, port: impl Into<PortIndex>) -> Option<PortOffset> {
         self.graph.port_offset(port.into())
     }
 
-    /// Returns the port index for a given node, direction, and offset.
-    #[must_use]
-    pub fn port_index(&self, node: NodeIndex, offset: PortOffset) -> Option<PortIndex> {
+    #[inline]
+    fn port_index(&self, node: NodeIndex, offset: PortOffset) -> Option<PortIndex> {
         self.graph.port_index(node, offset)
     }
 
-    /// Returns the port that the given `port` is linked to.
     #[inline]
-    pub fn port_links(&self, port: PortIndex) -> PortLinks {
-        PortLinks::new(self, port)
-    }
-
-    /// Return the link to the provided port, if not connected return None.
-    /// If this port has multiple connected subports, an arbitrary one is returned.
-    #[inline]
-    pub fn port_link(&self, port: PortIndex) -> Option<SubportIndex> {
-        self.port_links(port).next().map(|(_, p)| p)
-    }
-
-    /// Return the subport linked to the given `port`. If the port is not
-    /// connected, return None.
-    pub fn subport_link(&self, subport: SubportIndex) -> Option<SubportIndex> {
-        let subport_index = self.get_subport_index(subport)?;
-        let link = self.graph.port_link(subport_index)?;
-        self.get_subport_from_index(link)
-    }
-
-    /// Iterates over all the ports of the `node` in the given `direction`.
-    pub fn ports(&self, node: NodeIndex, direction: Direction) -> NodePorts {
+    fn ports(&self, node: NodeIndex, direction: Direction) -> Self::NodePorts<'_> {
         self.graph.ports(node, direction)
     }
 
-    /// Iterates over the input and output ports of the `node` in sequence.
-    pub fn all_ports(&self, node: NodeIndex) -> NodePorts {
+    #[inline]
+    fn all_ports(&self, node: NodeIndex) -> Self::NodePorts<'_> {
         self.graph.all_ports(node)
     }
 
-    /// Returns the input port at the given offset in the `node`.
-    ///
-    /// Shorthand for [`MultiPortGraph::port_index`].
     #[inline]
-    pub fn input(&self, node: NodeIndex, offset: usize) -> Option<PortIndex> {
+    fn input(&self, node: NodeIndex, offset: usize) -> Option<PortIndex> {
         self.graph.input(node, offset)
     }
 
-    /// Returns the output port at the given offset in the `node`.
-    ///
-    /// Shorthand for [`MultiPortGraph::ports`].
     #[inline]
-    pub fn output(&self, node: NodeIndex, offset: usize) -> Option<PortIndex> {
+    fn output(&self, node: NodeIndex, offset: usize) -> Option<PortIndex> {
         self.graph.output(node, offset)
     }
 
-    /// Iterates over all the input ports of the `node`.
-    ///
-    /// Shorthand for [`MultiPortGraph::ports`].
     #[inline]
-    pub fn inputs(&self, node: NodeIndex) -> NodePorts {
-        self.graph.inputs(node)
-    }
-
-    /// Iterates over all the output ports of the `node`.
-    ///
-    /// Shorthand for [`MultiPortGraph::ports`].
-    #[inline]
-    pub fn outputs(&self, node: NodeIndex) -> NodePorts {
-        self.graph.outputs(node)
-    }
-
-    /// Returns the number of input ports of the `node`.
-    ///
-    /// Shorthand for [`MultiPortGraph::num_ports`].
-    #[inline]
-    pub fn num_inputs(&self, node: NodeIndex) -> usize {
-        self.graph.num_inputs(node)
-    }
-
-    /// Returns the number of output ports of the `node`.
-    ///
-    /// Shorthand for [`MultiPortGraph::num_ports`].
-    #[inline]
-    pub fn num_outputs(&self, node: NodeIndex) -> usize {
-        self.graph.num_outputs(node)
-    }
-
-    /// Returns the number of ports of the `node` in the given `direction`.
-    #[inline]
-    pub fn num_ports(&self, node: NodeIndex, direction: Direction) -> usize {
+    fn num_ports(&self, node: NodeIndex, direction: Direction) -> usize {
         self.graph.num_ports(node, direction)
     }
 
-    /// Iterates over all the ports of the `node` in the given `direction`.
-    pub fn subports(&self, node: NodeIndex, direction: Direction) -> NodeSubports {
-        NodeSubports::new(self, self.graph.ports(node, direction))
-    }
-
-    /// Iterates over the input and output ports of the `node` in sequence.
-    pub fn all_subports(&self, node: NodeIndex) -> NodeSubports {
-        NodeSubports::new(self, self.graph.all_ports(node))
-    }
-
-    /// Iterates over all the input ports of the `node`.
-    ///
-    /// Shorthand for [`MultiPortGraph::subports`].
     #[inline]
-    pub fn subport_inputs(&self, node: NodeIndex) -> NodeSubports {
-        self.subports(node, Direction::Incoming)
-    }
-
-    /// Iterates over all the output ports of the `node`.
-    ///
-    /// Shorthand for [`MultiPortGraph::subports`].
-    #[inline]
-    pub fn subport_outputs(&self, node: NodeIndex) -> NodeSubports {
-        self.subports(node, Direction::Outgoing)
-    }
-
-    /// Iterates over all the port offsets of the `node` in the given `direction`.
-    pub fn port_offsets(&self, node: NodeIndex, direction: Direction) -> NodePortOffsets {
+    fn port_offsets(&self, node: NodeIndex, direction: Direction) -> Self::NodePortOffsets<'_> {
         self.graph.port_offsets(node, direction)
     }
 
-    /// Iterates over all the input port offsets of the `node`.
-    ///
-    /// Shorthand for [`MultiPortGraph::port_offsets`].
     #[inline]
-    pub fn input_offsets(&self, node: NodeIndex) -> NodePortOffsets {
-        self.graph.input_offsets(node)
-    }
-
-    /// Iterates over all the output port offsets of the `node`.
-    ///
-    /// Shorthand for [`MultiPortGraph::port_offsets`].
-    #[inline]
-    pub fn output_offsets(&self, node: NodeIndex) -> NodePortOffsets {
-        self.graph.output_offsets(node)
-    }
-
-    /// Iterates over the input and output port offsets of the `node` in sequence.
-    #[inline]
-    pub fn all_port_offsets(&self, node: NodeIndex) -> NodePortOffsets {
+    fn all_port_offsets(&self, node: NodeIndex) -> Self::NodePortOffsets<'_> {
         self.graph.all_port_offsets(node)
     }
 
-    /// Iterates over the connected links of the `node` in the given
-    /// `direction`.
-    ///
-    /// In contrast to [`PortGraph::links`], this iterator only returns linked
-    /// subports, and includes the source subport.
-    ///
-    /// [`PortGraph::links`]: crate::portgraph::PortGraph::links
     #[inline]
-    pub fn links(&self, node: NodeIndex, direction: Direction) -> NodeLinks<'_> {
-        NodeLinks::new(self, self.ports(node, direction))
-    }
-
-    /// Iterates over the connected input links of the `node`. Shorthand for
-    /// [`MultiPortGraph::links`].
-    #[inline]
-    pub fn input_links(&self, node: NodeIndex) -> NodeLinks<'_> {
-        self.links(node, Direction::Incoming)
-    }
-
-    /// Iterates over the connected output links of the `node`. Shorthand for
-    /// [`MultiPortGraph::links`].
-    #[inline]
-    pub fn output_links(&self, node: NodeIndex) -> NodeLinks<'_> {
-        self.links(node, Direction::Outgoing)
-    }
-
-    /// Iterates over the connected input and output links of the `node` in sequence.
-    #[inline]
-    pub fn all_links(&self, node: NodeIndex) -> NodeLinks<'_> {
-        NodeLinks::new(self, self.all_ports(node))
-    }
-
-    /// Iterates over neighbour nodes in the given `direction`.
-    /// May contain duplicates if the graph has multiple links between nodes.
-    #[inline]
-    pub fn neighbours(&self, node: NodeIndex, direction: Direction) -> Neighbours<'_> {
-        Neighbours::new(self, self.subports(node, direction))
-    }
-
-    /// Iterates over the input neighbours of the `node`. Shorthand for [`MultiPortGraph::neighbours`].
-    #[inline]
-    pub fn input_neighbours(&self, node: NodeIndex) -> Neighbours<'_> {
-        self.neighbours(node, Direction::Incoming)
-    }
-
-    /// Iterates over the output neighbours of the `node`. Shorthand for [`MultiPortGraph::neighbours`].
-    #[inline]
-    pub fn output_neighbours(&self, node: NodeIndex) -> Neighbours<'_> {
-        self.neighbours(node, Direction::Outgoing)
-    }
-
-    /// Iterates over the input and output neighbours of the `node` in sequence.
-    #[inline]
-    pub fn all_neighbours(&self, node: NodeIndex) -> Neighbours<'_> {
-        Neighbours::new(self, self.all_subports(node))
-    }
-
-    /// Returns whether the port graph contains the `node`.
-    #[inline]
-    pub fn contains_node(&self, node: NodeIndex) -> bool {
+    fn contains_node(&self, node: NodeIndex) -> bool {
         self.graph.contains_node(node) && !self.copy_node.get(node)
     }
 
-    /// Returns whether the port graph contains the `port`.
     #[inline]
-    pub fn contains_port(&self, port: PortIndex) -> bool {
+    fn contains_port(&self, port: PortIndex) -> bool {
         self.graph
             .port_node(port)
             .map_or(false, |node| !self.copy_node.get(node))
     }
 
-    /// Returns whether the port graph has no nodes nor ports.
     #[inline]
-    pub fn is_empty(&self) -> bool {
+    fn is_empty(&self) -> bool {
         self.node_count() == 0
     }
 
-    /// Returns the number of nodes in the port graph.
     #[inline]
-    pub fn node_count(&self) -> usize {
+    fn node_count(&self) -> usize {
         self.graph.node_count() - self.copy_node_count
     }
 
-    /// Returns the number of ports in the port graph.
     #[inline]
-    pub fn port_count(&self) -> usize {
+    fn port_count(&self) -> usize {
         // Do not count the ports in the copy nodes. We have to subtract one of
         // the two ports connecting the copy nodes with their main nodes, in
         // addition to all the subports.
         self.graph.port_count() - self.subport_count - self.copy_node_count
     }
-
-    /// Returns the number of links between ports.
     #[inline]
-    pub fn link_count(&self) -> usize {
-        // Do not count the links between copy nodes and their main nodes.
-        self.graph.link_count() - self.copy_node_count
-    }
-
-    /// Iterates over the nodes in the port graph.
-    #[inline]
-    pub fn nodes_iter(&self) -> Nodes<'_> {
+    fn nodes_iter(&self) -> Self::Nodes<'_> {
         self::iter::Nodes {
             multigraph: self,
             iter: self.graph.nodes_iter(),
@@ -599,14 +221,12 @@ impl MultiPortGraph {
         }
     }
 
-    /// Iterates over the ports in the port graph.
     #[inline]
-    pub fn ports_iter(&self) -> Ports<'_> {
+    fn ports_iter(&self) -> Self::Ports<'_> {
         Ports::new(self, self.graph.ports_iter())
     }
 
-    /// Removes all nodes and ports from the port graph.
-    pub fn clear(&mut self) {
+    fn clear(&mut self) {
         self.graph.clear();
         self.multiport.clear();
         self.copy_node.clear();
@@ -614,54 +234,31 @@ impl MultiPortGraph {
         self.subport_count = 0;
     }
 
-    /// Returns the capacity of the underlying buffer for nodes.
     #[inline]
-    pub fn node_capacity(&self) -> usize {
+    fn node_capacity(&self) -> usize {
         self.graph.node_capacity() - self.copy_node_count
     }
 
-    /// Returns the capacity of the underlying buffer for ports.
     #[inline]
-    pub fn port_capacity(&self) -> usize {
+    fn port_capacity(&self) -> usize {
         // See [`MultiPortGraph::port_count`]
         self.graph.port_capacity() - self.subport_count - self.copy_node_count
     }
 
-    /// Returns the allocated port capacity for a specific node.
-    ///
-    /// Changes to the number of ports of the node will not reallocate
-    /// until the number of ports exceeds this capacity.
     #[inline]
-    pub fn node_port_capacity(&self, node: NodeIndex) -> usize {
+    fn node_port_capacity(&self, node: NodeIndex) -> usize {
         self.graph.node_port_capacity(node)
     }
 
-    /// Reserves enough capacity to insert at least the given number of additional nodes and ports.
-    ///
-    /// This method does not take into account the length of the free list and might overallocate speculatively.
-    pub fn reserve(&mut self, nodes: usize, ports: usize) {
+    #[inline]
+    fn reserve(&mut self, nodes: usize, ports: usize) {
         self.graph.reserve(nodes, ports);
         self.multiport.reserve(ports);
         self.copy_node.reserve(nodes);
     }
 
-    /// Changes the number of ports of the `node` to the given `incoming` and `outgoing` counts.
-    ///
-    /// Invalidates the indices of the node's ports. If the number of incoming or outgoing ports
-    /// is reduced, the ports are removed from the end of the port list.
-    ///
-    /// Every time a port is moved, the `rekey` function will be called with its old and new index.
-    /// If the port is removed, the new index will be `None`.
-    ///
-    /// This operation is O(n) where n is the number of ports of the node.
-    #[allow(unreachable_code)] // TODO
-    pub fn set_num_ports<F>(
-        &mut self,
-        node: NodeIndex,
-        incoming: usize,
-        outgoing: usize,
-        mut rekey: F,
-    ) where
+    fn set_num_ports<F>(&mut self, node: NodeIndex, incoming: usize, outgoing: usize, mut rekey: F)
+    where
         F: FnMut(PortIndex, PortOperation),
     {
         let mut dropped_ports = Vec::new();
@@ -677,18 +274,12 @@ impl MultiPortGraph {
         for (port, old_link) in dropped_ports {
             if self.is_multiport(port) {
                 let link = old_link.expect("Multiport node has no link");
-                self.remove_copy_node(port, link)
+                self.remove_copy_node(port, link);
             }
         }
     }
 
-    /// Compacts the storage of nodes in the portgraph. Note that indices won't
-    /// necessarily be consecutively after this process, as there may be
-    /// hidden copy nodes.
-    ///
-    /// Every time a node is moved, the `rekey` function will be called with its
-    /// old and new index.
-    pub fn compact_nodes<F>(&mut self, mut rekey: F)
+    fn compact_nodes<F>(&mut self, mut rekey: F)
     where
         F: FnMut(NodeIndex, NodeIndex),
     {
@@ -698,13 +289,7 @@ impl MultiPortGraph {
         });
     }
 
-    /// Compacts the storage of ports in the portgraph. Note that indices won't
-    /// necessarily be consecutively after this process, as there may be hidden
-    /// copy nodes.
-    ///
-    /// Every time a port is moved, the `rekey` function will be called with is
-    /// old and new index.
-    pub fn compact_ports<F>(&mut self, mut rekey: F)
+    fn compact_ports<F>(&mut self, mut rekey: F)
     where
         F: FnMut(PortIndex, PortIndex),
     {
@@ -714,34 +299,156 @@ impl MultiPortGraph {
         });
     }
 
-    /// Shrinks the underlying buffers to the fit the data.
-    ///
-    /// This does not move nodes or ports, which might prevent freeing up more capacity.
-    pub fn shrink_to_fit(&mut self) {
+    fn shrink_to_fit(&mut self) {
         self.graph.shrink_to_fit();
         self.multiport.shrink_to_fit();
         self.copy_node.shrink_to_fit();
     }
+}
 
-    /// Given a node in the underlying flat portgraph, returns the main node for it.
-    ///
-    /// If the node is not a copy node, returns the node itself.
-    pub fn pg_main_node(&self, node: NodeIndex) -> NodeIndex {
-        if !self.copy_node.get(node) {
-            return node;
+impl LinkView for MultiPortGraph {
+    type LinkEndpoint = SubportIndex;
+
+    type Neighbours<'a> = Neighbours<'a>
+    where
+        Self: 'a;
+
+    type NodeConnections<'a> = NodeConnections<'a>
+    where
+        Self: 'a;
+
+    type NodeLinks<'a> = NodeLinks<'a>
+    where
+        Self: 'a;
+
+    type PortLinks<'a> = PortLinks<'a>
+    where
+        Self: 'a;
+
+    fn link_ports(
+        &mut self,
+        port_a: PortIndex,
+        port_b: PortIndex,
+    ) -> Result<(SubportIndex, SubportIndex), LinkError> {
+        let (multiport_a, index_a) = self.get_free_multiport(port_a)?;
+        let (multiport_b, index_b) = self.get_free_multiport(port_b)?;
+        self.graph.link_ports(index_a, index_b)?;
+        Ok((multiport_a, multiport_b))
+    }
+
+    fn unlink_port(&mut self, port: PortIndex) -> Option<SubportIndex> {
+        if self.is_multiport(port) {
+            let link = self
+                .graph
+                .port_link(port)
+                .expect("MultiPortGraph error: a port marked as multiport has no link.");
+            self.remove_copy_node(port, link)
+        } else {
+            self.graph.unlink_port(port).map(SubportIndex::new_unique)
         }
-        self.port_node(self.copy_node_main_port(node).unwrap())
-            .unwrap()
+    }
+
+    #[inline]
+    fn get_connections(&self, from: NodeIndex, to: NodeIndex) -> Self::NodeConnections<'_> {
+        NodeConnections::new(self, to, self.output_links(from))
+    }
+
+    #[inline]
+    fn port_links(&self, port: PortIndex) -> Self::PortLinks<'_> {
+        PortLinks::new(self, port)
+    }
+
+    #[inline]
+    fn links(&self, node: NodeIndex, direction: Direction) -> Self::NodeLinks<'_> {
+        NodeLinks::new(self, self.ports(node, direction))
+    }
+
+    #[inline]
+    fn all_links(&self, node: NodeIndex) -> Self::NodeLinks<'_> {
+        NodeLinks::new(self, self.all_ports(node))
+    }
+
+    #[inline]
+    fn neighbours(&self, node: NodeIndex, direction: Direction) -> Self::Neighbours<'_> {
+        Neighbours::new(self, self.subports(node, direction))
+    }
+
+    #[inline]
+    fn all_neighbours(&self, node: NodeIndex) -> Self::Neighbours<'_> {
+        Neighbours::new(self, self.all_subports(node))
+    }
+
+    #[inline]
+    fn link_count(&self) -> usize {
+        // Do not count the links between copy nodes and their main nodes.
+        self.graph.link_count() - self.copy_node_count
+    }
+}
+
+impl MultiView for MultiPortGraph {
+    type SubportIndex = SubportIndex;
+
+    type NodeSubports<'a> = NodeSubports<'a>
+    where
+        Self: 'a;
+
+    fn link_subports(
+        &mut self,
+        subport_from: Self::SubportIndex,
+        subport_to: Self::SubportIndex,
+    ) -> Result<(), LinkError> {
+        // TODO: Custom errors
+        let from_index = self
+            .get_subport_index(subport_from)
+            .expect("subport_from does not exist");
+        let to_index = self
+            .get_subport_index(subport_to)
+            .expect("subport_to does not exist");
+        self.graph.link_ports(from_index, to_index)?;
+        Ok(())
+    }
+
+    fn unlink_subport(&mut self, subport: Self::SubportIndex) -> Option<Self::SubportIndex> {
+        // TODO: Remove copy nodes when they are no longer needed?
+        let subport_index = self.get_subport_index(subport)?;
+        let link = self.graph.unlink_port(subport_index)?;
+        self.get_subport_from_index(link)
+    }
+
+    fn subport_link(&self, subport: Self::SubportIndex) -> Option<Self::SubportIndex> {
+        let subport_index = self.get_subport_index(subport)?;
+        let link = self.graph.port_link(subport_index)?;
+        self.get_subport_from_index(link)
+    }
+
+    #[inline]
+    fn subports(&self, node: NodeIndex, direction: Direction) -> Self::NodeSubports<'_> {
+        NodeSubports::new(self, self.graph.ports(node, direction))
+    }
+
+    #[inline]
+    fn all_subports(&self, node: NodeIndex) -> Self::NodeSubports<'_> {
+        NodeSubports::new(self, self.graph.all_ports(node))
     }
 }
 
 /// Internal helper methods
 impl MultiPortGraph {
     /// Remove an internal copy node.
-    fn remove_copy_node(&mut self, main_node_port: PortIndex, copy_port: PortIndex) {
+    ///
+    /// Returns one of the links, if the node was connected
+    fn remove_copy_node(
+        &mut self,
+        main_node_port: PortIndex,
+        copy_port: PortIndex,
+    ) -> Option<SubportIndex> {
         let copy_node = self.graph.port_node(copy_port).unwrap();
         let dir = self.port_direction(copy_port).unwrap();
         debug_assert!(self.copy_node.get(copy_node));
+
+        let link = self.graph.links(copy_node, dir).next();
+        let link = link.map(|(_, tgt)| self.get_subport_from_index(tgt).unwrap());
+
         let mut subports = self.graph.ports(copy_node, dir.reverse());
         self.multiport.set(copy_port, false);
         self.multiport.set(main_node_port, false);
@@ -750,6 +457,8 @@ impl MultiPortGraph {
         self.copy_node_count -= 1;
         self.subport_count -= subports.len();
         debug_assert!(subports.all(|port| !self.multiport.get(port.index())));
+
+        link
     }
 
     /// Returns a free multiport for the given port, along with its
@@ -855,9 +564,10 @@ impl MultiPortGraph {
         dir: Direction,
     ) -> Result<(), LinkError> {
         match dir {
-            Direction::Incoming => self.graph.link_ports(port2, port1),
-            Direction::Outgoing => self.graph.link_ports(port1, port2),
-        }
+            Direction::Incoming => self.graph.link_ports(port2, port1)?,
+            Direction::Outgoing => self.graph.link_ports(port1, port2)?,
+        };
+        Ok(())
     }
 
     /// Returns the PortIndex from the main node that connects to this copy node.

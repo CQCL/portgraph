@@ -1,13 +1,13 @@
 //! Iterator structures for a portgraph
 
 use std::{
-    iter::{Flatten, FusedIterator, Zip},
+    iter::{FusedIterator, Zip},
     ops::Range,
 };
 
 use crate::{
     portgraph::{NodeEntry, PortEntry, PortGraph},
-    Direction,
+    Direction, PortView,
 };
 use crate::{NodeIndex, PortIndex, PortOffset};
 
@@ -233,54 +233,66 @@ impl DoubleEndedIterator for NodePortOffsets {
 
 impl FusedIterator for NodePortOffsets {}
 
-/// Iterator over the links of a node, created by [`PortGraph::links`]. Returns
-/// the port indices linked to each port, or `None` if the corresponding port is
-/// not connected.
+/// Iterator over the links of a node, created by [`LinkView::links`]. Returns
+/// the port indices linked to each port.
+///
+/// [`LinkView::links`]: crate::LinkView::links
 #[derive(Clone, Debug)]
-pub struct NodeLinks<'a>(pub(super) std::slice::Iter<'a, Option<PortIndex>>);
+pub struct NodeLinks<'a> {
+    links: Zip<NodePorts, std::slice::Iter<'a, Option<PortIndex>>>,
+}
+
+impl<'a> NodeLinks<'a> {
+    /// Returns a new iterator
+    pub(super) fn new(ports: NodePorts, links: &'a [Option<PortIndex>]) -> Self {
+        Self {
+            links: ports.zip(links.iter()),
+        }
+    }
+}
 
 impl<'a> Iterator for NodeLinks<'a> {
-    type Item = Option<PortIndex>;
+    type Item = (PortIndex, PortIndex);
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.0.next().copied()
-    }
-
-    #[inline]
-    fn nth(&mut self, n: usize) -> Option<Self::Item> {
-        self.0.nth(n).copied()
+        loop {
+            let (port, link) = self.links.next()?;
+            if let Some(link) = link {
+                return Some((port, *link));
+            }
+        }
     }
 
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        self.0.size_hint()
-    }
-}
-
-impl<'a> ExactSizeIterator for NodeLinks<'a> {
-    #[inline]
-    fn len(&self) -> usize {
-        self.0.len()
+        (0, self.links.size_hint().1)
     }
 }
 
 impl<'a> DoubleEndedIterator for NodeLinks<'a> {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.0.next_back().copied()
+        loop {
+            let (port, link) = self.links.next_back()?;
+            if let Some(link) = link {
+                return Some((port, *link));
+            }
+        }
     }
 }
 
 impl<'a> FusedIterator for NodeLinks<'a> {}
 
 /// Iterator over the neighbours of a node, created by
-/// [`PortGraph::neighbours`]. May return duplicate entries if the graph has
+/// [`LinkView::neighbours`]. May return duplicate entries if the graph has
 /// multiple links between the same pair of nodes.
+///
+/// [`LinkView::neighbours`]: crate::LinkView::neighbours
 #[derive(Clone, Debug)]
 pub struct Neighbours<'a> {
     graph: &'a PortGraph,
-    linked_ports: Flatten<NodeLinks<'a>>,
+    linked_ports: NodeLinks<'a>,
 }
 
 impl<'a> Neighbours<'a> {
@@ -289,7 +301,7 @@ impl<'a> Neighbours<'a> {
     pub fn from_node_links(graph: &'a PortGraph, links: NodeLinks<'a>) -> Self {
         Self {
             graph,
-            linked_ports: links.flatten(),
+            linked_ports: links,
         }
     }
 }
@@ -301,7 +313,7 @@ impl<'a> Iterator for Neighbours<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         self.linked_ports
             .next()
-            .map(|port| self.graph.port_node(port).unwrap())
+            .map(|(_, port)| self.graph.port_node(port).unwrap())
     }
 
     #[inline]
@@ -315,51 +327,31 @@ impl<'a> DoubleEndedIterator for Neighbours<'a> {
     fn next_back(&mut self) -> Option<Self::Item> {
         self.linked_ports
             .next_back()
-            .map(|port| self.graph.port_node(port).unwrap())
+            .map(|(_, port)| self.graph.port_node(port).unwrap())
     }
 }
 
 impl<'a> FusedIterator for Neighbours<'a> {}
 
 /// Iterator over the links connecting two nodes, created by
-/// [`PortGraph::get_connections`].
+/// [`LinkView::get_connections`].
+///
+/// [`LinkView::get_connections`]: crate::LinkView::get_connections
 #[derive(Clone, Debug)]
 pub struct NodeConnections<'a> {
     graph: &'a PortGraph,
     target: NodeIndex,
-    port_links: Zip<NodePorts, NodeLinks<'a>>,
+    port_links: NodeLinks<'a>,
 }
 
 impl<'a> NodeConnections<'a> {
     /// Create a new iterator over the links connecting two nodes, from an
     /// iterator over the ports and links.
-    pub fn new(
-        graph: &'a PortGraph,
-        target: NodeIndex,
-        ports: NodePorts,
-        links: NodeLinks<'a>,
-    ) -> Self {
+    pub fn new(graph: &'a PortGraph, target: NodeIndex, links: NodeLinks<'a>) -> Self {
         Self {
             graph,
             target,
-            port_links: ports.zip(links),
-        }
-    }
-
-    /// Checks if we can yield an element from the `port_links` iterator.
-    ///
-    /// Receives `self.graph` and `self.target` as arguments to avoid borrowing issues.
-    fn get_next(
-        graph: &PortGraph,
-        target: NodeIndex,
-        next: (PortIndex, Option<PortIndex>),
-    ) -> Option<(PortIndex, PortIndex)> {
-        let (from, to) = next;
-        let to = to?;
-        if graph.port_node(to) == Some(target) {
-            Some((from, to))
-        } else {
-            None
+            port_links: links,
         }
     }
 }
@@ -369,8 +361,12 @@ impl<'a> Iterator for NodeConnections<'a> {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.port_links
-            .find_map(|next| Self::get_next(self.graph, self.target, next))
+        loop {
+            let (src, tgt) = self.port_links.next()?;
+            if self.graph.port_node(tgt) == Some(self.target) {
+                return Some((src, tgt));
+            }
+        }
     }
 
     #[inline]
@@ -382,12 +378,12 @@ impl<'a> Iterator for NodeConnections<'a> {
 impl<'a> DoubleEndedIterator for NodeConnections<'a> {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
-        while let Some(next) = self.port_links.next_back() {
-            if let Some(next) = Self::get_next(self.graph, self.target, next) {
-                return Some(next);
+        loop {
+            let (src, tgt) = self.port_links.next_back()?;
+            if self.graph.port_node(tgt) == Some(self.target) {
+                return Some((src, tgt));
             }
         }
-        None
     }
 }
 

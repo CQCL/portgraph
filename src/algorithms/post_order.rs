@@ -2,7 +2,7 @@ use std::iter::FusedIterator;
 
 use bitvec::vec::BitVec;
 
-use crate::{Direction, NodeIndex, PortGraph, PortIndex};
+use crate::{Direction, LinkView, NodeIndex, PortGraph, PortIndex, PortView};
 
 /// Returns an iterator doing a post-order traversal of a spanning tree in a
 /// [`PortGraph`].
@@ -22,7 +22,7 @@ use crate::{Direction, NodeIndex, PortGraph, PortIndex};
 /// And traverse it in post-order:
 ///
 /// ```
-/// # use portgraph::{algorithms::postorder, Direction, PortGraph};
+/// # use portgraph::{algorithms::postorder, Direction, PortGraph, PortView, LinkView};
 /// let mut graph = PortGraph::new();
 ///
 /// let a = graph.add_node(0, 1);
@@ -78,7 +78,7 @@ pub fn postorder(
 /// And traverse it in post-order:
 ///
 /// ```
-/// # use portgraph::{algorithms::postorder_filtered, Direction, PortGraph};
+/// # use portgraph::{algorithms::postorder_filtered, Direction, PortGraph, PortView, LinkView};
 /// let mut graph = PortGraph::new();
 ///
 /// let a = graph.add_node(0, 1);

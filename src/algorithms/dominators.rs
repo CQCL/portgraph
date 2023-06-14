@@ -1,6 +1,6 @@
 use super::postorder_filtered;
 use crate::unmanaged::UnmanagedDenseMap;
-use crate::{Direction, NodeIndex, PortGraph, PortIndex, SecondaryMap};
+use crate::{Direction, LinkView, NodeIndex, PortGraph, PortIndex, PortView, SecondaryMap};
 use std::cmp::Ordering;
 
 /// Returns a dominator tree for a [`PortGraph`], where each node is dominated
@@ -17,7 +17,7 @@ use std::cmp::Ordering;
 ///    ┗> d ┛
 ///
 /// ```
-/// # use portgraph::{algorithms::{dominators, DominatorTree}, Direction, PortGraph};
+/// # use portgraph::{algorithms::{dominators, DominatorTree}, Direction, PortGraph, PortView, LinkView};
 /// let mut graph = PortGraph::with_capacity(5, 10);
 /// let a = graph.add_node(0,2);
 /// let b = graph.add_node(1,1);
@@ -67,7 +67,7 @@ where
 /// a ─┬> b ┐ │    ├─> c ─> e f ─┴> d ┴────────^
 ///
 /// ```
-/// # use portgraph::{algorithms::{dominators_filtered, DominatorTree}, Direction, PortGraph};
+/// # use portgraph::{algorithms::{dominators_filtered, DominatorTree}, Direction, PortGraph, PortView, LinkView};
 /// let mut graph = PortGraph::with_capacity(5, 10);
 /// let a = graph.add_node(0,2);
 /// let b = graph.add_node(1,1);

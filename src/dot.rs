@@ -2,7 +2,7 @@
 
 use std::fmt::Display;
 
-use crate::{Direction, Hierarchy, NodeIndex, PortGraph, PortIndex, Weights};
+use crate::{Direction, Hierarchy, LinkView, NodeIndex, PortGraph, PortIndex, PortView, Weights};
 
 /// Style of an edge in a dot graph. Defaults to "None".
 pub type DotEdgeStyle = Option<String>;
@@ -196,6 +196,8 @@ fn get_edge_dot(
 
 #[cfg(test)]
 mod tests {
+    use crate::{LinkView, PortView};
+
     use super::*;
 
     #[test]

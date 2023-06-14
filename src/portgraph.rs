@@ -17,7 +17,7 @@ use std::num::{NonZeroU16, NonZeroU32};
 use std::ops::Range;
 use thiserror::Error;
 
-use crate::{Direction, NodeIndex, PortIndex, PortOffset};
+use crate::{Direction, LinkView, NodeIndex, PortIndex, PortOffset, PortView};
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -91,47 +91,6 @@ impl PortGraph {
             port_count: 0,
             link_count: 0,
         }
-    }
-
-    /// Adds a node to the portgraph with a given number of input and output ports.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the total number of ports exceeds `u16::MAX`.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// # use portgraph::PortGraph;
-    /// # use portgraph::Direction;
-    /// let mut g = PortGraph::new();
-    /// let node = g.add_node(4, 3);
-    /// assert_eq!(g.inputs(node).count(), 4);
-    /// assert_eq!(g.outputs(node).count(), 3);
-    /// assert!(g.contains_node(node));
-    /// ```
-    pub fn add_node(&mut self, incoming: usize, outgoing: usize) -> NodeIndex {
-        assert!(
-            incoming <= NodeMeta::MAX_INCOMING,
-            "Incoming port count exceeds maximum."
-        );
-        assert!(
-            outgoing <= NodeMeta::MAX_OUTGOING,
-            "Outgoing port count exceeds maximum."
-        );
-        assert!(
-            incoming + outgoing <= u16::MAX as usize,
-            "Total port count exceeds maximum u16::MAX."
-        );
-
-        let node = self.alloc_node();
-        let node_meta = self.alloc_ports(node, incoming, outgoing, 0);
-        self.node_meta[node.index()] = NodeEntry::Node(node_meta);
-
-        self.node_count += 1;
-        self.port_count += incoming + outgoing;
-
-        node
     }
 
     #[inline]
@@ -208,49 +167,6 @@ impl PortGraph {
         }
     }
 
-    /// Remove a node from the port graph. All ports of the node will be
-    /// unlinked and removed as well. Does nothing if the node does not exist.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// # use portgraph::PortGraph;
-    /// # use portgraph::Direction;
-    /// let mut g = PortGraph::new();
-    /// let node0 = g.add_node(1, 1);
-    /// let node1 = g.add_node(1, 1);
-    /// g.link_ports(g.outputs(node0).nth(0).unwrap(), g.inputs(node1).nth(0).unwrap());
-    /// g.link_ports(g.outputs(node1).nth(0).unwrap(), g.inputs(node0).nth(0).unwrap());
-    /// g.remove_node(node0);
-    /// assert!(!g.contains_node(node0));
-    /// assert!(g.port_link(g.outputs(node1).nth(0).unwrap()).is_none());
-    /// assert!(g.port_link(g.inputs(node1).nth(0).unwrap()).is_none());
-    /// ```
-    pub fn remove_node(&mut self, node: NodeIndex) {
-        let Some(node_meta) = self.node_meta.get(node.index()).copied() else {
-            return;
-        };
-
-        let NodeEntry::Node(node_meta) = node_meta else {
-            return;
-        };
-
-        self.free_node(node);
-
-        self.node_count -= 1;
-
-        if node_meta.capacity() > 0 {
-            let first_port = node_meta.first_port();
-            let size = node_meta.capacity();
-            self.port_count -= node_meta.port_count();
-
-            assert!(first_port.index() + size <= self.port_link.len());
-            assert!(first_port.index() + size <= self.port_meta.len());
-
-            self.free_ports(first_port, size);
-        }
-    }
-
     #[inline]
     fn free_node(&mut self, node: NodeIndex) {
         self.node_meta[node.index()] = NodeEntry::Free(self.node_free);
@@ -282,753 +198,6 @@ impl PortGraph {
 
         // Add this slab to the free list.
         self.port_link[ports.index()] = replace(ports_free, Some(ports));
-    }
-
-    /// Link an output and an input port.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// # use portgraph::PortGraph;
-    /// # use portgraph::Direction;
-    /// let mut g = PortGraph::new();
-    /// let node0 = g.add_node(0, 1);
-    /// let node1 = g.add_node(1, 0);
-    /// let node0_output = g.output(node0, 0).unwrap();
-    /// let node1_input = g.input(node1, 0).unwrap();
-    /// g.link_ports(node0_output, node1_input).unwrap();
-    /// assert_eq!(g.port_link(node0_output), Some(node1_input));
-    /// assert_eq!(g.port_link(node1_input), Some(node0_output));
-    /// ```
-    ///
-    /// # Errors
-    ///
-    ///  - If `port_a` or `port_b` does not exist.
-    ///  - If `port_a` and `port_b` have the same direction.
-    ///  - If `port_a` or `port_b` is already linked.
-    pub fn link_ports(&mut self, port_a: PortIndex, port_b: PortIndex) -> Result<(), LinkError> {
-        let Some(meta_a) = self.port_meta_valid(port_a) else {
-            return Err(LinkError::UnknownPort{port: port_a});
-        };
-
-        let Some(meta_b) = self.port_meta_valid(port_b) else {
-            return Err(LinkError::UnknownPort{port: port_a});
-        };
-
-        if meta_a.direction() == meta_b.direction() {
-            return Err(LinkError::IncompatibleDirections {
-                port_a,
-                port_b,
-                dir: meta_a.direction(),
-            });
-        }
-
-        if self.port_link[port_a.index()].is_some() {
-            return Err(LinkError::AlreadyLinked { port: port_a });
-        } else if self.port_link[port_b.index()].is_some() {
-            return Err(LinkError::AlreadyLinked { port: port_b });
-        }
-
-        self.port_link[port_a.index()] = Some(port_b);
-        self.port_link[port_b.index()] = Some(port_a);
-        self.link_count += 1;
-        Ok(())
-    }
-
-    /// Unlinks the `port` and returns the port it was linked to. Returns `None`
-    /// when the port was not linked.
-    pub fn unlink_port(&mut self, port: PortIndex) -> Option<PortIndex> {
-        self.port_meta_valid(port)?;
-        let linked = take(&mut self.port_link[port.index()])?;
-        self.port_link[linked.index()] = None;
-        self.link_count -= 1;
-        Some(linked)
-    }
-
-    /// Returns an iterator over every pair of matching ports connecting `from`
-    /// with `to`.
-    ///
-    /// # Example
-    /// ```
-    /// # use portgraph::{PortGraph, NodeIndex, PortIndex, Direction};
-    /// let mut g = PortGraph::new();
-    /// let a = g.add_node(0, 2);
-    /// let b = g.add_node(2, 0);
-    ///
-    /// g.link_nodes(a, 0, b, 0).unwrap();
-    /// g.link_nodes(a, 1, b, 1).unwrap();
-    ///
-    /// let mut connections = g.get_connections(a, b);
-    /// assert_eq!(connections.next(), Some((g.output(a,0).unwrap(), g.input(b,0).unwrap())));
-    /// assert_eq!(connections.next(), Some((g.output(a,1).unwrap(), g.input(b,1).unwrap())));
-    /// assert_eq!(connections.next(), None);
-    /// ```
-    #[must_use]
-    #[inline]
-    pub fn get_connections(&self, from: NodeIndex, to: NodeIndex) -> NodeConnections<'_> {
-        NodeConnections::new(self, to, self.outputs(from), self.output_links(from))
-    }
-
-    /// Checks whether there is a directed link between the two nodes and
-    /// returns the first matching pair of ports.
-    ///
-    /// # Example
-    /// ```
-    /// # use portgraph::{PortGraph, NodeIndex, PortIndex, Direction};
-    /// let mut g = PortGraph::new();
-    /// let a = g.add_node(0, 2);
-    /// let b = g.add_node(2, 0);
-    ///
-    /// g.link_nodes(a, 0, b, 0).unwrap();
-    /// g.link_nodes(a, 1, b, 1).unwrap();
-    ///
-    /// assert_eq!(g.get_connection(a, b), Some((g.output(a,0).unwrap(), g.input(b,0).unwrap())));
-    /// ```
-    #[must_use]
-    #[inline]
-    pub fn get_connection(&self, from: NodeIndex, to: NodeIndex) -> Option<(PortIndex, PortIndex)> {
-        self.get_connections(from, to).next()
-    }
-
-    /// Checks whether there is a directed link between the two nodes.
-    ///
-    /// # Example
-    /// ```
-    /// # use portgraph::{PortGraph, NodeIndex, PortIndex, Direction};
-    /// let mut g = PortGraph::new();
-    /// let a = g.add_node(0, 2);
-    /// let b = g.add_node(2, 0);
-    ///
-    /// g.link_nodes(a, 0, b, 0).unwrap();
-    ///
-    /// assert!(g.connected(a, b));
-    /// ```
-    #[must_use]
-    #[inline]
-    pub fn connected(&self, from: NodeIndex, to: NodeIndex) -> bool {
-        self.get_connection(from, to).is_some()
-    }
-
-    /// Links two nodes at an input and output port offsets.
-    ///
-    /// # Errors
-    ///
-    ///  - If the ports and nodes do not exist.
-    ///  - If the ports are already linked.
-    pub fn link_nodes(
-        &mut self,
-        from: NodeIndex,
-        from_output: usize,
-        to: NodeIndex,
-        to_input: usize,
-    ) -> Result<(PortIndex, PortIndex), LinkError> {
-        self.link_offsets(
-            from,
-            PortOffset::new_outgoing(from_output),
-            to,
-            PortOffset::new_incoming(to_input),
-        )
-    }
-
-    /// Links two nodes at an input and output port offsets.
-    ///
-    /// # Errors
-    ///
-    ///  - If the ports and nodes do not exist.
-    ///  - If the ports have the same direction.
-    ///  - If the ports are already linked.
-    pub fn link_offsets(
-        &mut self,
-        node_a: NodeIndex,
-        offset_a: PortOffset,
-        node_b: NodeIndex,
-        offset_b: PortOffset,
-    ) -> Result<(PortIndex, PortIndex), LinkError> {
-        let from_port = self
-            .port_index(node_a, offset_a)
-            .ok_or(LinkError::UnknownOffset {
-                node: node_a,
-                offset: offset_a,
-            })?;
-        let to_port = self
-            .port_index(node_b, offset_b)
-            .ok_or(LinkError::UnknownOffset {
-                node: node_b,
-                offset: offset_b,
-            })?;
-        self.link_ports(from_port, to_port)?;
-        Ok((from_port, to_port))
-    }
-
-    /// Returns the direction of the `port`.
-    #[inline]
-    pub fn port_direction(&self, port: PortIndex) -> Option<Direction> {
-        Some(self.port_meta_valid(port)?.direction())
-    }
-
-    /// Returns the node that the `port` belongs to.
-    #[inline]
-    pub fn port_node(&self, port: PortIndex) -> Option<NodeIndex> {
-        Some(self.port_meta_valid(port)?.node())
-    }
-
-    /// Returns the index of a `port` within its node's port list.
-    pub fn port_offset(&self, port: PortIndex) -> Option<PortOffset> {
-        let port_meta = self.port_meta_valid(port)?;
-        let node = port_meta.node();
-
-        let node_meta = match self.node_meta[node.index()] {
-            NodeEntry::Free(_) => unreachable!("ports are only attached to valid nodes"),
-            NodeEntry::Node(node_meta) => node_meta,
-        };
-
-        let port_offset = port.index().wrapping_sub(node_meta.first_port().index());
-
-        match port_meta.direction() {
-            Direction::Incoming => Some(PortOffset::new_incoming(port_offset)),
-            Direction::Outgoing => {
-                let port_offset = port_offset.saturating_sub(node_meta.incoming() as usize);
-                Some(PortOffset::new_outgoing(port_offset))
-            }
-        }
-    }
-
-    /// Returns the port index for a given node, direction, and offset.
-    #[must_use]
-    pub fn port_index(&self, node: NodeIndex, offset: PortOffset) -> Option<PortIndex> {
-        let node_meta = self.node_meta_valid(node)?;
-        let direction = offset.direction();
-        let offset = offset.index();
-        node_meta.ports(direction).nth(offset).map(PortIndex::new)
-    }
-
-    /// Returns the port that the given `port` is linked to.
-    #[inline]
-    pub fn port_link(&self, port: PortIndex) -> Option<PortIndex> {
-        self.port_meta_valid(port)?;
-        self.port_link[port.index()]
-    }
-
-    /// Iterates over all the ports of the `node` in the given `direction`.
-    pub fn ports(&self, node: NodeIndex, direction: Direction) -> NodePorts {
-        match self.node_meta_valid(node) {
-            Some(node_meta) => NodePorts {
-                indices: node_meta.ports(direction),
-            },
-            None => NodePorts::default(),
-        }
-    }
-
-    /// Iterates over the input and output ports of the `node` in sequence.
-    pub fn all_ports(&self, node: NodeIndex) -> NodePorts {
-        match self.node_meta_valid(node) {
-            Some(node_meta) => NodePorts {
-                indices: node_meta.all_ports(),
-            },
-            None => NodePorts::default(),
-        }
-    }
-
-    /// Returns the input port at the given offset in the `node`.
-    ///
-    /// Shorthand for [`PortGraph::port_index`].
-    #[inline]
-    pub fn input(&self, node: NodeIndex, offset: usize) -> Option<PortIndex> {
-        self.port_index(node, PortOffset::new_incoming(offset))
-    }
-
-    /// Returns the output port at the given offset in the `node`.
-    ///
-    /// Shorthand for [`PortGraph::ports`].
-    #[inline]
-    pub fn output(&self, node: NodeIndex, offset: usize) -> Option<PortIndex> {
-        self.port_index(node, PortOffset::new_outgoing(offset))
-    }
-
-    /// Iterates over all the input ports of the `node`.
-    ///
-    /// Shorthand for [`PortGraph::ports`].
-    #[inline]
-    pub fn inputs(&self, node: NodeIndex) -> NodePorts {
-        self.ports(node, Direction::Incoming)
-    }
-
-    /// Iterates over all the output ports of the `node`.
-    ///
-    /// Shorthand for [`PortGraph::ports`].
-    #[inline]
-    pub fn outputs(&self, node: NodeIndex) -> NodePorts {
-        self.ports(node, Direction::Outgoing)
-    }
-
-    /// Returns the number of input ports of the `node`.
-    ///
-    /// Shorthand for [`PortGraph::num_ports`].
-    #[inline]
-    pub fn num_inputs(&self, node: NodeIndex) -> usize {
-        self.num_ports(node, Direction::Incoming)
-    }
-
-    /// Returns the number of output ports of the `node`.
-    ///
-    /// Shorthand for [`PortGraph::num_ports`].
-    #[inline]
-    pub fn num_outputs(&self, node: NodeIndex) -> usize {
-        self.num_ports(node, Direction::Outgoing)
-    }
-
-    /// Returns the number of ports of the `node` in the given `direction`.
-    #[inline]
-    pub fn num_ports(&self, node: NodeIndex, direction: Direction) -> usize {
-        let Some(node_meta) = self.node_meta_valid(node) else {return 0;};
-        if Direction::Incoming == direction {
-            node_meta.incoming() as usize
-        } else {
-            node_meta.outgoing() as usize
-        }
-    }
-
-    /// Iterates over all the port offsets of the `node` in the given `direction`.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// # use portgraph::PortGraph;
-    /// # use portgraph::{Direction, PortOffset};
-    /// let mut graph = PortGraph::new();
-    /// let node = graph.add_node(0, 2);
-    ///
-    /// assert!(graph.links(node, Direction::Incoming).eq([]));
-    /// assert!(graph.port_offsets(node, Direction::Outgoing).eq([PortOffset::new_outgoing(0), PortOffset::new_outgoing(1)]));
-    /// ```
-    pub fn port_offsets(&self, node: NodeIndex, direction: Direction) -> NodePortOffsets {
-        match direction {
-            Direction::Incoming => NodePortOffsets {
-                incoming: 0..self.num_inputs(node) as u16,
-                outgoing: 0..0,
-            },
-            Direction::Outgoing => NodePortOffsets {
-                incoming: 0..0,
-                outgoing: 0..self.num_outputs(node) as u32,
-            },
-        }
-    }
-
-    /// Iterates over all the input port offsets of the `node`.
-    ///
-    /// Shorthand for [`PortGraph::port_offsets`].
-    #[inline]
-    pub fn input_offsets(&self, node: NodeIndex) -> NodePortOffsets {
-        self.port_offsets(node, Direction::Incoming)
-    }
-
-    /// Iterates over all the output port offsets of the `node`.
-    ///
-    /// Shorthand for [`PortGraph::port_offsets`].
-    #[inline]
-    pub fn output_offsets(&self, node: NodeIndex) -> NodePortOffsets {
-        self.port_offsets(node, Direction::Outgoing)
-    }
-
-    /// Iterates over the input and output port offsets of the `node` in sequence.
-    #[inline]
-    pub fn all_port_offsets(&self, node: NodeIndex) -> NodePortOffsets {
-        NodePortOffsets {
-            incoming: 0..self.num_inputs(node) as u16,
-            outgoing: 0..self.num_outputs(node) as u32,
-        }
-    }
-
-    /// Iterates over the links of the `node` in the given `direction`. When the
-    /// corresponding node port is linked to another one, the Option contains
-    /// the index of the other port.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use portgraph::PortGraph;
-    /// # use portgraph::Direction;
-    ///
-    /// let mut graph = PortGraph::new();
-    ///
-    /// let node_a = graph.add_node(0, 2);
-    /// let node_b = graph.add_node(1, 0);
-    ///
-    /// let port_a = graph.outputs(node_a).next().unwrap();
-    /// let port_b = graph.inputs(node_b).next().unwrap();
-    ///
-    /// graph.link_ports(port_a, port_b).unwrap();
-    ///
-    /// assert!(graph.links(node_a, Direction::Outgoing).eq([Some(port_b), None]));
-    /// assert!(graph.links(node_b, Direction::Incoming).eq([Some(port_a)]));
-    /// ```
-    #[inline]
-    pub fn links(&self, node: NodeIndex, direction: Direction) -> NodeLinks<'_> {
-        let Some(node_meta) = self.node_meta_valid(node) else {
-            return NodeLinks([].iter());
-        };
-        let indices = node_meta.ports(direction);
-        NodeLinks(self.port_link[indices].iter())
-    }
-
-    /// Iterates over the input links of the `node`. Shorthand for [`PortGraph::links`].
-    #[inline]
-    pub fn input_links(&self, node: NodeIndex) -> NodeLinks<'_> {
-        self.links(node, Direction::Incoming)
-    }
-
-    /// Iterates over the output links of the `node`. Shorthand for [`PortGraph::links`].
-    #[inline]
-    pub fn output_links(&self, node: NodeIndex) -> NodeLinks<'_> {
-        self.links(node, Direction::Outgoing)
-    }
-
-    /// Iterates over the input and output links of the `node` in sequence.
-    #[inline]
-    pub fn all_links(&self, node: NodeIndex) -> NodeLinks<'_> {
-        let Some(node_meta) = self.node_meta_valid(node) else {
-            return NodeLinks([].iter());
-        };
-        let indices = node_meta.all_ports();
-        NodeLinks(self.port_link[indices].iter())
-    }
-
-    /// Iterates over neighbour nodes in the given `direction`.
-    /// May contain duplicates if the graph has multiple links between nodes.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use portgraph::PortGraph;
-    /// # use portgraph::Direction;
-    ///
-    /// let mut graph = PortGraph::new();
-    ///
-    /// let a = graph.add_node(0, 1);
-    /// let b = graph.add_node(2, 1);
-    ///
-    /// graph.link_nodes(a, 0, b, 0).unwrap();
-    /// graph.link_nodes(b, 0, b, 1).unwrap();
-    ///
-    /// assert!(graph.neighbours(a, Direction::Outgoing).eq([b]));
-    /// assert!(graph.neighbours(b, Direction::Incoming).eq([a,b]));
-    /// ```
-    #[inline]
-    pub fn neighbours(&self, node: NodeIndex, direction: Direction) -> Neighbours<'_> {
-        Neighbours::from_node_links(self, self.links(node, direction))
-    }
-
-    /// Iterates over the input neighbours of the `node`. Shorthand for [`PortGraph::neighbours`].
-    #[inline]
-    pub fn input_neighbours(&self, node: NodeIndex) -> Neighbours<'_> {
-        self.neighbours(node, Direction::Incoming)
-    }
-
-    /// Iterates over the output neighbours of the `node`. Shorthand for [`PortGraph::neighbours`].
-    #[inline]
-    pub fn output_neighbours(&self, node: NodeIndex) -> Neighbours<'_> {
-        self.neighbours(node, Direction::Outgoing)
-    }
-
-    /// Iterates over the input and output neighbours of the `node` in sequence.
-    #[inline]
-    pub fn all_neighbours(&self, node: NodeIndex) -> Neighbours<'_> {
-        Neighbours::from_node_links(self, self.all_links(node))
-    }
-
-    /// Returns whether the port graph contains the `node`.
-    #[inline]
-    pub fn contains_node(&self, node: NodeIndex) -> bool {
-        self.node_meta_valid(node).is_some()
-    }
-
-    /// Returns whether the port graph contains the `port`.
-    #[inline]
-    pub fn contains_port(&self, port: PortIndex) -> bool {
-        self.port_meta_valid(port).is_some()
-    }
-
-    /// Returns whether the port graph has no nodes nor ports.
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.node_count == 0 && self.port_count == 0
-    }
-
-    /// Returns the number of nodes in the port graph.
-    #[inline]
-    pub fn node_count(&self) -> usize {
-        self.node_count
-    }
-
-    /// Returns the number of ports in the port graph.
-    #[inline]
-    pub fn port_count(&self) -> usize {
-        self.port_count
-    }
-
-    /// Returns the number of links between ports.
-    #[inline]
-    pub fn link_count(&self) -> usize {
-        self.link_count
-    }
-
-    /// Iterates over the nodes in the port graph.
-    #[inline]
-    pub fn nodes_iter(&self) -> Nodes<'_> {
-        Nodes {
-            iter: self.node_meta.iter().enumerate(),
-            len: self.node_count,
-        }
-    }
-
-    /// Iterates over the ports in the port graph.
-    #[inline]
-    pub fn ports_iter(&self) -> Ports<'_> {
-        Ports {
-            iter: self.port_meta.iter().enumerate(),
-            len: self.port_count,
-        }
-    }
-
-    /// Removes all nodes and ports from the port graph.
-    pub fn clear(&mut self) {
-        self.node_meta.clear();
-        self.port_link.clear();
-        self.port_meta.clear();
-        self.node_free = None;
-        self.port_free.clear();
-        self.node_count = 0;
-        self.port_count = 0;
-        self.link_count = 0;
-    }
-
-    /// Returns the capacity of the underlying buffer for nodes.
-    #[inline]
-    pub fn node_capacity(&self) -> usize {
-        self.node_meta.capacity()
-    }
-
-    /// Returns the capacity of the underlying buffer for ports.
-    #[inline]
-    pub fn port_capacity(&self) -> usize {
-        self.port_meta.capacity()
-    }
-
-    /// Returns the allocated port capacity for a specific node.
-    ///
-    /// Changes to the number of ports of the node will not reallocate
-    /// until the number of ports exceeds this capacity.
-    #[inline]
-    pub fn node_port_capacity(&self, node: NodeIndex) -> usize {
-        self.node_meta_valid(node)
-            .map_or(0, |node_meta| node_meta.capacity())
-    }
-
-    /// Reserves enough capacity to insert at least the given number of additional nodes and ports.
-    ///
-    /// This method does not take into account the length of the free list and might overallocate speculatively.
-    pub fn reserve(&mut self, nodes: usize, ports: usize) {
-        self.node_meta.reserve(nodes);
-        self.port_meta.reserve(ports);
-        self.port_link.reserve(ports);
-    }
-
-    /// Changes the number of ports of the `node` to the given `incoming` and `outgoing` counts.
-    ///
-    /// Invalidates the indices of the node's ports. If the number of incoming or outgoing ports
-    /// is reduced, the ports are removed from the end of the port list.
-    ///
-    /// Every time a port is moved, the `rekey` function will be called with its old and new index.
-    /// If the port is removed, the new index will be `None`.
-    ///
-    /// This operation is O(n) where n is the number of ports of the node.
-    pub fn set_num_ports<F>(
-        &mut self,
-        node: NodeIndex,
-        incoming: usize,
-        outgoing: usize,
-        mut rekey: F,
-    ) where
-        F: FnMut(PortIndex, PortOperation),
-    {
-        assert!(
-            incoming <= NodeMeta::MAX_INCOMING,
-            "Incoming port count exceeds maximum."
-        );
-        assert!(
-            outgoing <= NodeMeta::MAX_OUTGOING,
-            "Outgoing port count exceeds maximum."
-        );
-
-        let new_total = incoming + outgoing;
-
-        let Some(node_meta) = self.node_meta_valid(node) else {return;};
-        let old_incoming = node_meta.incoming() as usize;
-        let old_outgoing = node_meta.outgoing() as usize;
-        let old_capacity = node_meta.capacity();
-        let old_total = old_incoming + old_outgoing;
-        let old_first_port = node_meta.first_port();
-        if old_incoming == incoming && old_outgoing == outgoing {
-            // Nothing to do
-            return;
-        } else if (1..old_capacity).contains(&new_total) {
-            // Special case when we can avoid reallocations by shifting the
-            // ports in the pre-allocated slab.
-            self.resize_ports_inplace(node, incoming, outgoing, rekey);
-            return;
-        }
-
-        // Disconnect any port to be removed.
-        for port in self
-            .inputs(node)
-            .skip(incoming)
-            .chain(self.outputs(node).skip(outgoing))
-        {
-            let old_link = self.unlink_port(port);
-            rekey(port, PortOperation::Removed { old_link });
-        }
-        // Allocate a new slab of ports. If `new_total` is 0, we just free the
-        // old slab.
-        //
-        // TODO: Fine-tune overallocation factor
-        let target_capacity = new_total.next_power_of_two();
-        let new_meta = self.alloc_ports(node, incoming, outgoing, target_capacity - new_total);
-
-        // Move the port data.
-        for dir in Direction::BOTH {
-            let rekeys = node_meta.ports(dir).zip(new_meta.ports(dir));
-            for (old, new) in rekeys {
-                if let Some(link) = self.port_link[old] {
-                    self.port_link[link.index()] = Some(PortIndex::new(new));
-                }
-                self.port_link[new] = self.port_link[old].take();
-                self.port_meta[new] = self.port_meta[old];
-
-                let new_index = PortIndex::new(new);
-                rekey(PortIndex::new(old), PortOperation::Moved { new_index });
-            }
-        }
-
-        self.node_meta[node.index()] = NodeEntry::Node(new_meta);
-        self.free_ports(old_first_port, old_capacity);
-
-        self.port_count = self.port_count - old_total + new_total;
-    }
-
-    /// Compacts the storage of nodes in the portgraph so that all nodes are stored consecutively.
-    ///
-    /// Every time a node is moved, the `rekey` function will be called with its old and new index.
-    pub fn compact_nodes<F>(&mut self, mut rekey: F)
-    where
-        F: FnMut(NodeIndex, NodeIndex),
-    {
-        let mut old_index = 0;
-        let mut new_index = 0;
-        self.node_meta.retain(|node_meta| {
-            let old_node = NodeIndex::new(old_index);
-            let new_node = NodeIndex::new(new_index);
-
-            let NodeEntry::Node(node_meta) = node_meta else {
-                old_index += 1;
-                return false;
-            };
-
-            for dir in Direction::BOTH {
-                for port in node_meta.ports(dir) {
-                    self.port_meta[port] = PortEntry::Port(PortMeta::new(new_node, dir));
-                }
-            }
-
-            rekey(old_node, new_node);
-
-            old_index += 1;
-            new_index += 1;
-            true
-        });
-
-        self.node_free = None;
-    }
-
-    /// Compacts the storage of ports in the portgraph so that all ports are stored consecutively.
-    ///
-    /// Shrinks the port capacity of every node to match the number of ports it contains.
-    ///
-    /// Every time a port is moved, the `rekey` function will be called with is old and new index.
-    pub fn compact_ports<F>(&mut self, mut rekey: F)
-    where
-        F: FnMut(PortIndex, PortIndex),
-    {
-        // Compact the links vector, ignoring free ports.
-        let mut new_index = 0;
-        for old_index in 0..self.port_link.len() {
-            if let PortEntry::Free = self.port_meta[old_index] {
-                continue;
-            }
-            if new_index == old_index {
-                new_index += 1;
-                continue;
-            }
-
-            // Invariant: The neighbour ports of visited ports always have
-            // backlinks pointing to the correctly updated port indices.
-            //
-            // At the end of the loop, all port links have been updated.
-            if let Some(link) = self.port_link[old_index] {
-                self.port_link[link.index()] = Some(PortIndex::new(new_index));
-            }
-            self.port_link.swap(new_index, old_index);
-            new_index += 1;
-        }
-        self.port_link.truncate(new_index);
-
-        // Compact the metadata vector
-        let mut new_index = 0;
-        let mut old_index = 0;
-        self.port_meta.retain(|port_meta| {
-            let old_port = PortIndex::new(old_index);
-            let new_port = PortIndex::new(new_index);
-
-            let PortEntry::Port(port_meta) = port_meta else {
-                old_index += 1;
-                return false;
-            };
-
-            // If we are moving the first port in a node's port list, we have to update the node.
-            let node_entry = &mut self.node_meta[port_meta.node().index()];
-            let NodeEntry::Node(node_meta) = *node_entry else {
-                unreachable!("port must be attached to a valid node")
-            };
-            if node_meta.first_port() == old_port {
-                // Update the node's port list, and reduce the capacity to match
-                // the number of ports.
-                *node_entry = NodeEntry::Node(NodeMeta::new(
-                    new_port,
-                    node_meta.incoming(),
-                    node_meta.outgoing(),
-                    node_meta.port_count() as u16,
-                ));
-            }
-
-            rekey(old_port, new_port);
-
-            old_index += 1;
-            new_index += 1;
-            true
-        });
-
-        self.port_free.clear();
-    }
-
-    /// Shrinks the underlying buffers to the fit the data.
-    ///
-    /// This does not move nodes or ports, which might prevent freeing up more capacity.
-    /// To shrink the buffers as much as possible, call [`PortGraph::compact_nodes`] and
-    /// [`PortGraph::compact_ports`] first.
-    pub fn shrink_to_fit(&mut self) {
-        self.node_meta.shrink_to_fit();
-        self.port_link.shrink_to_fit();
-        self.port_meta.shrink_to_fit();
-        self.port_free.shrink_to_fit();
     }
 
     #[inline]
@@ -1128,6 +297,523 @@ impl PortGraph {
 
         self.port_count -= node_meta.incoming() as usize + node_meta.outgoing() as usize;
         self.port_count += incoming + outgoing;
+    }
+}
+
+impl PortView for PortGraph {
+    type Nodes<'a> = Nodes<'a>
+    where
+        Self: 'a;
+
+    type Ports<'a> = Ports<'a>
+    where
+        Self: 'a;
+
+    type NodePorts<'a> = NodePorts
+    where
+        Self: 'a;
+
+    type NodePortOffsets<'a> = NodePortOffsets
+    where
+        Self: 'a;
+
+    fn add_node(&mut self, incoming: usize, outgoing: usize) -> NodeIndex {
+        assert!(
+            incoming <= NodeMeta::MAX_INCOMING,
+            "Incoming port count exceeds maximum."
+        );
+        assert!(
+            outgoing <= NodeMeta::MAX_OUTGOING,
+            "Outgoing port count exceeds maximum."
+        );
+        assert!(
+            incoming + outgoing <= u16::MAX as usize,
+            "Total port count exceeds maximum u16::MAX."
+        );
+
+        let node = self.alloc_node();
+        let node_meta = self.alloc_ports(node, incoming, outgoing, 0);
+        self.node_meta[node.index()] = NodeEntry::Node(node_meta);
+
+        self.node_count += 1;
+        self.port_count += incoming + outgoing;
+
+        node
+    }
+
+    fn remove_node(&mut self, node: NodeIndex) {
+        let Some(node_meta) = self.node_meta.get(node.index()).copied() else {
+            return;
+        };
+
+        let NodeEntry::Node(node_meta) = node_meta else {
+            return;
+        };
+
+        self.free_node(node);
+
+        self.node_count -= 1;
+
+        if node_meta.capacity() > 0 {
+            let first_port = node_meta.first_port();
+            let size = node_meta.capacity();
+            self.port_count -= node_meta.port_count();
+
+            assert!(first_port.index() + size <= self.port_link.len());
+            assert!(first_port.index() + size <= self.port_meta.len());
+
+            self.free_ports(first_port, size);
+        }
+    }
+
+    #[inline]
+    fn port_direction(&self, port: impl Into<PortIndex>) -> Option<Direction> {
+        Some(self.port_meta_valid(port.into())?.direction())
+    }
+
+    #[inline]
+    fn port_node(&self, port: impl Into<PortIndex>) -> Option<NodeIndex> {
+        Some(self.port_meta_valid(port.into())?.node())
+    }
+
+    fn port_offset(&self, port: impl Into<PortIndex>) -> Option<PortOffset> {
+        let port = port.into();
+        let port_meta = self.port_meta_valid(port)?;
+        let node = port_meta.node();
+
+        let node_meta = match self.node_meta[node.index()] {
+            NodeEntry::Free(_) => unreachable!("ports are only attached to valid nodes"),
+            NodeEntry::Node(node_meta) => node_meta,
+        };
+
+        let port_offset = port.index().wrapping_sub(node_meta.first_port().index());
+
+        match port_meta.direction() {
+            Direction::Incoming => Some(PortOffset::new_incoming(port_offset)),
+            Direction::Outgoing => {
+                let port_offset = port_offset.saturating_sub(node_meta.incoming() as usize);
+                Some(PortOffset::new_outgoing(port_offset))
+            }
+        }
+    }
+
+    fn port_index(&self, node: NodeIndex, offset: PortOffset) -> Option<PortIndex> {
+        let node_meta = self.node_meta_valid(node)?;
+        let direction = offset.direction();
+        let offset = offset.index();
+        node_meta.ports(direction).nth(offset).map(PortIndex::new)
+    }
+
+    fn ports(&self, node: NodeIndex, direction: Direction) -> Self::NodePorts<'_> {
+        match self.node_meta_valid(node) {
+            Some(node_meta) => NodePorts {
+                indices: node_meta.ports(direction),
+            },
+            None => NodePorts::default(),
+        }
+    }
+
+    fn all_ports(&self, node: NodeIndex) -> Self::NodePorts<'_> {
+        match self.node_meta_valid(node) {
+            Some(node_meta) => NodePorts {
+                indices: node_meta.all_ports(),
+            },
+            None => NodePorts::default(),
+        }
+    }
+
+    #[inline]
+    fn input(&self, node: NodeIndex, offset: usize) -> Option<PortIndex> {
+        self.port_index(node, PortOffset::new_incoming(offset))
+    }
+
+    #[inline]
+    fn output(&self, node: NodeIndex, offset: usize) -> Option<PortIndex> {
+        self.port_index(node, PortOffset::new_outgoing(offset))
+    }
+
+    fn num_ports(&self, node: NodeIndex, direction: Direction) -> usize {
+        let Some(node_meta) = self.node_meta_valid(node) else {return 0;};
+        if Direction::Incoming == direction {
+            node_meta.incoming() as usize
+        } else {
+            node_meta.outgoing() as usize
+        }
+    }
+
+    fn port_offsets(&self, node: NodeIndex, direction: Direction) -> Self::NodePortOffsets<'_> {
+        match direction {
+            Direction::Incoming => NodePortOffsets {
+                incoming: 0..self.num_inputs(node) as u16,
+                outgoing: 0..0,
+            },
+            Direction::Outgoing => NodePortOffsets {
+                incoming: 0..0,
+                outgoing: 0..self.num_outputs(node) as u32,
+            },
+        }
+    }
+
+    #[inline]
+    fn all_port_offsets(&self, node: NodeIndex) -> Self::NodePortOffsets<'_> {
+        NodePortOffsets {
+            incoming: 0..self.num_inputs(node) as u16,
+            outgoing: 0..self.num_outputs(node) as u32,
+        }
+    }
+
+    #[inline]
+    fn contains_node(&self, node: NodeIndex) -> bool {
+        self.node_meta_valid(node).is_some()
+    }
+
+    #[inline]
+    fn contains_port(&self, port: PortIndex) -> bool {
+        self.port_meta_valid(port).is_some()
+    }
+
+    #[inline]
+    fn is_empty(&self) -> bool {
+        self.node_count == 0 && self.port_count == 0
+    }
+
+    #[inline]
+    fn node_count(&self) -> usize {
+        self.node_count
+    }
+
+    #[inline]
+    fn port_count(&self) -> usize {
+        self.port_count
+    }
+
+    #[inline]
+    fn nodes_iter(&self) -> Self::Nodes<'_> {
+        Nodes {
+            iter: self.node_meta.iter().enumerate(),
+            len: self.node_count,
+        }
+    }
+
+    #[inline]
+    fn ports_iter(&self) -> Self::Ports<'_> {
+        Ports {
+            iter: self.port_meta.iter().enumerate(),
+            len: self.port_count,
+        }
+    }
+
+    fn clear(&mut self) {
+        self.node_meta.clear();
+        self.port_link.clear();
+        self.port_meta.clear();
+        self.node_free = None;
+        self.port_free.clear();
+        self.node_count = 0;
+        self.port_count = 0;
+        self.link_count = 0;
+    }
+
+    #[inline]
+    fn node_capacity(&self) -> usize {
+        self.node_meta.capacity()
+    }
+
+    #[inline]
+    fn port_capacity(&self) -> usize {
+        self.port_meta.capacity()
+    }
+
+    #[inline]
+    fn node_port_capacity(&self, node: NodeIndex) -> usize {
+        self.node_meta_valid(node)
+            .map_or(0, |node_meta| node_meta.capacity())
+    }
+
+    fn reserve(&mut self, nodes: usize, ports: usize) {
+        self.node_meta.reserve(nodes);
+        self.port_meta.reserve(ports);
+        self.port_link.reserve(ports);
+    }
+
+    fn set_num_ports<F>(&mut self, node: NodeIndex, incoming: usize, outgoing: usize, mut rekey: F)
+    where
+        F: FnMut(PortIndex, PortOperation),
+    {
+        assert!(
+            incoming <= NodeMeta::MAX_INCOMING,
+            "Incoming port count exceeds maximum."
+        );
+        assert!(
+            outgoing <= NodeMeta::MAX_OUTGOING,
+            "Outgoing port count exceeds maximum."
+        );
+
+        let new_total = incoming + outgoing;
+
+        let Some(node_meta) = self.node_meta_valid(node) else {return;};
+        let old_incoming = node_meta.incoming() as usize;
+        let old_outgoing = node_meta.outgoing() as usize;
+        let old_capacity = node_meta.capacity();
+        let old_total = old_incoming + old_outgoing;
+        let old_first_port = node_meta.first_port();
+        if old_incoming == incoming && old_outgoing == outgoing {
+            // Nothing to do
+            return;
+        } else if (1..old_capacity).contains(&new_total) {
+            // Special case when we can avoid reallocations by shifting the
+            // ports in the pre-allocated slab.
+            self.resize_ports_inplace(node, incoming, outgoing, rekey);
+            return;
+        }
+
+        // Disconnect any port to be removed.
+        for port in self
+            .inputs(node)
+            .skip(incoming)
+            .chain(self.outputs(node).skip(outgoing))
+        {
+            let old_link = self.unlink_port(port);
+            rekey(port, PortOperation::Removed { old_link });
+        }
+        // Allocate a new slab of ports. If `new_total` is 0, we just free the
+        // old slab.
+        //
+        // TODO: Fine-tune overallocation factor
+        let target_capacity = new_total.next_power_of_two();
+        let new_meta = self.alloc_ports(node, incoming, outgoing, target_capacity - new_total);
+
+        // Move the port data.
+        for dir in Direction::BOTH {
+            let rekeys = node_meta.ports(dir).zip(new_meta.ports(dir));
+            for (old, new) in rekeys {
+                if let Some(link) = self.port_link[old] {
+                    self.port_link[link.index()] = Some(PortIndex::new(new));
+                }
+                self.port_link[new] = self.port_link[old].take();
+                self.port_meta[new] = self.port_meta[old];
+
+                let new_index = PortIndex::new(new);
+                rekey(PortIndex::new(old), PortOperation::Moved { new_index });
+            }
+        }
+
+        self.node_meta[node.index()] = NodeEntry::Node(new_meta);
+        self.free_ports(old_first_port, old_capacity);
+
+        self.port_count = self.port_count - old_total + new_total;
+    }
+
+    fn compact_nodes<F>(&mut self, mut rekey: F)
+    where
+        F: FnMut(NodeIndex, NodeIndex),
+    {
+        let mut old_index = 0;
+        let mut new_index = 0;
+        self.node_meta.retain(|node_meta| {
+            let old_node = NodeIndex::new(old_index);
+            let new_node = NodeIndex::new(new_index);
+
+            let NodeEntry::Node(node_meta) = node_meta else {
+                old_index += 1;
+                return false;
+            };
+
+            for dir in Direction::BOTH {
+                for port in node_meta.ports(dir) {
+                    self.port_meta[port] = PortEntry::Port(PortMeta::new(new_node, dir));
+                }
+            }
+
+            rekey(old_node, new_node);
+
+            old_index += 1;
+            new_index += 1;
+            true
+        });
+
+        self.node_free = None;
+    }
+
+    fn compact_ports<F>(&mut self, mut rekey: F)
+    where
+        F: FnMut(PortIndex, PortIndex),
+    {
+        // Compact the links vector, ignoring free ports.
+        let mut new_index = 0;
+        for old_index in 0..self.port_link.len() {
+            if let PortEntry::Free = self.port_meta[old_index] {
+                continue;
+            }
+            if new_index == old_index {
+                new_index += 1;
+                continue;
+            }
+
+            // Invariant: The neighbour ports of visited ports always have
+            // backlinks pointing to the correctly updated port indices.
+            //
+            // At the end of the loop, all port links have been updated.
+            if let Some(link) = self.port_link[old_index] {
+                self.port_link[link.index()] = Some(PortIndex::new(new_index));
+            }
+            self.port_link.swap(new_index, old_index);
+            new_index += 1;
+        }
+        self.port_link.truncate(new_index);
+
+        // Compact the metadata vector
+        let mut new_index = 0;
+        let mut old_index = 0;
+        self.port_meta.retain(|port_meta| {
+            let old_port = PortIndex::new(old_index);
+            let new_port = PortIndex::new(new_index);
+
+            let PortEntry::Port(port_meta) = port_meta else {
+                old_index += 1;
+                return false;
+            };
+
+            // If we are moving the first port in a node's port list, we have to update the node.
+            let node_entry = &mut self.node_meta[port_meta.node().index()];
+            let NodeEntry::Node(node_meta) = *node_entry else {
+                unreachable!("port must be attached to a valid node")
+            };
+            if node_meta.first_port() == old_port {
+                // Update the node's port list, and reduce the capacity to match
+                // the number of ports.
+                *node_entry = NodeEntry::Node(NodeMeta::new(
+                    new_port,
+                    node_meta.incoming(),
+                    node_meta.outgoing(),
+                    node_meta.port_count() as u16,
+                ));
+            }
+
+            rekey(old_port, new_port);
+
+            old_index += 1;
+            new_index += 1;
+            true
+        });
+
+        self.port_free.clear();
+    }
+
+    fn shrink_to_fit(&mut self) {
+        self.node_meta.shrink_to_fit();
+        self.port_link.shrink_to_fit();
+        self.port_meta.shrink_to_fit();
+        self.port_free.shrink_to_fit();
+    }
+}
+
+impl LinkView for PortGraph {
+    type LinkEndpoint = PortIndex;
+
+    type Neighbours<'a> = Neighbours<'a>
+    where
+        Self: 'a;
+
+    type NodeConnections<'a> = NodeConnections<'a>
+    where
+        Self: 'a;
+
+    type NodeLinks<'a> = NodeLinks<'a>
+    where
+        Self: 'a;
+
+    type PortLinks<'a> = std::iter::Once<(PortIndex, PortIndex)>
+    where
+        Self: 'a;
+
+    fn link_ports(
+        &mut self,
+        port_a: PortIndex,
+        port_b: PortIndex,
+    ) -> Result<(Self::LinkEndpoint, Self::LinkEndpoint), LinkError> {
+        let Some(meta_a) = self.port_meta_valid(port_a) else {
+            return Err(LinkError::UnknownPort{port: port_a});
+        };
+
+        let Some(meta_b) = self.port_meta_valid(port_b) else {
+            return Err(LinkError::UnknownPort{port: port_a});
+        };
+
+        if meta_a.direction() == meta_b.direction() {
+            return Err(LinkError::IncompatibleDirections {
+                port_a,
+                port_b,
+                dir: meta_a.direction(),
+            });
+        }
+
+        if self.port_link[port_a.index()].is_some() {
+            return Err(LinkError::AlreadyLinked { port: port_a });
+        } else if self.port_link[port_b.index()].is_some() {
+            return Err(LinkError::AlreadyLinked { port: port_b });
+        }
+
+        self.port_link[port_a.index()] = Some(port_b);
+        self.port_link[port_b.index()] = Some(port_a);
+        self.link_count += 1;
+        Ok((port_a, port_b))
+    }
+
+    fn unlink_port(&mut self, port: PortIndex) -> Option<PortIndex> {
+        self.port_meta_valid(port)?;
+        let linked = take(&mut self.port_link[port.index()])?;
+        self.port_link[linked.index()] = None;
+        self.link_count -= 1;
+        Some(linked)
+    }
+
+    #[inline]
+    fn get_connections(&self, from: NodeIndex, to: NodeIndex) -> Self::NodeConnections<'_> {
+        NodeConnections::new(self, to, self.output_links(from))
+    }
+
+    fn port_links(&self, port: PortIndex) -> Self::PortLinks<'_> {
+        self.port_meta_valid(port).unwrap();
+        match self.port_link[port.index()] {
+            Some(link) => std::iter::once((port, link)),
+            None => {
+                let mut iter = std::iter::once((port, port));
+                iter.next();
+                iter
+            }
+        }
+    }
+
+    fn links(&self, node: NodeIndex, direction: Direction) -> Self::NodeLinks<'_> {
+        let Some(node_meta) = self.node_meta_valid(node) else {
+            return NodeLinks::new(self.ports(node, direction), &[]);
+        };
+        let indices = node_meta.ports(direction);
+        NodeLinks::new(self.ports(node, direction), &self.port_link[indices])
+    }
+
+    fn all_links(&self, node: NodeIndex) -> Self::NodeLinks<'_> {
+        let Some(node_meta) = self.node_meta_valid(node) else {
+            return NodeLinks::new(self.all_ports(node), &[]);
+        };
+        let indices = node_meta.all_ports();
+        NodeLinks::new(self.all_ports(node), &self.port_link[indices])
+    }
+
+    #[inline]
+    fn neighbours(&self, node: NodeIndex, direction: Direction) -> Self::Neighbours<'_> {
+        Neighbours::from_node_links(self, self.links(node, direction))
+    }
+
+    #[inline]
+    fn all_neighbours(&self, node: NodeIndex) -> Self::Neighbours<'_> {
+        Neighbours::from_node_links(self, self.all_links(node))
+    }
+
+    #[inline]
+    fn link_count(&self) -> usize {
+        self.link_count
     }
 }
 
@@ -1628,34 +1314,36 @@ pub mod test {
         let mut g = PortGraph::new();
         let node0 = g.add_node(1, 2);
         let node1 = g.add_node(2, 1);
+        let node0_output0 = g.output(node0, 0).unwrap();
+        let node0_output1 = g.output(node0, 1).unwrap();
         let node1_input0 = g.input(node1, 0).unwrap();
         let node1_input1 = g.input(node1, 1).unwrap();
 
-        assert!(g.input_links(node0).eq([None]));
-        assert!(g.output_links(node0).eq([None, None]));
-        assert!(g.all_links(node0).eq([None, None, None]));
+        assert!(g.input_links(node0).eq([]));
+        assert!(g.output_links(node0).eq([]));
+        assert!(g.all_links(node0).eq([]));
         assert!(g.input_neighbours(node0).eq([]));
         assert!(g.output_neighbours(node0).eq([]));
         assert!(g.all_neighbours(node0).eq([]));
 
         g.link_nodes(node0, 0, node1, 0).unwrap();
 
-        assert!(g.input_links(node0).eq([None]));
-        assert!(g.output_links(node0).eq([Some(node1_input0), None]));
-        assert!(g.all_links(node0).eq([None, Some(node1_input0), None]));
+        assert!(g.input_links(node0).eq([]));
+        assert!(g.output_links(node0).eq([(node0_output0, node1_input0)]));
+        assert!(g.all_links(node0).eq([(node0_output0, node1_input0)]));
         assert!(g.input_neighbours(node0).eq([]));
         assert!(g.output_neighbours(node0).eq([node1]));
         assert!(g.all_neighbours(node0).eq([node1]));
 
         g.link_nodes(node0, 1, node1, 1).unwrap();
 
-        assert!(g.input_links(node0).eq([None]));
+        assert!(g.input_links(node0).eq([]));
         assert!(g
             .output_links(node0)
-            .eq([Some(node1_input0), Some(node1_input1)]));
+            .eq([(node0_output0, node1_input0), (node0_output1, node1_input1)]));
         assert!(g
             .all_links(node0)
-            .eq([None, Some(node1_input0), Some(node1_input1)]));
+            .eq([(node0_output0, node1_input0), (node0_output1, node1_input1)]));
         assert!(g.input_neighbours(node0).eq([]));
         assert!(g.output_neighbours(node0).eq([node1, node1]));
         assert!(g.all_neighbours(node0).eq([node1, node1]));

@@ -5,7 +5,7 @@ use std::ops::Range;
 
 use super::{MultiPortGraph, SubportIndex};
 use crate::portgraph::{self, NodePorts};
-use crate::{NodeIndex, PortIndex, PortOffset};
+use crate::{LinkView, NodeIndex, PortIndex, PortOffset, PortView};
 
 /// Iterator over the nodes of a graph.
 #[derive(Clone)]

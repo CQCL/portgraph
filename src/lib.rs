@@ -26,7 +26,7 @@
 //! # Example
 //!
 //! ```
-//! use portgraph::{PortGraph, Direction};
+//! use portgraph::{PortGraph, Direction, PortView, LinkView};
 //! use portgraph::algorithms::{toposort, TopoSort};
 //!
 //! // Create a graph with two nodes, each with two input and two output ports
@@ -70,6 +70,7 @@ pub mod portgraph;
 pub mod secondary;
 pub mod substitute;
 pub mod unmanaged;
+pub mod view;
 pub mod weights;
 
 #[cfg(feature = "pyo3")]
@@ -86,6 +87,8 @@ pub use crate::portgraph::{LinkError, PortGraph};
 pub use crate::secondary::SecondaryMap;
 #[doc(inline)]
 pub use crate::unmanaged::UnmanagedDenseMap;
+#[doc(inline)]
+pub use crate::view::{LinkView, MultiView, PortView};
 #[doc(inline)]
 pub use crate::weights::Weights;
 

@@ -6,6 +6,7 @@ use crate::{Direction, Hierarchy, LinkView, NodeIndex, PortIndex, Weights};
 
 /// Style of an edge in a dot graph. Defaults to "None".
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum NodeStyle {
     /// Ignore the node. No edges will be connected to it.
     Hidden,
@@ -28,30 +29,48 @@ impl Default for NodeStyle {
 
 /// Style of an edge in a dot graph. Defaults to `Box("")`.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum PortStyle {
     /// Do not draw a label. Edges will be connected to the node.
     Hidden,
-    /// Just the port label
+    /// Just the port label. Optionally prepend the port index.
+    #[deprecated(note = "Use `PortStyle::Plain(_, true)` instead")]
     Text(String),
-    /// Draw a box around the label
+    /// Draw a box around the label. Optionally prepend the port index.
+    #[deprecated(note = "Use `PortStyle::Boxed(_, true)` instead")]
     Box(String),
+    /// Just the port label. Optionally prepend the port index.
+    Plain(String, bool),
+    /// Draw a box around the label. Optionally prepend the port index.
+    Boxed(String, bool),
 }
 
 impl PortStyle {
     /// Show a port label with the default style.
     pub fn new(label: impl ToString) -> Self {
-        Self::Box(label.to_string())
+        Self::Boxed(label.to_string(), true)
+    }
+
+    /// Just the port label. Optionally prepend the port index.
+    pub fn text(label: impl ToString, show_offset: bool) -> Self {
+        Self::Plain(label.to_string(), show_offset)
+    }
+
+    /// Draw a box around the label. Optionally prepend the port index.
+    pub fn boxed(label: impl ToString, show_offset: bool) -> Self {
+        Self::Boxed(label.to_string(), show_offset)
     }
 }
 
 impl Default for PortStyle {
     fn default() -> Self {
-        Self::Box(String::new())
+        Self::Boxed(String::new(), true)
     }
 }
 
 /// Style of an edge in a dot graph. Defaults to [`EdgeStyle::Solid`].
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub enum EdgeStyle {
     /// Normal line
     #[default]
@@ -185,13 +204,15 @@ where
                 continue;
             };
 
-            // Track the port counts for spacing
-            let ins = self.graph.num_inputs(node).max(1);
-            let outs = self.graph.num_outputs(node).max(1);
-            let table_width = ins * outs;
+            // Get the ports to render, ignoring Hidden ones.
+            let ins = self.get_port_strings(node, Direction::Incoming);
+            let outs = self.get_port_strings(node, Direction::Outgoing);
+            let ins_len = ins.len().max(1);
+            let outs_len = outs.len().max(1);
+            let table_width = ins_len * outs_len;
 
-            let inputs_row = self.get_ports_row_dot(node, Direction::Incoming, outs);
-            let outputs_row = self.get_ports_row_dot(node, Direction::Outgoing, ins);
+            let inputs_row = self.get_ports_row_dot(&ins, outs_len);
+            let outputs_row = self.get_ports_row_dot(&outs, ins_len);
 
             let label_row = format!(
                 "<tr><td align=\"text\" border=\"0\" colspan=\"{table_width}\">{node_label}</td></tr>"
@@ -217,43 +238,65 @@ where
         }
     }
 
+    /// Compute the rendered port styles for a node. Returns a vector with a
+    /// port id, a cell style string, and a label for ports to be shown.
+    fn get_port_strings(&mut self, node: NodeIndex, direction: Direction) -> Vec<PortCellStrings> {
+        let dir = match direction {
+            Direction::Incoming => "in",
+            Direction::Outgoing => "out",
+        };
+        let make_label = |offset: usize, show_offset: bool, label: &str| match (show_offset, label)
+        {
+            (false, label) => label.to_string(),
+            (true, "") => format!("{}", offset),
+            (true, label) => format!("{}: {}", offset, label),
+        };
+        self.graph
+            .ports(node, direction)
+            .enumerate()
+            .filter_map(|(offset, port)| match self.port_style(port) {
+                PortStyle::Hidden => None,
+                PortStyle::Plain(label, show_offset) => Some(PortCellStrings {
+                    id: format!("{}{}", dir, offset),
+                    style: "border=\"0\"".to_string(),
+                    label: make_label(offset, show_offset, &label),
+                }),
+                PortStyle::Boxed(label, show_offset) => Some(PortCellStrings {
+                    id: format!("{}{}", dir, offset),
+                    style: String::new(),
+                    label: make_label(offset, show_offset, &label),
+                }),
+                #[allow(deprecated)]
+                PortStyle::Text(label) => Some(PortCellStrings {
+                    id: format!("{}{}", dir, offset),
+                    style: "border=\"0\"".to_string(),
+                    label: make_label(offset, true, &label),
+                }),
+                #[allow(deprecated)]
+                PortStyle::Box(label) => Some(PortCellStrings {
+                    id: format!("{}{}", dir, offset),
+                    style: String::new(),
+                    label: make_label(offset, true, &label),
+                }),
+            })
+            .collect()
+    }
+
     /// Outputs an html table row with the ports of a node.
     ///
     /// `num_others` is the number of ports in the other direction.
     ///
     /// The node table is a grid with `#inputs * #outputs` columns, so each port
     /// label should be `num_others` columns wide.
-    fn get_ports_row_dot(
-        &mut self,
-        node: NodeIndex,
-        direction: Direction,
-        num_others: usize,
-    ) -> String {
-        if self.graph.num_ports(node, direction) == 0 {
+    fn get_ports_row_dot(&mut self, ports: &Vec<PortCellStrings>, num_others: usize) -> String {
+        if ports.is_empty() {
             return String::new();
         }
-        let dir = match direction {
-            Direction::Incoming => "in",
-            Direction::Outgoing => "out",
-        };
-
-        let separator = |label: &str| if label.is_empty() { "" } else { ": " };
-
         let mut ports_row = "<tr>".to_string();
-        for (offset, port) in self.graph.ports(node, direction).enumerate() {
-            let port_str = match self.port_style(port) {
-                PortStyle::Hidden =>
-                    format!("<td port=\"{dir}{offset}\" align=\"text\" colspan=\"0\"></td>"),
-                PortStyle::Text(label) =>
-                    format!("<td port=\"{dir}{offset}\" align=\"text\" colspan=\"{num_others}\">{offset}{separator}{label}</td>",
-                        separator = separator(&label),
-                    ),
-                PortStyle::Box(label) => format!(
-                        "<td port=\"{dir}{offset}\" align=\"text\" colspan=\"{num_others}\" cellpadding=\"1\">{offset}{separator}{label}</td>",
-                        separator = separator(&label),
-                    ),
-            };
-            ports_row.push_str(&port_str);
+        for PortCellStrings { id, style, label } in ports {
+            ports_row.push_str(&format!(
+                "<td port=\"{id}\" align=\"text\" colspan=\"{num_others}\" cellpadding=\"1\" {style}>{label}</td>"
+            ));
         }
         ports_row.push_str("</tr>");
         ports_row
@@ -329,6 +372,16 @@ where
     }
 }
 
+/// Struct used internally while formatting a port in a node.
+struct PortCellStrings {
+    /// The id for the cell containing the port.
+    pub id: String,
+    /// Extra style options to use in the port's table cell.
+    pub style: String,
+    /// The label to show for the port.
+    pub label: String,
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{PortGraph, PortView};
@@ -346,11 +399,11 @@ mod tests {
 
         let dot = &graph.dot_string();
         let expected = r#"digraph {
-0 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="2" cellpadding="1">0</td><td port="in1" align="text" colspan="2" cellpadding="1">1</td><td port="in2" align="text" colspan="2" cellpadding="1">2</td></tr><tr><td align="text" border="0" colspan="6">0</td></tr><tr><td port="out0" align="text" colspan="3" cellpadding="1">0</td><td port="out1" align="text" colspan="3" cellpadding="1">1</td></tr></table>>]
+0 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="2" cellpadding="1" >0</td><td port="in1" align="text" colspan="2" cellpadding="1" >1</td><td port="in2" align="text" colspan="2" cellpadding="1" >2</td></tr><tr><td align="text" border="0" colspan="6">0</td></tr><tr><td port="out0" align="text" colspan="3" cellpadding="1" >0</td><td port="out1" align="text" colspan="3" cellpadding="1" >1</td></tr></table>>]
 0:out0 -> 1:in0 [style=""]
 0:out1 -> 2:in0 [style=""]
-1 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1">0</td></tr><tr><td align="text" border="0" colspan="1">1</td></tr></table>>]
-2 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1">0</td></tr><tr><td align="text" border="0" colspan="1">2</td></tr></table>>]
+1 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1" >0</td></tr><tr><td align="text" border="0" colspan="1">1</td></tr></table>>]
+2 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1" >0</td></tr><tr><td align="text" border="0" colspan="1">2</td></tr></table>>]
 }
 "#;
         assert_eq!(dot, expected, "\n{}\n{}\n", dot, expected);
@@ -371,11 +424,11 @@ mod tests {
         hier.push_child(n3, n1).unwrap();
         let dot = graph.dot_format().with_hierarchy(&hier).finish();
         let expected = r#"digraph {
-0 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="2" cellpadding="1">0</td><td port="in1" align="text" colspan="2" cellpadding="1">1</td><td port="in2" align="text" colspan="2" cellpadding="1">2</td></tr><tr><td align="text" border="0" colspan="6">0</td></tr><tr><td port="out0" align="text" colspan="3" cellpadding="1">0</td><td port="out1" align="text" colspan="3" cellpadding="1">1</td></tr></table>>]
+0 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="2" cellpadding="1" >0</td><td port="in1" align="text" colspan="2" cellpadding="1" >1</td><td port="in2" align="text" colspan="2" cellpadding="1" >2</td></tr><tr><td align="text" border="0" colspan="6">0</td></tr><tr><td port="out0" align="text" colspan="3" cellpadding="1" >0</td><td port="out1" align="text" colspan="3" cellpadding="1" >1</td></tr></table>>]
 0:out0 -> 1:in0 [style=""]
 0:out1 -> 2:in0 [style=""]
-1 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1">0</td></tr><tr><td align="text" border="0" colspan="1">1</td></tr></table>>]
-2 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1">0</td></tr><tr><td align="text" border="0" colspan="1">2</td></tr></table>>]
+1 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1" >0</td></tr><tr><td align="text" border="0" colspan="1">1</td></tr></table>>]
+2 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1" >0</td></tr><tr><td align="text" border="0" colspan="1">2</td></tr></table>>]
 hier0 [shape=plain label="0"]
 hier0 -> hier1  [style = "dashed"] 
 hier0 -> hier2  [style = "dashed"] 
@@ -412,11 +465,11 @@ hier2 [shape=plain label="2"]
         let dot = graph.dot_format().with_weights(&weights).finish();
         println!("\n{}\n", dot);
         let expected = r#"digraph {
-0 [shape=plain label=<<table border="1"><tr><td align="text" border="0" colspan="2">node1</td></tr><tr><td port="out0" align="text" colspan="1" cellpadding="1">0: out 0</td><td port="out1" align="text" colspan="1" cellpadding="1">1: out 1</td></tr></table>>]
+0 [shape=plain label=<<table border="1"><tr><td align="text" border="0" colspan="2">node1</td></tr><tr><td port="out0" align="text" colspan="1" cellpadding="1" >0: out 0</td><td port="out1" align="text" colspan="1" cellpadding="1" >1: out 1</td></tr></table>>]
 0:out0 -> 1:in0 [style=""]
 0:out1 -> 2:in0 [style=""]
-1 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1">0: in 0</td></tr><tr><td align="text" border="0" colspan="1">node2</td></tr></table>>]
-2 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1">0: in 0</td></tr><tr><td align="text" border="0" colspan="1">node3</td></tr></table>>]
+1 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1" >0: in 0</td></tr><tr><td align="text" border="0" colspan="1">node2</td></tr></table>>]
+2 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1" >0: in 0</td></tr><tr><td align="text" border="0" colspan="1">node3</td></tr></table>>]
 }
 "#;
         assert_eq!(dot, expected, "\n{}\n{}\n", dot, expected);

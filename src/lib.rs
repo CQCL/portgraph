@@ -53,7 +53,7 @@
 //!   graph component structures.
 //! - `pyo3` enables Python bindings.
 //!
-use std::num::{NonZeroU16, NonZeroU32};
+use std::num::NonZeroU32;
 use thiserror::Error;
 
 #[cfg(feature = "pyo3")]
@@ -319,7 +319,7 @@ pub enum PortOffset {
     /// The index is shifted by one to allow for [null pointer optimizations].
     ///
     /// [null pointer optimizations]: https://doc.rust-lang.org/std/option/#representation
-    Incoming(NonZeroU16),
+    Incoming(u16),
     /// Output from a node.
     Outgoing(u16),
 }
@@ -337,10 +337,8 @@ impl PortOffset {
     /// Creates a new incoming port offset.
     #[inline(always)]
     pub fn new_incoming(offset: usize) -> Self {
-        assert!(offset < u16::MAX as usize);
-        // SAFETY: The value cannot be zero
-        let offset = unsafe { NonZeroU16::new_unchecked(offset.saturating_add(1) as u16) };
-        PortOffset::Incoming(offset)
+        assert!(offset <= u16::MAX as usize);
+        PortOffset::Incoming(offset as u16)
     }
 
     /// Creates a new outgoing port offset.
@@ -363,7 +361,7 @@ impl PortOffset {
     #[inline(always)]
     pub fn index(self) -> usize {
         match self {
-            PortOffset::Incoming(offset) => (offset.get() - 1) as usize,
+            PortOffset::Incoming(offset) => offset as usize,
             PortOffset::Outgoing(offset) => offset as usize,
         }
     }
@@ -377,9 +375,9 @@ impl Default for PortOffset {
 
 impl std::fmt::Debug for PortOffset {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.direction() {
-            Direction::Incoming => write!(f, "Incoming({})", self.index()),
-            Direction::Outgoing => write!(f, "Outgoing({})", self.index()),
+        match self {
+            PortOffset::Incoming(idx) => write!(f, "Incoming({})", idx),
+            PortOffset::Outgoing(idx) => write!(f, "Outgoing({})", idx),
         }
     }
 }

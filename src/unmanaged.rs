@@ -15,8 +15,7 @@
 //! # Example
 //!
 //! ```
-//! # use portgraph::{PortGraph, NodeIndex, PortIndex, PortView, LinkView};
-//! # use portgraph::unmanaged::UnmanagedDenseMap;
+//! # use ::portgraph::*;
 //!
 //! let mut graph = PortGraph::new();
 //! let mut node_weights = UnmanagedDenseMap::<NodeIndex, usize>::new();

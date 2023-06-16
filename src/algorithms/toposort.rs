@@ -15,7 +15,8 @@ use std::{collections::VecDeque, fmt::Debug, iter::FusedIterator};
 /// # Example
 ///
 /// ```
-/// # use portgraph::{algorithms::{toposort, TopoSort}, Direction, PortGraph, PortView, LinkView};
+/// # use ::portgraph::algorithms::*;
+/// # use ::portgraph::*;
 /// let mut graph = PortGraph::new();
 /// let node_a = graph.add_node(2, 2);
 /// let node_b = graph.add_node(2, 2);
@@ -54,8 +55,8 @@ where
 /// # Example
 ///
 /// ```
-/// # use portgraph::{Direction, PortGraph, PortView, LinkView};
-/// # use portgraph::algorithms::{toposort, toposort_filtered, TopoSort};
+/// # use ::portgraph::algorithms::*;
+/// # use ::portgraph::*;
 /// let mut graph = PortGraph::new();
 /// let node_a = graph.add_node(2, 2);
 /// let node_b = graph.add_node(2, 2);
@@ -274,7 +275,7 @@ where
 mod test {
     use super::*;
 
-    use crate::{Direction, PortGraph};
+    use crate::{Direction, LinkMut, PortMut, PortView};
 
     #[test]
     fn small_toposort() {

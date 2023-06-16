@@ -7,6 +7,7 @@
 //! matching the replaced subgraph hierarchy in the replacement.
 
 use crate::portgraph::LinkError;
+use crate::view::{LinkMut, PortMut};
 use crate::weights::Weights;
 use crate::{LinkView, NodeIndex, PortGraph, PortIndex, PortView};
 
@@ -388,8 +389,7 @@ mod tests {
     use std::collections::HashSet;
     use std::error::Error;
 
-    use crate::substitute::{BoundedSubgraph, OpenGraph, Rewrite, WeightedRewrite};
-    use crate::{LinkView, PortGraph, PortView, Weights};
+    use super::*;
 
     #[test]
     fn test_remove_subgraph() -> Result<(), Box<dyn Error>> {

@@ -26,8 +26,8 @@
 //! # Example
 //!
 //! ```
-//! use portgraph::{PortGraph, Direction, PortView, LinkView};
-//! use portgraph::algorithms::{toposort, TopoSort};
+//! use ::portgraph::*;
+//! use ::portgraph::algorithms::{toposort, TopoSort};
 //!
 //! // Create a graph with two nodes, each with two input and two output ports
 //! let mut graph = PortGraph::new();
@@ -82,13 +82,15 @@ pub mod proptest;
 #[doc(inline)]
 pub use crate::hierarchy::Hierarchy;
 #[doc(inline)]
+pub use crate::multiportgraph::MultiPortGraph;
+#[doc(inline)]
 pub use crate::portgraph::{LinkError, PortGraph};
 #[doc(inline)]
 pub use crate::secondary::SecondaryMap;
 #[doc(inline)]
 pub use crate::unmanaged::UnmanagedDenseMap;
 #[doc(inline)]
-pub use crate::view::{LinkView, MultiView, PortView};
+pub use crate::view::{LinkMut, LinkView, MultiMut, MultiView, PortMut, PortView};
 #[doc(inline)]
 pub use crate::weights::Weights;
 

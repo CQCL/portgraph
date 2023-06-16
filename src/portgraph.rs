@@ -17,6 +17,7 @@ use std::num::{NonZeroU16, NonZeroU32};
 use std::ops::Range;
 use thiserror::Error;
 
+use crate::view::{LinkMut, PortMut};
 use crate::{Direction, LinkView, NodeIndex, PortIndex, PortOffset, PortView};
 
 #[cfg(feature = "pyo3")]
@@ -317,55 +318,6 @@ impl PortView for PortGraph {
     where
         Self: 'a;
 
-    fn add_node(&mut self, incoming: usize, outgoing: usize) -> NodeIndex {
-        assert!(
-            incoming <= NodeMeta::MAX_INCOMING,
-            "Incoming port count exceeds maximum."
-        );
-        assert!(
-            outgoing <= NodeMeta::MAX_OUTGOING,
-            "Outgoing port count exceeds maximum."
-        );
-        assert!(
-            incoming + outgoing <= u16::MAX as usize,
-            "Total port count exceeds maximum u16::MAX."
-        );
-
-        let node = self.alloc_node();
-        let node_meta = self.alloc_ports(node, incoming, outgoing, 0);
-        self.node_meta[node.index()] = NodeEntry::Node(node_meta);
-
-        self.node_count += 1;
-        self.port_count += incoming + outgoing;
-
-        node
-    }
-
-    fn remove_node(&mut self, node: NodeIndex) {
-        let Some(node_meta) = self.node_meta.get(node.index()).copied() else {
-            return;
-        };
-
-        let NodeEntry::Node(node_meta) = node_meta else {
-            return;
-        };
-
-        self.free_node(node);
-
-        self.node_count -= 1;
-
-        if node_meta.capacity() > 0 {
-            let first_port = node_meta.first_port();
-            let size = node_meta.capacity();
-            self.port_count -= node_meta.port_count();
-
-            assert!(first_port.index() + size <= self.port_link.len());
-            assert!(first_port.index() + size <= self.port_meta.len());
-
-            self.free_ports(first_port, size);
-        }
-    }
-
     #[inline]
     fn port_direction(&self, port: impl Into<PortIndex>) -> Option<Direction> {
         Some(self.port_meta_valid(port.into())?.direction())
@@ -503,17 +455,6 @@ impl PortView for PortGraph {
         }
     }
 
-    fn clear(&mut self) {
-        self.node_meta.clear();
-        self.port_link.clear();
-        self.port_meta.clear();
-        self.node_free = None;
-        self.port_free.clear();
-        self.node_count = 0;
-        self.port_count = 0;
-        self.link_count = 0;
-    }
-
     #[inline]
     fn node_capacity(&self) -> usize {
         self.node_meta.capacity()
@@ -528,6 +469,68 @@ impl PortView for PortGraph {
     fn node_port_capacity(&self, node: NodeIndex) -> usize {
         self.node_meta_valid(node)
             .map_or(0, |node_meta| node_meta.capacity())
+    }
+}
+
+impl PortMut for PortGraph {
+    fn add_node(&mut self, incoming: usize, outgoing: usize) -> NodeIndex {
+        assert!(
+            incoming <= NodeMeta::MAX_INCOMING,
+            "Incoming port count exceeds maximum."
+        );
+        assert!(
+            outgoing <= NodeMeta::MAX_OUTGOING,
+            "Outgoing port count exceeds maximum."
+        );
+        assert!(
+            incoming + outgoing <= u16::MAX as usize,
+            "Total port count exceeds maximum u16::MAX."
+        );
+
+        let node = self.alloc_node();
+        let node_meta = self.alloc_ports(node, incoming, outgoing, 0);
+        self.node_meta[node.index()] = NodeEntry::Node(node_meta);
+
+        self.node_count += 1;
+        self.port_count += incoming + outgoing;
+
+        node
+    }
+
+    fn remove_node(&mut self, node: NodeIndex) {
+        let Some(node_meta) = self.node_meta.get(node.index()).copied() else {
+            return;
+        };
+
+        let NodeEntry::Node(node_meta) = node_meta else {
+            return;
+        };
+
+        self.free_node(node);
+
+        self.node_count -= 1;
+
+        if node_meta.capacity() > 0 {
+            let first_port = node_meta.first_port();
+            let size = node_meta.capacity();
+            self.port_count -= node_meta.port_count();
+
+            assert!(first_port.index() + size <= self.port_link.len());
+            assert!(first_port.index() + size <= self.port_meta.len());
+
+            self.free_ports(first_port, size);
+        }
+    }
+
+    fn clear(&mut self) {
+        self.node_meta.clear();
+        self.port_link.clear();
+        self.port_meta.clear();
+        self.node_free = None;
+        self.port_free.clear();
+        self.node_count = 0;
+        self.port_count = 0;
+        self.link_count = 0;
     }
 
     fn reserve(&mut self, nodes: usize, ports: usize) {
@@ -727,47 +730,6 @@ impl LinkView for PortGraph {
     where
         Self: 'a;
 
-    fn link_ports(
-        &mut self,
-        port_a: PortIndex,
-        port_b: PortIndex,
-    ) -> Result<(Self::LinkEndpoint, Self::LinkEndpoint), LinkError> {
-        let Some(meta_a) = self.port_meta_valid(port_a) else {
-            return Err(LinkError::UnknownPort{port: port_a});
-        };
-
-        let Some(meta_b) = self.port_meta_valid(port_b) else {
-            return Err(LinkError::UnknownPort{port: port_a});
-        };
-
-        if meta_a.direction() == meta_b.direction() {
-            return Err(LinkError::IncompatibleDirections {
-                port_a,
-                port_b,
-                dir: meta_a.direction(),
-            });
-        }
-
-        if self.port_link[port_a.index()].is_some() {
-            return Err(LinkError::AlreadyLinked { port: port_a });
-        } else if self.port_link[port_b.index()].is_some() {
-            return Err(LinkError::AlreadyLinked { port: port_b });
-        }
-
-        self.port_link[port_a.index()] = Some(port_b);
-        self.port_link[port_b.index()] = Some(port_a);
-        self.link_count += 1;
-        Ok((port_a, port_b))
-    }
-
-    fn unlink_port(&mut self, port: PortIndex) -> Option<PortIndex> {
-        self.port_meta_valid(port)?;
-        let linked = take(&mut self.port_link[port.index()])?;
-        self.port_link[linked.index()] = None;
-        self.link_count -= 1;
-        Some(linked)
-    }
-
     #[inline]
     fn get_connections(&self, from: NodeIndex, to: NodeIndex) -> Self::NodeConnections<'_> {
         NodeConnections::new(self, to, self.output_links(from))
@@ -814,6 +776,49 @@ impl LinkView for PortGraph {
     #[inline]
     fn link_count(&self) -> usize {
         self.link_count
+    }
+}
+
+impl LinkMut for PortGraph {
+    fn link_ports(
+        &mut self,
+        port_a: PortIndex,
+        port_b: PortIndex,
+    ) -> Result<(Self::LinkEndpoint, Self::LinkEndpoint), LinkError> {
+        let Some(meta_a) = self.port_meta_valid(port_a) else {
+            return Err(LinkError::UnknownPort{port: port_a});
+        };
+
+        let Some(meta_b) = self.port_meta_valid(port_b) else {
+            return Err(LinkError::UnknownPort{port: port_a});
+        };
+
+        if meta_a.direction() == meta_b.direction() {
+            return Err(LinkError::IncompatibleDirections {
+                port_a,
+                port_b,
+                dir: meta_a.direction(),
+            });
+        }
+
+        if self.port_link[port_a.index()].is_some() {
+            return Err(LinkError::AlreadyLinked { port: port_a });
+        } else if self.port_link[port_b.index()].is_some() {
+            return Err(LinkError::AlreadyLinked { port: port_b });
+        }
+
+        self.port_link[port_a.index()] = Some(port_b);
+        self.port_link[port_b.index()] = Some(port_a);
+        self.link_count += 1;
+        Ok((port_a, port_b))
+    }
+
+    fn unlink_port(&mut self, port: PortIndex) -> Option<PortIndex> {
+        self.port_meta_valid(port)?;
+        let linked = take(&mut self.port_link[port.index()])?;
+        self.port_link[linked.index()] = None;
+        self.link_count -= 1;
+        Some(linked)
     }
 }
 

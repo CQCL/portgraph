@@ -6,7 +6,7 @@ pub use self::iter::{
     Neighbours, NodeConnections, NodeLinks, NodeSubports, Nodes, PortLinks, Ports,
 };
 use crate::portgraph::{NodePortOffsets, NodePorts, PortOperation};
-use crate::view::MultiView;
+use crate::view::{LinkMut, MultiMut, MultiView, PortMut};
 use crate::{
     Direction, LinkError, LinkView, NodeIndex, PortGraph, PortIndex, PortOffset, PortView,
     SecondaryMap,
@@ -114,21 +114,6 @@ impl PortView for MultiPortGraph {
         Self: 'a;
 
     #[inline]
-    fn add_node(&mut self, incoming: usize, outgoing: usize) -> NodeIndex {
-        self.graph.add_node(incoming, outgoing)
-    }
-
-    fn remove_node(&mut self, node: NodeIndex) {
-        debug_assert!(!self.copy_node.get(node));
-        for port in self.graph.all_ports(node) {
-            if *self.multiport.get(port) {
-                self.unlink_port(port);
-            }
-        }
-        self.graph.remove_node(node);
-    }
-
-    #[inline]
     fn port_direction(&self, port: impl Into<PortIndex>) -> Option<Direction> {
         self.graph.port_direction(port.into())
     }
@@ -226,14 +211,6 @@ impl PortView for MultiPortGraph {
         Ports::new(self, self.graph.ports_iter())
     }
 
-    fn clear(&mut self) {
-        self.graph.clear();
-        self.multiport.clear();
-        self.copy_node.clear();
-        self.copy_node_count = 0;
-        self.subport_count = 0;
-    }
-
     #[inline]
     fn node_capacity(&self) -> usize {
         self.graph.node_capacity() - self.copy_node_count
@@ -248,6 +225,31 @@ impl PortView for MultiPortGraph {
     #[inline]
     fn node_port_capacity(&self, node: NodeIndex) -> usize {
         self.graph.node_port_capacity(node)
+    }
+}
+
+impl PortMut for MultiPortGraph {
+    #[inline]
+    fn add_node(&mut self, incoming: usize, outgoing: usize) -> NodeIndex {
+        self.graph.add_node(incoming, outgoing)
+    }
+
+    fn remove_node(&mut self, node: NodeIndex) {
+        debug_assert!(!self.copy_node.get(node));
+        for port in self.graph.all_ports(node) {
+            if *self.multiport.get(port) {
+                self.unlink_port(port);
+            }
+        }
+        self.graph.remove_node(node);
+    }
+
+    fn clear(&mut self) {
+        self.graph.clear();
+        self.multiport.clear();
+        self.copy_node.clear();
+        self.copy_node_count = 0;
+        self.subport_count = 0;
     }
 
     #[inline]
@@ -325,29 +327,6 @@ impl LinkView for MultiPortGraph {
     where
         Self: 'a;
 
-    fn link_ports(
-        &mut self,
-        port_a: PortIndex,
-        port_b: PortIndex,
-    ) -> Result<(SubportIndex, SubportIndex), LinkError> {
-        let (multiport_a, index_a) = self.get_free_multiport(port_a)?;
-        let (multiport_b, index_b) = self.get_free_multiport(port_b)?;
-        self.graph.link_ports(index_a, index_b)?;
-        Ok((multiport_a, multiport_b))
-    }
-
-    fn unlink_port(&mut self, port: PortIndex) -> Option<SubportIndex> {
-        if self.is_multiport(port) {
-            let link = self
-                .graph
-                .port_link(port)
-                .expect("MultiPortGraph error: a port marked as multiport has no link.");
-            self.remove_copy_node(port, link)
-        } else {
-            self.graph.unlink_port(port).map(SubportIndex::new_unique)
-        }
-    }
-
     #[inline]
     fn get_connections(&self, from: NodeIndex, to: NodeIndex) -> Self::NodeConnections<'_> {
         NodeConnections::new(self, to, self.output_links(from))
@@ -385,6 +364,31 @@ impl LinkView for MultiPortGraph {
     }
 }
 
+impl LinkMut for MultiPortGraph {
+    fn link_ports(
+        &mut self,
+        port_a: PortIndex,
+        port_b: PortIndex,
+    ) -> Result<(SubportIndex, SubportIndex), LinkError> {
+        let (multiport_a, index_a) = self.get_free_multiport(port_a)?;
+        let (multiport_b, index_b) = self.get_free_multiport(port_b)?;
+        self.graph.link_ports(index_a, index_b)?;
+        Ok((multiport_a, multiport_b))
+    }
+
+    fn unlink_port(&mut self, port: PortIndex) -> Option<SubportIndex> {
+        if self.is_multiport(port) {
+            let link = self
+                .graph
+                .port_link(port)
+                .expect("MultiPortGraph error: a port marked as multiport has no link.");
+            self.remove_copy_node(port, link)
+        } else {
+            self.graph.unlink_port(port).map(SubportIndex::new_unique)
+        }
+    }
+}
+
 impl MultiView for MultiPortGraph {
     type SubportIndex = SubportIndex;
 
@@ -392,6 +396,24 @@ impl MultiView for MultiPortGraph {
     where
         Self: 'a;
 
+    fn subport_link(&self, subport: Self::SubportIndex) -> Option<Self::SubportIndex> {
+        let subport_index = self.get_subport_index(subport)?;
+        let link = self.graph.port_link(subport_index)?;
+        self.get_subport_from_index(link)
+    }
+
+    #[inline]
+    fn subports(&self, node: NodeIndex, direction: Direction) -> Self::NodeSubports<'_> {
+        NodeSubports::new(self, self.graph.ports(node, direction))
+    }
+
+    #[inline]
+    fn all_subports(&self, node: NodeIndex) -> Self::NodeSubports<'_> {
+        NodeSubports::new(self, self.graph.all_ports(node))
+    }
+}
+
+impl MultiMut for MultiPortGraph {
     fn link_subports(
         &mut self,
         subport_from: Self::SubportIndex,
@@ -413,22 +435,6 @@ impl MultiView for MultiPortGraph {
         let subport_index = self.get_subport_index(subport)?;
         let link = self.graph.unlink_port(subport_index)?;
         self.get_subport_from_index(link)
-    }
-
-    fn subport_link(&self, subport: Self::SubportIndex) -> Option<Self::SubportIndex> {
-        let subport_index = self.get_subport_index(subport)?;
-        let link = self.graph.port_link(subport_index)?;
-        self.get_subport_from_index(link)
-    }
-
-    #[inline]
-    fn subports(&self, node: NodeIndex, direction: Direction) -> Self::NodeSubports<'_> {
-        NodeSubports::new(self, self.graph.ports(node, direction))
-    }
-
-    #[inline]
-    fn all_subports(&self, node: NodeIndex) -> Self::NodeSubports<'_> {
-        NodeSubports::new(self, self.graph.all_ports(node))
     }
 }
 

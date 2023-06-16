@@ -11,8 +11,7 @@
 //! # Example
 //!
 //! ```
-//! # use portgraph::{PortGraph, NodeIndex, PortIndex, PortView, LinkView};
-//! # use portgraph::weights::Weights;
+//! # use ::portgraph::*;
 //! let mut graph = PortGraph::new();
 //! let mut weights = Weights::<usize, isize>::new();
 //!

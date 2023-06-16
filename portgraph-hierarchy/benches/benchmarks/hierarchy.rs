@@ -1,7 +1,8 @@
 #![allow(clippy::unit_arg)] // Required for black_box uses
 
 use criterion::{black_box, criterion_group, AxisScale, BenchmarkId, Criterion, PlotConfiguration};
-use portgraph::{Hierarchy, NodeIndex};
+use portgraph::NodeIndex;
+use portgraph_hierarchy::Hierarchy;
 
 use super::generators::*;
 

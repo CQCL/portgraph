@@ -1,4 +1,5 @@
-use portgraph::{Hierarchy, LinkView, NodeIndex, PortGraph, PortView, Weights};
+use portgraph::{LinkView, NodeIndex, PortGraph, PortView, Weights};
+use portgraph_hierarchy::Hierarchy;
 
 /// Create line graph, connected with two parallel edges at each step.
 ///

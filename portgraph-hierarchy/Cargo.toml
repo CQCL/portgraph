@@ -1,0 +1,38 @@
+[package]
+name = "portgraph_hierarchy"
+version = "0.5.0"
+license = "Apache-2.0"
+
+readme = "README.md"
+documentation = "https://docs.rs/portgraph_hierarchy/"
+repository = "https://github.com/CQCL/portgraph"
+
+description = ""
+keywords = ["data-structure", "graph"]
+categories = ["data-structures"]
+
+edition = "2021"
+rust-version = "1.69"
+
+[lib]
+bench = false
+name = "portgraph_hierarchy"
+path = "src/lib.rs"
+
+[dependencies]
+thiserror = "1.0.28"
+serde = { version = "1.0.152", features = ["derive"], optional = true }
+portgraph = { version = "0.5.0", path = "../portgraph" }
+
+[features]
+serde = ["dep:serde", "portgraph/serde"]
+
+[dev-dependencies]
+criterion = { version = "0.5.1", features = ["html_reports"] }
+rmp-serde = "1.1.1"
+rstest = "0.17.0"
+itertools = "0.10.5"
+
+[[bench]]
+name = "bench_main"
+harness = false

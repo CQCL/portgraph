@@ -2,7 +2,7 @@
 
 use std::fmt::Display;
 
-use crate::{Direction, Hierarchy, LinkView, NodeIndex, PortIndex, Weights};
+use crate::{Direction, LinkView, NodeIndex, PortIndex, Weights};
 
 /// Style of an edge in a dot graph. Defaults to "None".
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -79,7 +79,6 @@ impl EdgeStyle {
 /// Configurable dot formatter for a `PortGraph`.
 pub struct DotFormatter<'g, G: LinkView> {
     graph: &'g G,
-    forest: Option<&'g Hierarchy>,
     node_style: Option<Box<dyn FnMut(NodeIndex) -> NodeStyle + 'g>>,
     port_style: Option<Box<dyn FnMut(PortIndex) -> PortStyle + 'g>>,
     #[allow(clippy::type_complexity)]
@@ -94,17 +93,10 @@ where
     pub fn new(graph: &'g G) -> Self {
         Self {
             graph,
-            forest: None,
             node_style: None,
             port_style: None,
             edge_style: None,
         }
-    }
-
-    /// Set the `Hierarchy` to use for the graph.
-    pub fn with_hierarchy(mut self, forest: &'g Hierarchy) -> Self {
-        self.forest = Some(forest);
-        self
     }
 
     /// Set the function to use to get the style of a node.
@@ -145,7 +137,19 @@ where
 
         dot.push_str("digraph {\n");
         self.node_and_edge_strings(&mut dot);
-        self.hierarchy_strings(&mut dot);
+        dot.push_str("}\n");
+
+        dot
+    }
+
+    /// Encode the graph in dot format as a subgraph.
+    ///
+    /// The resulting string can be included in a larger graph definition.
+    pub fn finish_subgraph(mut self) -> String {
+        let mut dot = String::new();
+
+        dot.push_str("subgraph {\n");
+        self.node_and_edge_strings(&mut dot);
         dot.push_str("}\n");
 
         dot
@@ -279,34 +283,6 @@ where
             to_offset,
         )
     }
-
-    fn hierarchy_strings(&mut self, dot: &mut String) {
-        if let Some(forest) = self.forest {
-            let hier_node_id = |n: NodeIndex| format!("hier{}", n.index());
-
-            for n in self.graph.nodes_iter() {
-                let node_str = format!(
-                    "{} [shape=plain label=\"{}\"]\n",
-                    hier_node_id(n),
-                    n.index()
-                );
-                dot.push_str(&node_str);
-
-                // Connect the parent to any existing children
-                forest.children(n).for_each(|child| {
-                    dot.push_str(&{
-                        let from_node = n;
-                        let to_node = child;
-                        format!(
-                            "{} -> {}  [style = \"dashed\"] \n",
-                            hier_node_id(from_node),
-                            hier_node_id(to_node),
-                        )
-                    });
-                });
-            }
-        }
-    }
 }
 
 /// A trait for encoding a graph in dot format.
@@ -351,36 +327,6 @@ mod tests {
 0:out1 -> 2:in0 [style=""]
 1 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1">0</td></tr><tr><td align="text" border="0" colspan="1">1</td></tr></table>>]
 2 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1">0</td></tr><tr><td align="text" border="0" colspan="1">2</td></tr></table>>]
-}
-"#;
-        assert_eq!(dot, expected, "\n{}\n{}\n", dot, expected);
-    }
-
-    #[test]
-    fn test_hier_dot_string() {
-        let mut graph = PortGraph::new();
-        let n1 = graph.add_node(3, 2);
-        let n2 = graph.add_node(1, 0);
-        let n3 = graph.add_node(1, 0);
-        graph.link_nodes(n1, 0, n2, 0).unwrap();
-        graph.link_nodes(n1, 1, n3, 0).unwrap();
-
-        let mut hier = Hierarchy::new();
-
-        hier.push_child(n2, n1).unwrap();
-        hier.push_child(n3, n1).unwrap();
-        let dot = graph.dot_format().with_hierarchy(&hier).finish();
-        let expected = r#"digraph {
-0 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="2" cellpadding="1">0</td><td port="in1" align="text" colspan="2" cellpadding="1">1</td><td port="in2" align="text" colspan="2" cellpadding="1">2</td></tr><tr><td align="text" border="0" colspan="6">0</td></tr><tr><td port="out0" align="text" colspan="3" cellpadding="1">0</td><td port="out1" align="text" colspan="3" cellpadding="1">1</td></tr></table>>]
-0:out0 -> 1:in0 [style=""]
-0:out1 -> 2:in0 [style=""]
-1 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1">0</td></tr><tr><td align="text" border="0" colspan="1">1</td></tr></table>>]
-2 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1">0</td></tr><tr><td align="text" border="0" colspan="1">2</td></tr></table>>]
-hier0 [shape=plain label="0"]
-hier0 -> hier1  [style = "dashed"] 
-hier0 -> hier2  [style = "dashed"] 
-hier1 [shape=plain label="1"]
-hier2 [shape=plain label="2"]
 }
 "#;
         assert_eq!(dot, expected, "\n{}\n{}\n", dot, expected);

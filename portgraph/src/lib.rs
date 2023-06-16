@@ -64,7 +64,6 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 pub mod algorithms;
 pub mod dot;
-pub mod hierarchy;
 pub mod multiportgraph;
 pub mod portgraph;
 pub mod secondary;
@@ -79,8 +78,6 @@ pub mod py_graph;
 #[cfg(feature = "proptest")]
 pub mod proptest;
 
-#[doc(inline)]
-pub use crate::hierarchy::Hierarchy;
 #[doc(inline)]
 pub use crate::portgraph::{LinkError, PortGraph};
 #[doc(inline)]

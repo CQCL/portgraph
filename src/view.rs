@@ -1,5 +1,8 @@
 //! Abstractions over portgraph representations.
 
+pub mod filter;
+pub mod region;
+
 #[cfg(feature = "petgraph")]
 pub mod petgraph;
 

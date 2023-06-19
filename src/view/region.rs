@@ -131,3 +131,50 @@ where
         fn all_subports(&self, node: NodeIndex) -> Self::NodeSubports<'_>;
     }}
 }
+
+#[cfg(test)]
+mod test {
+    use std::error::Error;
+
+    use crate::{Hierarchy, LinkMut, PortGraph, PortMut};
+
+    use super::*;
+
+    #[test]
+    fn empty_region() {
+        let mut graph = PortGraph::new();
+        let root = graph.add_node(0, 0);
+
+        let hierarchy = Hierarchy::new();
+
+        let region = Region::new(&graph, &hierarchy, root);
+        assert!(region.is_empty());
+        assert_eq!(region.node_count(), 0);
+        assert_eq!(region.port_count(), 0);
+    }
+
+    #[test]
+    fn simple_region() -> Result<(), Box<dyn Error>> {
+        let mut graph = PortGraph::new();
+        let root = graph.add_node(42, 0);
+        let a = graph.add_node(1, 2);
+        let b = graph.add_node(0, 0);
+        graph.link_nodes(a, 0, root, 0)?;
+
+        let mut hierarchy = Hierarchy::new();
+        hierarchy.push_child(a, root)?;
+        hierarchy.push_child(b, root)?;
+
+        let region = Region::new(&graph, &hierarchy, root);
+
+        assert!(region.nodes_iter().eq([a, b]));
+        assert_eq!(region.node_count(), 2);
+        assert_eq!(region.port_count(), 3);
+        assert_eq!(region.link_count(), 0);
+
+        assert!(region.all_links(a).eq([]));
+        assert!(region.all_neighbours(a).eq([]));
+
+        Ok(())
+    }
+}

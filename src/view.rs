@@ -543,18 +543,15 @@ pub trait LinkMut: LinkView + PortMut {
 
 /// Abstraction over a portgraph that may have multiple connections per node.
 pub trait MultiView: LinkView {
-    /// An index type used to identify specific connections in a multiport.
-    type SubportIndex;
-
     /// Iterator over all the subports of a node.
-    type NodeSubports<'a>: Iterator<Item = Self::SubportIndex>
+    type NodeSubports<'a>: Iterator<Item = Self::LinkEndpoint>
     where
         Self: 'a;
 
     /// Return the subport linked to the given `port`. If the port is not
     /// connected, return None.
     #[must_use]
-    fn subport_link(&self, subport: Self::SubportIndex) -> Option<Self::SubportIndex>;
+    fn subport_link(&self, subport: Self::LinkEndpoint) -> Option<Self::LinkEndpoint>;
 
     /// Iterates over all the subports of the `node` in the given `direction`.
     #[must_use]
@@ -594,11 +591,11 @@ pub trait MultiMut: MultiView + LinkMut {
     ///  - If `subport_from` or `subport_to` is already linked.
     fn link_subports(
         &mut self,
-        subport_from: Self::SubportIndex,
-        subport_to: Self::SubportIndex,
+        subport_from: Self::LinkEndpoint,
+        subport_to: Self::LinkEndpoint,
     ) -> Result<(), LinkError>;
 
     /// Unlinks the `port` and returns the subport it was linked to. Returns `None`
     /// when the port was not linked.
-    fn unlink_subport(&mut self, subport: Self::SubportIndex) -> Option<Self::SubportIndex>;
+    fn unlink_subport(&mut self, subport: Self::LinkEndpoint) -> Option<Self::LinkEndpoint>;
 }

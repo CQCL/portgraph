@@ -390,13 +390,11 @@ impl LinkMut for MultiPortGraph {
 }
 
 impl MultiView for MultiPortGraph {
-    type SubportIndex = SubportIndex;
-
     type NodeSubports<'a> = NodeSubports<'a>
     where
         Self: 'a;
 
-    fn subport_link(&self, subport: Self::SubportIndex) -> Option<Self::SubportIndex> {
+    fn subport_link(&self, subport: SubportIndex) -> Option<SubportIndex> {
         let subport_index = self.get_subport_index(subport)?;
         let link = self.graph.port_link(subport_index)?;
         self.get_subport_from_index(link)
@@ -416,8 +414,8 @@ impl MultiView for MultiPortGraph {
 impl MultiMut for MultiPortGraph {
     fn link_subports(
         &mut self,
-        subport_from: Self::SubportIndex,
-        subport_to: Self::SubportIndex,
+        subport_from: SubportIndex,
+        subport_to: SubportIndex,
     ) -> Result<(), LinkError> {
         // TODO: Custom errors
         let from_index = self
@@ -430,7 +428,7 @@ impl MultiMut for MultiPortGraph {
         Ok(())
     }
 
-    fn unlink_subport(&mut self, subport: Self::SubportIndex) -> Option<Self::SubportIndex> {
+    fn unlink_subport(&mut self, subport: SubportIndex) -> Option<SubportIndex> {
         // TODO: Remove copy nodes when they are no longer needed?
         let subport_index = self.get_subport_index(subport)?;
         let link = self.graph.unlink_port(subport_index)?;

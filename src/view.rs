@@ -5,7 +5,7 @@ pub mod petgraph;
 
 use crate::{portgraph::PortOperation, Direction, LinkError, NodeIndex, PortIndex, PortOffset};
 
-/// Core capabilities of a graph containing nodes and ports.
+/// Core capabilities for querying a graph containing nodes and ports.
 pub trait PortView {
     /// Iterator over the nodes of the graph.
     type Nodes<'a>: Iterator<Item = NodeIndex>
@@ -26,45 +26,6 @@ pub trait PortView {
     type NodePortOffsets<'a>: Iterator<Item = PortOffset>
     where
         Self: 'a;
-
-    /// Adds a node to the portgraph with a given number of input and output ports.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the total number of ports exceeds `u16::MAX`.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// # use portgraph::{Direction, PortView, LinkView, MultiView};
-    /// # use portgraph::PortGraph;
-    /// let mut g = PortGraph::new();
-    /// let node = g.add_node(4, 3);
-    /// assert_eq!(g.inputs(node).count(), 4);
-    /// assert_eq!(g.outputs(node).count(), 3);
-    /// assert!(g.contains_node(node));
-    /// ```
-    fn add_node(&mut self, incoming: usize, outgoing: usize) -> NodeIndex;
-
-    /// Remove a node from the port graph. All ports of the node will be
-    /// unlinked and removed as well. Does nothing if the node does not exist.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// # use portgraph::{Direction, PortView, LinkView, MultiView};
-    /// # use portgraph::PortGraph;
-    /// let mut g = PortGraph::new();
-    /// let node0 = g.add_node(1, 1);
-    /// let node1 = g.add_node(1, 1);
-    /// g.link_ports(g.outputs(node0).nth(0).unwrap(), g.inputs(node1).nth(0).unwrap());
-    /// g.link_ports(g.outputs(node1).nth(0).unwrap(), g.inputs(node0).nth(0).unwrap());
-    /// g.remove_node(node0);
-    /// assert!(!g.contains_node(node0));
-    /// assert!(g.port_link(g.outputs(node1).nth(0).unwrap()).is_none());
-    /// assert!(g.port_link(g.inputs(node1).nth(0).unwrap()).is_none());
-    /// ```
-    fn remove_node(&mut self, node: NodeIndex);
 
     /// Returns the direction of the `port`.
     #[must_use]
@@ -147,8 +108,7 @@ pub trait PortView {
     /// # Example
     ///
     /// ```
-    /// # use portgraph::PortGraph;
-    /// # use portgraph::{Direction, PortOffset, PortView, LinkView};
+    /// # use ::portgraph::*;
     /// let mut graph = PortGraph::new();
     /// let node = graph.add_node(0, 2);
     ///
@@ -208,9 +168,6 @@ pub trait PortView {
     #[must_use]
     fn ports_iter(&self) -> Self::Ports<'_>;
 
-    /// Removes all nodes and ports from the port graph.
-    fn clear(&mut self);
-
     /// Returns the capacity of the underlying buffer for nodes.
     #[must_use]
     fn node_capacity(&self) -> usize;
@@ -225,6 +182,49 @@ pub trait PortView {
     /// until the number of ports exceeds this capacity.
     #[must_use]
     fn node_port_capacity(&self, node: NodeIndex) -> usize;
+}
+
+/// Core capabilities for mutating a graph containing nodes and ports.
+pub trait PortMut: PortView {
+    /// Adds a node to the portgraph with a given number of input and output ports.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the total number of ports exceeds `u16::MAX`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use ::portgraph::*;
+    /// let mut g = PortGraph::new();
+    /// let node = g.add_node(4, 3);
+    /// assert_eq!(g.inputs(node).count(), 4);
+    /// assert_eq!(g.outputs(node).count(), 3);
+    /// assert!(g.contains_node(node));
+    /// ```
+    fn add_node(&mut self, incoming: usize, outgoing: usize) -> NodeIndex;
+
+    /// Remove a node from the port graph. All ports of the node will be
+    /// unlinked and removed as well. Does nothing if the node does not exist.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use ::portgraph::*;
+    /// let mut g = PortGraph::new();
+    /// let node0 = g.add_node(1, 1);
+    /// let node1 = g.add_node(1, 1);
+    /// g.link_ports(g.outputs(node0).nth(0).unwrap(), g.inputs(node1).nth(0).unwrap());
+    /// g.link_ports(g.outputs(node1).nth(0).unwrap(), g.inputs(node0).nth(0).unwrap());
+    /// g.remove_node(node0);
+    /// assert!(!g.contains_node(node0));
+    /// assert!(g.port_link(g.outputs(node1).nth(0).unwrap()).is_none());
+    /// assert!(g.port_link(g.inputs(node1).nth(0).unwrap()).is_none());
+    /// ```
+    fn remove_node(&mut self, node: NodeIndex);
+
+    /// Removes all nodes and ports from the port graph.
+    fn clear(&mut self);
 
     /// Reserves enough capacity to insert at least the given number of additional nodes and ports.
     ///
@@ -295,13 +295,179 @@ pub trait LinkView: PortView {
     where
         Self: 'a;
 
+    /// Returns an iterator over every pair of matching ports connecting `from`
+    /// with `to`.
+    ///
+    /// # Example
+    /// ```
+    /// # use ::portgraph::*;
+    /// let mut g = PortGraph::new();
+    /// let a = g.add_node(0, 2);
+    /// let b = g.add_node(2, 0);
+    ///
+    /// g.link_nodes(a, 0, b, 0).unwrap();
+    /// g.link_nodes(a, 1, b, 1).unwrap();
+    ///
+    /// let mut connections = g.get_connections(a, b);
+    /// assert_eq!(connections.next(), Some((g.output(a,0).unwrap(), g.input(b,0).unwrap())));
+    /// assert_eq!(connections.next(), Some((g.output(a,1).unwrap(), g.input(b,1).unwrap())));
+    /// assert_eq!(connections.next(), None);
+    /// ```
+    #[must_use]
+    fn get_connections(&self, from: NodeIndex, to: NodeIndex) -> Self::NodeConnections<'_>;
+
+    /// Checks whether there is a directed link between the two nodes and
+    /// returns the first matching pair of ports.
+    ///
+    /// # Example
+    /// ```
+    /// # use ::portgraph::*;
+    /// let mut g = PortGraph::new();
+    /// let a = g.add_node(0, 2);
+    /// let b = g.add_node(2, 0);
+    ///
+    /// g.link_nodes(a, 0, b, 0).unwrap();
+    /// g.link_nodes(a, 1, b, 1).unwrap();
+    ///
+    /// assert_eq!(g.get_connection(a, b), Some((g.output(a,0).unwrap(), g.input(b,0).unwrap())));
+    /// ```
+    #[must_use]
+    fn get_connection(
+        &self,
+        from: NodeIndex,
+        to: NodeIndex,
+    ) -> Option<(Self::LinkEndpoint, Self::LinkEndpoint)> {
+        self.get_connections(from, to).next()
+    }
+
+    /// Checks whether there is a directed link between the two nodes.
+    ///
+    /// # Example
+    /// ```
+    /// # use ::portgraph::*;
+    /// let mut g = PortGraph::new();
+    /// let a = g.add_node(0, 2);
+    /// let b = g.add_node(2, 0);
+    ///
+    /// g.link_nodes(a, 0, b, 0).unwrap();
+    ///
+    /// assert!(g.connected(a, b));
+    /// ```
+    #[must_use]
+    #[inline]
+    fn connected(&self, from: NodeIndex, to: NodeIndex) -> bool {
+        self.get_connection(from, to).is_some()
+    }
+
+    /// Returns the port that the given `port` is linked to.
+    #[must_use]
+    fn port_links(&self, port: PortIndex) -> Self::PortLinks<'_>;
+
+    /// Return the link to the provided port, if not connected return None.
+    /// If this port has multiple connected subports, an arbitrary one is returned.
+    #[must_use]
+    #[inline]
+    fn port_link(&self, port: PortIndex) -> Option<Self::LinkEndpoint> {
+        self.port_links(port).next().map(|(_, p)| p)
+    }
+
+    /// Iterates over the connected links of the `node` in the given
+    /// `direction`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use ::portgraph::*;
+    ///
+    /// let mut graph = PortGraph::new();
+    ///
+    /// let node_a = graph.add_node(0, 2);
+    /// let node_b = graph.add_node(1, 0);
+    ///
+    /// let port_a = graph.outputs(node_a).next().unwrap();
+    /// let port_b = graph.inputs(node_b).next().unwrap();
+    ///
+    /// graph.link_ports(port_a, port_b).unwrap();
+    ///
+    /// assert!(graph.links(node_a, Direction::Outgoing).eq([(port_a, port_b)]));
+    /// assert!(graph.links(node_b, Direction::Incoming).eq([(port_b, port_a)]));
+    /// ```
+    #[must_use]
+    fn links(&self, node: NodeIndex, direction: Direction) -> Self::NodeLinks<'_>;
+
+    /// Iterates over the connected input and output links of the `node` in sequence.
+    #[must_use]
+    fn all_links(&self, node: NodeIndex) -> Self::NodeLinks<'_>;
+
+    /// Iterates over the connected input links of the `node`. Shorthand for
+    /// [`LinkView::links`].
+    #[must_use]
+    #[inline]
+    fn input_links(&self, node: NodeIndex) -> Self::NodeLinks<'_> {
+        self.links(node, Direction::Incoming)
+    }
+
+    /// Iterates over the connected output links of the `node`. Shorthand for
+    /// [`LinkView::links`].
+    #[must_use]
+    #[inline]
+    fn output_links(&self, node: NodeIndex) -> Self::NodeLinks<'_> {
+        self.links(node, Direction::Outgoing)
+    }
+
+    /// Iterates over neighbour nodes in the given `direction`.
+    /// May contain duplicates if the graph has multiple links between nodes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use ::portgraph::*;
+    ///
+    /// let mut graph = PortGraph::new();
+    ///
+    /// let a = graph.add_node(0, 1);
+    /// let b = graph.add_node(2, 1);
+    ///
+    /// graph.link_nodes(a, 0, b, 0).unwrap();
+    /// graph.link_nodes(b, 0, b, 1).unwrap();
+    ///
+    /// assert!(graph.neighbours(a, Direction::Outgoing).eq([b]));
+    /// assert!(graph.neighbours(b, Direction::Incoming).eq([a,b]));
+    /// ```
+    #[must_use]
+    fn neighbours(&self, node: NodeIndex, direction: Direction) -> Self::Neighbours<'_>;
+
+    /// Iterates over the input and output neighbours of the `node` in sequence.
+    #[must_use]
+    fn all_neighbours(&self, node: NodeIndex) -> Self::Neighbours<'_>;
+
+    /// Iterates over the input neighbours of the `node`. Shorthand for [`LinkView::neighbours`].
+    #[must_use]
+    #[inline]
+    fn input_neighbours(&self, node: NodeIndex) -> Self::Neighbours<'_> {
+        self.neighbours(node, Direction::Incoming)
+    }
+
+    /// Iterates over the output neighbours of the `node`. Shorthand for [`LinkView::neighbours`].
+    #[must_use]
+    #[inline]
+    fn output_neighbours(&self, node: NodeIndex) -> Self::Neighbours<'_> {
+        self.neighbours(node, Direction::Outgoing)
+    }
+
+    /// Returns the number of links between ports.
+    #[must_use]
+    fn link_count(&self) -> usize;
+}
+
+/// Mutating operations pertaining the adjacency of nodes in a port graph.
+pub trait LinkMut: LinkView + PortMut {
     /// Link an output port to an input port.
     ///
     /// # Example
     ///
     /// ```
-    /// # use portgraph::PortGraph;
-    /// # use portgraph::{Direction, PortView, LinkView, MultiView};
+    /// # use ::portgraph::*;
     /// let mut g = PortGraph::new();
     /// let node0 = g.add_node(0, 1);
     /// let node1 = g.add_node(1, 0);
@@ -373,205 +539,19 @@ pub trait LinkView: PortView {
     /// Unlinks all connections to the `port`. If the port was connected,
     /// returns one of the ports it was connected to.
     fn unlink_port(&mut self, port: PortIndex) -> Option<Self::LinkEndpoint>;
-
-    /// Returns an iterator over every pair of matching ports connecting `from`
-    /// with `to`.
-    ///
-    /// # Example
-    /// ```
-    /// # use portgraph::{PortGraph, NodeIndex, PortIndex, Direction, PortView, LinkView};
-    /// let mut g = PortGraph::new();
-    /// let a = g.add_node(0, 2);
-    /// let b = g.add_node(2, 0);
-    ///
-    /// g.link_nodes(a, 0, b, 0).unwrap();
-    /// g.link_nodes(a, 1, b, 1).unwrap();
-    ///
-    /// let mut connections = g.get_connections(a, b);
-    /// assert_eq!(connections.next(), Some((g.output(a,0).unwrap(), g.input(b,0).unwrap())));
-    /// assert_eq!(connections.next(), Some((g.output(a,1).unwrap(), g.input(b,1).unwrap())));
-    /// assert_eq!(connections.next(), None);
-    /// ```
-    #[must_use]
-    fn get_connections(&self, from: NodeIndex, to: NodeIndex) -> Self::NodeConnections<'_>;
-
-    /// Checks whether there is a directed link between the two nodes and
-    /// returns the first matching pair of ports.
-    ///
-    /// # Example
-    /// ```
-    /// # use portgraph::{NodeIndex, PortIndex, Direction, PortView, LinkView, PortGraph};
-    /// let mut g = PortGraph::new();
-    /// let a = g.add_node(0, 2);
-    /// let b = g.add_node(2, 0);
-    ///
-    /// g.link_nodes(a, 0, b, 0).unwrap();
-    /// g.link_nodes(a, 1, b, 1).unwrap();
-    ///
-    /// assert_eq!(g.get_connection(a, b), Some((g.output(a,0).unwrap(), g.input(b,0).unwrap())));
-    /// ```
-    #[must_use]
-    fn get_connection(
-        &self,
-        from: NodeIndex,
-        to: NodeIndex,
-    ) -> Option<(Self::LinkEndpoint, Self::LinkEndpoint)> {
-        self.get_connections(from, to).next()
-    }
-
-    /// Checks whether there is a directed link between the two nodes.
-    ///
-    /// # Example
-    /// ```
-    /// # use portgraph::{PortGraph, NodeIndex, PortIndex, Direction, PortView, LinkView};
-    /// let mut g = PortGraph::new();
-    /// let a = g.add_node(0, 2);
-    /// let b = g.add_node(2, 0);
-    ///
-    /// g.link_nodes(a, 0, b, 0).unwrap();
-    ///
-    /// assert!(g.connected(a, b));
-    /// ```
-    #[must_use]
-    #[inline]
-    fn connected(&self, from: NodeIndex, to: NodeIndex) -> bool {
-        self.get_connection(from, to).is_some()
-    }
-
-    /// Returns the port that the given `port` is linked to.
-    #[must_use]
-    fn port_links(&self, port: PortIndex) -> Self::PortLinks<'_>;
-
-    /// Return the link to the provided port, if not connected return None.
-    /// If this port has multiple connected subports, an arbitrary one is returned.
-    #[must_use]
-    #[inline]
-    fn port_link(&self, port: PortIndex) -> Option<Self::LinkEndpoint> {
-        self.port_links(port).next().map(|(_, p)| p)
-    }
-
-    /// Iterates over the connected links of the `node` in the given
-    /// `direction`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use portgraph::{PortGraph, PortView, LinkView, MultiView};
-    /// # use portgraph::Direction;
-    ///
-    /// let mut graph = PortGraph::new();
-    ///
-    /// let node_a = graph.add_node(0, 2);
-    /// let node_b = graph.add_node(1, 0);
-    ///
-    /// let port_a = graph.outputs(node_a).next().unwrap();
-    /// let port_b = graph.inputs(node_b).next().unwrap();
-    ///
-    /// graph.link_ports(port_a, port_b).unwrap();
-    ///
-    /// assert!(graph.links(node_a, Direction::Outgoing).eq([(port_a, port_b)]));
-    /// assert!(graph.links(node_b, Direction::Incoming).eq([(port_b, port_a)]));
-    /// ```
-    #[must_use]
-    fn links(&self, node: NodeIndex, direction: Direction) -> Self::NodeLinks<'_>;
-
-    /// Iterates over the connected input and output links of the `node` in sequence.
-    #[must_use]
-    fn all_links(&self, node: NodeIndex) -> Self::NodeLinks<'_>;
-
-    /// Iterates over the connected input links of the `node`. Shorthand for
-    /// [`LinkView::links`].
-    #[must_use]
-    #[inline]
-    fn input_links(&self, node: NodeIndex) -> Self::NodeLinks<'_> {
-        self.links(node, Direction::Incoming)
-    }
-
-    /// Iterates over the connected output links of the `node`. Shorthand for
-    /// [`LinkView::links`].
-    #[must_use]
-    #[inline]
-    fn output_links(&self, node: NodeIndex) -> Self::NodeLinks<'_> {
-        self.links(node, Direction::Outgoing)
-    }
-
-    /// Iterates over neighbour nodes in the given `direction`.
-    /// May contain duplicates if the graph has multiple links between nodes.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use portgraph::{PortGraph, PortView, LinkView};
-    /// # use portgraph::Direction;
-    ///
-    /// let mut graph = PortGraph::new();
-    ///
-    /// let a = graph.add_node(0, 1);
-    /// let b = graph.add_node(2, 1);
-    ///
-    /// graph.link_nodes(a, 0, b, 0).unwrap();
-    /// graph.link_nodes(b, 0, b, 1).unwrap();
-    ///
-    /// assert!(graph.neighbours(a, Direction::Outgoing).eq([b]));
-    /// assert!(graph.neighbours(b, Direction::Incoming).eq([a,b]));
-    /// ```
-    #[must_use]
-    fn neighbours(&self, node: NodeIndex, direction: Direction) -> Self::Neighbours<'_>;
-
-    /// Iterates over the input and output neighbours of the `node` in sequence.
-    #[must_use]
-    fn all_neighbours(&self, node: NodeIndex) -> Self::Neighbours<'_>;
-
-    /// Iterates over the input neighbours of the `node`. Shorthand for [`LinkView::neighbours`].
-    #[must_use]
-    #[inline]
-    fn input_neighbours(&self, node: NodeIndex) -> Self::Neighbours<'_> {
-        self.neighbours(node, Direction::Incoming)
-    }
-
-    /// Iterates over the output neighbours of the `node`. Shorthand for [`LinkView::neighbours`].
-    #[must_use]
-    #[inline]
-    fn output_neighbours(&self, node: NodeIndex) -> Self::Neighbours<'_> {
-        self.neighbours(node, Direction::Outgoing)
-    }
-
-    /// Returns the number of links between ports.
-    #[must_use]
-    fn link_count(&self) -> usize;
 }
 
 /// Abstraction over a portgraph that may have multiple connections per node.
 pub trait MultiView: LinkView {
-    /// An index type used to identify specific connections in a multiport.
-    type SubportIndex;
-
     /// Iterator over all the subports of a node.
-    type NodeSubports<'a>: Iterator<Item = Self::SubportIndex>
+    type NodeSubports<'a>: Iterator<Item = Self::LinkEndpoint>
     where
         Self: 'a;
-
-    /// Link an output subport to an input subport.
-    ///
-    /// # Errors
-    ///
-    ///  - If `subport_from` or `subport_to` does not exist.
-    ///  - If `subport_a` and `subport_b` have the same direction.
-    ///  - If `subport_from` or `subport_to` is already linked.
-    fn link_subports(
-        &mut self,
-        subport_from: Self::SubportIndex,
-        subport_to: Self::SubportIndex,
-    ) -> Result<(), LinkError>;
-
-    /// Unlinks the `port` and returns the subport it was linked to. Returns `None`
-    /// when the port was not linked.
-    fn unlink_subport(&mut self, subport: Self::SubportIndex) -> Option<Self::SubportIndex>;
 
     /// Return the subport linked to the given `port`. If the port is not
     /// connected, return None.
     #[must_use]
-    fn subport_link(&self, subport: Self::SubportIndex) -> Option<Self::SubportIndex>;
+    fn subport_link(&self, subport: Self::LinkEndpoint) -> Option<Self::LinkEndpoint>;
 
     /// Iterates over all the subports of the `node` in the given `direction`.
     #[must_use]
@@ -598,4 +578,24 @@ pub trait MultiView: LinkView {
     fn subport_outputs(&self, node: NodeIndex) -> Self::NodeSubports<'_> {
         self.subports(node, Direction::Outgoing)
     }
+}
+
+/// Abstraction for mutating a portgraph that may have multiple connections per node.
+pub trait MultiMut: MultiView + LinkMut {
+    /// Link an output subport to an input subport.
+    ///
+    /// # Errors
+    ///
+    ///  - If `subport_from` or `subport_to` does not exist.
+    ///  - If `subport_a` and `subport_b` have the same direction.
+    ///  - If `subport_from` or `subport_to` is already linked.
+    fn link_subports(
+        &mut self,
+        subport_from: Self::LinkEndpoint,
+        subport_to: Self::LinkEndpoint,
+    ) -> Result<(), LinkError>;
+
+    /// Unlinks the `port` and returns the subport it was linked to. Returns `None`
+    /// when the port was not linked.
+    fn unlink_subport(&mut self, subport: Self::LinkEndpoint) -> Option<Self::LinkEndpoint>;
 }

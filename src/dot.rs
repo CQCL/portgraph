@@ -384,7 +384,7 @@ struct PortCellStrings {
 
 #[cfg(test)]
 mod tests {
-    use crate::{PortGraph, PortView};
+    use crate::{LinkMut, PortGraph, PortMut, PortView};
 
     use super::*;
 

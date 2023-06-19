@@ -17,7 +17,8 @@ use std::cmp::Ordering;
 ///    ┗> d ┛
 ///
 /// ```
-/// # use portgraph::{algorithms::{dominators, DominatorTree}, Direction, PortGraph, PortView, LinkView};
+/// # use ::portgraph::algorithms::*;
+/// # use ::portgraph::*;
 /// let mut graph = PortGraph::with_capacity(5, 10);
 /// let a = graph.add_node(0,2);
 /// let b = graph.add_node(1,1);
@@ -67,7 +68,8 @@ where
 /// a ─┬> b ┐ │    ├─> c ─> e f ─┴> d ┴────────^
 ///
 /// ```
-/// # use portgraph::{algorithms::{dominators_filtered, DominatorTree}, Direction, PortGraph, PortView, LinkView};
+/// # use ::portgraph::algorithms::*;
+/// # use ::portgraph::*;
 /// let mut graph = PortGraph::with_capacity(5, 10);
 /// let a = graph.add_node(0,2);
 /// let b = graph.add_node(1,1);
@@ -233,6 +235,8 @@ fn intersect(dominators: &[usize], mut finger1: usize, mut finger2: usize) -> us
 
 #[cfg(test)]
 mod tests {
+    use crate::{LinkMut, PortMut};
+
     use super::*;
 
     #[test]

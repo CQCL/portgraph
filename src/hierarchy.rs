@@ -13,8 +13,7 @@
 //! # Example
 //!
 //! ```
-//! # use portgraph::{PortGraph, NodeIndex, PortIndex, PortView, LinkView};
-//! # use portgraph::hierarchy::Hierarchy;
+//! # use ::portgraph::*;
 //! let mut graph = PortGraph::new();
 //! let mut hierarchy = Hierarchy::new();
 //!
@@ -555,7 +554,7 @@ pub enum AttachError {
 
 #[cfg(test)]
 mod test {
-    use crate::{PortGraph, PortView};
+    use crate::{PortGraph, PortMut, PortView};
 
     use super::*;
 

@@ -3,7 +3,7 @@
 use criterion::{black_box, criterion_group, BatchSize, Criterion};
 use portgraph::{
     substitute::{BoundedSubgraph, OpenGraph, Rewrite, WeightedRewrite},
-    LinkView, NodeIndex, PortGraph, PortView,
+    LinkView, NodeIndex, PortGraph, PortMut, PortView,
 };
 
 use super::generators::*;

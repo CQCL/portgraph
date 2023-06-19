@@ -22,7 +22,8 @@ use crate::{Direction, LinkView, NodeIndex, PortGraph, PortIndex, PortView};
 /// And traverse it in post-order:
 ///
 /// ```
-/// # use portgraph::{algorithms::postorder, Direction, PortGraph, PortView, LinkView};
+/// # use ::portgraph::algorithms::*;
+/// # use ::portgraph::*;
 /// let mut graph = PortGraph::new();
 ///
 /// let a = graph.add_node(0, 1);
@@ -78,7 +79,8 @@ pub fn postorder(
 /// And traverse it in post-order:
 ///
 /// ```
-/// # use portgraph::{algorithms::postorder_filtered, Direction, PortGraph, PortView, LinkView};
+/// # use ::portgraph::algorithms::*;
+/// # use ::portgraph::*;
 /// let mut graph = PortGraph::new();
 ///
 /// let a = graph.add_node(0, 1);
@@ -267,6 +269,8 @@ impl<'graph> std::fmt::Debug for PostOrder<'graph> {
 
 #[cfg(test)]
 mod tests {
+    use crate::{LinkMut, PortMut};
+
     use super::*;
 
     #[test]

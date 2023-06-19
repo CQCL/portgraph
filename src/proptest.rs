@@ -4,7 +4,7 @@
 //! returns strategies that generate random portgraphs.
 use std::iter::zip;
 
-use crate::{Direction, LinkView, NodeIndex, PortGraph, PortIndex, PortView};
+use crate::{Direction, LinkMut, NodeIndex, PortGraph, PortIndex, PortMut, PortView};
 use proptest::prelude::*;
 use rand::seq::SliceRandom;
 
@@ -100,6 +100,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::LinkView;
 
     proptest! {
         #[test]

@@ -3,12 +3,9 @@
 use std::{cell::RefCell, collections::HashMap, iter};
 
 use super::filter::NodeFiltered;
-use crate::{Direction, Hierarchy, LinkView, MultiView, NodeIndex, PortIndex, PortView};
-
-use delegate::delegate;
+use crate::{Hierarchy, NodeIndex};
 
 type RegionCallback<'g> = fn(NodeIndex, &RegionContext<'g>) -> bool;
-type RegionInternalGraph<'g, G> = NodeFiltered<'g, G, RegionCallback<'g>, RegionContext<'g>>;
 
 /// View of a portgraph containing only the descendants of a node in a
 /// [`Hierarchy`].
@@ -19,25 +16,13 @@ type RegionInternalGraph<'g, G> = NodeFiltered<'g, G, RegionCallback<'g>, Region
 ///
 /// [`Region`] does not implement `Sync` as it uses a [`RefCell`] to cache the
 /// node filtering.
-#[derive(Debug, Clone)]
-pub struct Region<'g, G> {
-    graph: RegionInternalGraph<'g, G>,
-    root: NodeIndex,
-}
+pub type Region<'g, G> = NodeFiltered<'g, G, RegionCallback<'g>, RegionContext<'g>>;
 
 impl<'a, G> Region<'a, G> {
     /// Create a new region view including all the descendants of the root node.
-    pub fn new(graph: &'a G, hierarchy: &'a Hierarchy, root: NodeIndex) -> Self {
+    pub fn new_region(graph: &'a G, hierarchy: &'a Hierarchy, root: NodeIndex) -> Self {
         let region_filter: RegionCallback<'a> = |node, context| context.is_descendant(node);
-        Self {
-            graph: NodeFiltered::new(graph, region_filter, RegionContext::new(hierarchy, root)),
-            root,
-        }
-    }
-
-    /// Get the root node of the region.
-    pub fn root(&self) -> NodeIndex {
-        self.root
+        Self::new(graph, region_filter, RegionContext::new(hierarchy, root))
     }
 }
 
@@ -95,240 +80,30 @@ impl<'g> RegionContext<'g> {
     }
 }
 
-impl<'g, G> PortView for Region<'g, G>
-where
-    G: PortView,
-{
-    type Nodes<'a> = <RegionInternalGraph<'g, G> as PortView>::Nodes<'a>
-    where
-        Self: 'a;
-
-    type Ports<'a> = <RegionInternalGraph<'g, G> as PortView>::Ports<'a>
-    where
-        Self: 'a;
-
-    type NodePorts<'a> = <RegionInternalGraph<'g, G> as PortView>::NodePorts<'a>
-    where
-        Self: 'a;
-
-    type NodePortOffsets<'a> = <RegionInternalGraph<'g, G> as PortView>::NodePortOffsets<'a>
-    where
-        Self: 'a;
-
-    delegate! {
-        to self.graph {
-            fn port_direction(&self, port: impl Into<PortIndex>) -> Option<Direction>;
-            fn port_node(&self, port: impl Into<PortIndex>) -> Option<NodeIndex>;
-            fn port_offset(&self, port: impl Into<PortIndex>) -> Option<crate::PortOffset>;
-            fn port_index(&self, node: NodeIndex, offset: crate::PortOffset) -> Option<PortIndex>;
-            fn ports(&self, node: NodeIndex, direction: Direction) -> Self::NodePorts<'_>;
-            fn all_ports(&self, node: NodeIndex) -> Self::NodePorts<'_>;
-            fn input(&self, node: NodeIndex, offset: usize) -> Option<PortIndex>;
-            fn output(&self, node: NodeIndex, offset: usize) -> Option<PortIndex>;
-            fn num_ports(&self, node: NodeIndex, direction: Direction) -> usize;
-            fn port_offsets(&self, node: NodeIndex, direction: Direction) -> Self::NodePortOffsets<'_>;
-            fn all_port_offsets(&self, node: NodeIndex) -> Self::NodePortOffsets<'_>;
-            fn contains_node(&self, node: NodeIndex) -> bool;
-            fn contains_port(&self, port: PortIndex) -> bool;
-            fn is_empty(&self) -> bool;
-            fn node_count(&self) -> usize;
-            fn port_count(&self) -> usize;
-            fn nodes_iter(&self) -> Self::Nodes<'_>;
-            fn ports_iter(&self) -> Self::Ports<'_>;
-            fn node_capacity(&self) -> usize;
-            fn port_capacity(&self) -> usize;
-            fn node_port_capacity(&self, node: NodeIndex) -> usize;
-        }
-    }
-}
-
-impl<'g, G> LinkView for Region<'g, G>
-where
-    G: LinkView,
-{
-    type LinkEndpoint = G::LinkEndpoint;
-
-    type Neighbours<'a> = <RegionInternalGraph<'g, G> as LinkView>::Neighbours<'a>
-    where
-        Self: 'a;
-
-    type NodeConnections<'a> = <RegionInternalGraph<'g, G> as LinkView>::NodeConnections<'a>
-    where
-        Self: 'a;
-
-    type NodeLinks<'a> = <RegionInternalGraph<'g, G> as LinkView>::NodeLinks<'a>
-    where
-        Self: 'a;
-
-    type PortLinks<'a> = <RegionInternalGraph<'g, G> as LinkView>::PortLinks<'a>
-    where
-        Self: 'a;
-
-    delegate! {
-        to self.graph {
-            fn get_connections(&self, from: NodeIndex, to: NodeIndex) -> Self::NodeConnections<'_>;
-            fn port_links(&self, port: PortIndex) -> Self::PortLinks<'_>;
-            fn links(&self, node: NodeIndex, direction: Direction) -> Self::NodeLinks<'_>;
-            fn all_links(&self, node: NodeIndex) -> Self::NodeLinks<'_>;
-            fn neighbours(&self, node: NodeIndex, direction: Direction) -> Self::Neighbours<'_>;
-            fn all_neighbours(&self, node: NodeIndex) -> Self::Neighbours<'_>;
-            fn link_count(&self) -> usize;
-        }
-    }
-}
-
-impl<'g, G> MultiView for Region<'g, G>
-where
-    G: MultiView,
-{
-    type NodeSubports<'a> = <RegionInternalGraph<'g, G> as MultiView>::NodeSubports<'a>
-    where
-        Self: 'a;
-
-    delegate! {
-            to self.graph {
-        fn subport_link(&self, subport: Self::LinkEndpoint) -> Option<Self::LinkEndpoint>;
-        fn subports(&self, node: NodeIndex, direction: Direction) -> Self::NodeSubports<'_>;
-        fn all_subports(&self, node: NodeIndex) -> Self::NodeSubports<'_>;
-    }}
-}
-
 type FlatRegionContext<'g> = (&'g Hierarchy, NodeIndex);
 type FlatRegionCallback<'g> = fn(NodeIndex, &FlatRegionContext<'g>) -> bool;
-type FlatRegionInternalGraph<'g, G> =
-    NodeFiltered<'g, G, FlatRegionCallback<'g>, FlatRegionContext<'g>>;
 
 /// View of a portgraph containing only the direct children of a node in a [`Hierarchy`].
 ///
 /// For a view of all descendants, see [`Region`].
-#[derive(Debug, Clone, PartialEq)]
-pub struct FlatRegion<'g, G> {
-    graph: FlatRegionInternalGraph<'g, G>,
-    root: NodeIndex,
-}
+pub type FlatRegion<'g, G> = NodeFiltered<'g, G, FlatRegionCallback<'g>, FlatRegionContext<'g>>;
 
 impl<'a, G> FlatRegion<'a, G> {
     /// Create a new region view including all the descendants of the root node.
-    pub fn new(graph: &'a G, hierarchy: &'a Hierarchy, root: NodeIndex) -> Self {
+    pub fn new_flat_region(graph: &'a G, hierarchy: &'a Hierarchy, root: NodeIndex) -> Self {
         let region_filter: FlatRegionCallback<'a> = |node, context| {
             let (hierarchy, root) = context;
             hierarchy.parent(node) == Some(*root)
         };
-        Self {
-            graph: NodeFiltered::new(graph, region_filter, (hierarchy, root)),
-            root,
-        }
+        Self::new(graph, region_filter, (hierarchy, root))
     }
-
-    /// Get the root node of the region.
-    pub fn root(&self) -> NodeIndex {
-        self.root
-    }
-}
-
-impl<'g, G> PortView for FlatRegion<'g, G>
-where
-    G: PortView,
-{
-    type Nodes<'a> = <FlatRegionInternalGraph<'g, G> as PortView>::Nodes<'a>
-    where
-        Self: 'a;
-
-    type Ports<'a> = <FlatRegionInternalGraph<'g, G> as PortView>::Ports<'a>
-    where
-        Self: 'a;
-
-    type NodePorts<'a> = <FlatRegionInternalGraph<'g, G> as PortView>::NodePorts<'a>
-    where
-        Self: 'a;
-
-    type NodePortOffsets<'a> = <FlatRegionInternalGraph<'g, G> as PortView>::NodePortOffsets<'a>
-    where
-        Self: 'a;
-
-    delegate! {
-        to self.graph {
-            fn port_direction(&self, port: impl Into<PortIndex>) -> Option<Direction>;
-            fn port_node(&self, port: impl Into<PortIndex>) -> Option<NodeIndex>;
-            fn port_offset(&self, port: impl Into<PortIndex>) -> Option<crate::PortOffset>;
-            fn port_index(&self, node: NodeIndex, offset: crate::PortOffset) -> Option<PortIndex>;
-            fn ports(&self, node: NodeIndex, direction: Direction) -> Self::NodePorts<'_>;
-            fn all_ports(&self, node: NodeIndex) -> Self::NodePorts<'_>;
-            fn input(&self, node: NodeIndex, offset: usize) -> Option<PortIndex>;
-            fn output(&self, node: NodeIndex, offset: usize) -> Option<PortIndex>;
-            fn num_ports(&self, node: NodeIndex, direction: Direction) -> usize;
-            fn port_offsets(&self, node: NodeIndex, direction: Direction) -> Self::NodePortOffsets<'_>;
-            fn all_port_offsets(&self, node: NodeIndex) -> Self::NodePortOffsets<'_>;
-            fn contains_node(&self, node: NodeIndex) -> bool;
-            fn contains_port(&self, port: PortIndex) -> bool;
-            fn is_empty(&self) -> bool;
-            fn node_count(&self) -> usize;
-            fn port_count(&self) -> usize;
-            fn nodes_iter(&self) -> Self::Nodes<'_>;
-            fn ports_iter(&self) -> Self::Ports<'_>;
-            fn node_capacity(&self) -> usize;
-            fn port_capacity(&self) -> usize;
-            fn node_port_capacity(&self, node: NodeIndex) -> usize;
-        }
-    }
-}
-
-impl<'g, G> LinkView for FlatRegion<'g, G>
-where
-    G: LinkView,
-{
-    type LinkEndpoint = G::LinkEndpoint;
-
-    type Neighbours<'a> = <FlatRegionInternalGraph<'g, G> as LinkView>::Neighbours<'a>
-    where
-        Self: 'a;
-
-    type NodeConnections<'a> = <FlatRegionInternalGraph<'g, G> as LinkView>::NodeConnections<'a>
-    where
-        Self: 'a;
-
-    type NodeLinks<'a> = <FlatRegionInternalGraph<'g, G> as LinkView>::NodeLinks<'a>
-    where
-        Self: 'a;
-
-    type PortLinks<'a> = <FlatRegionInternalGraph<'g, G> as LinkView>::PortLinks<'a>
-    where
-        Self: 'a;
-
-    delegate! {
-        to self.graph {
-            fn get_connections(&self, from: NodeIndex, to: NodeIndex) -> Self::NodeConnections<'_>;
-            fn port_links(&self, port: PortIndex) -> Self::PortLinks<'_>;
-            fn links(&self, node: NodeIndex, direction: Direction) -> Self::NodeLinks<'_>;
-            fn all_links(&self, node: NodeIndex) -> Self::NodeLinks<'_>;
-            fn neighbours(&self, node: NodeIndex, direction: Direction) -> Self::Neighbours<'_>;
-            fn all_neighbours(&self, node: NodeIndex) -> Self::Neighbours<'_>;
-            fn link_count(&self) -> usize;
-        }
-    }
-}
-
-impl<'g, G> MultiView for FlatRegion<'g, G>
-where
-    G: MultiView,
-{
-    type NodeSubports<'a> = <FlatRegionInternalGraph<'g, G> as MultiView>::NodeSubports<'a>
-    where
-        Self: 'a;
-
-    delegate! {
-            to self.graph {
-        fn subport_link(&self, subport: Self::LinkEndpoint) -> Option<Self::LinkEndpoint>;
-        fn subports(&self, node: NodeIndex, direction: Direction) -> Self::NodeSubports<'_>;
-        fn all_subports(&self, node: NodeIndex) -> Self::NodeSubports<'_>;
-    }}
 }
 
 #[cfg(test)]
 mod test {
     use std::error::Error;
 
-    use crate::{Hierarchy, LinkMut, PortGraph, PortMut};
+    use crate::{Hierarchy, LinkMut, LinkView, PortGraph, PortMut, PortView};
 
     use super::*;
 
@@ -339,12 +114,12 @@ mod test {
 
         let hierarchy = Hierarchy::new();
 
-        let region = FlatRegion::new(&graph, &hierarchy, root);
+        let region = FlatRegion::new_flat_region(&graph, &hierarchy, root);
         assert!(region.is_empty());
         assert_eq!(region.node_count(), 0);
         assert_eq!(region.port_count(), 0);
 
-        let region = Region::new(&graph, &hierarchy, root);
+        let region = Region::new_region(&graph, &hierarchy, root);
         assert!(region.is_empty());
         assert_eq!(region.node_count(), 0);
         assert_eq!(region.port_count(), 0);
@@ -364,7 +139,7 @@ mod test {
         hierarchy.push_child(b, root)?;
         hierarchy.push_child(c, b)?;
 
-        let region = FlatRegion::new(&graph, &hierarchy, root);
+        let region = FlatRegion::new_flat_region(&graph, &hierarchy, root);
 
         assert!(region.nodes_iter().eq([a, b]));
         assert_eq!(region.node_count(), 2);
@@ -391,7 +166,7 @@ mod test {
         hierarchy.push_child(b, root)?;
         hierarchy.push_child(c, b)?;
 
-        let region = Region::new(&graph, &hierarchy, root);
+        let region = Region::new_region(&graph, &hierarchy, root);
 
         assert!(
             region.nodes_iter().eq([a, b, c]),

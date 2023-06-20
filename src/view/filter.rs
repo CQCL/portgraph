@@ -9,6 +9,7 @@ use delegate::delegate;
 pub type NodeFilter<Ctx> = fn(NodeIndex, &Ctx) -> bool;
 
 /// A wrapper around a portgraph that filters out nodes.
+#[derive(Debug, Clone, PartialEq)]
 pub struct NodeFiltered<'a, G, F, Context = ()> {
     graph: &'a G,
     filter: F,

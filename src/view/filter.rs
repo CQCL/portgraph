@@ -83,25 +83,22 @@ impl<'a, G, Ctx> NodeFilterCtx<'a, G, Ctx> {
     }
 }
 
-/// Non-capturing filter function used in [`NodeFilteredNodes`].
-/// This
+/// Non-capturing filter function used by [`NodeFiltered`].
 type NodeFilterFn<Item, G, Ctx> = fn(&Item, &NodeFilterCtx<G, Ctx>) -> bool;
+
+/// Node-filtered iterator wrapper used by [`NodeFiltered`].
+pub type NodeFilteredIter<'a, G, Ctx, I> =
+    FilterCtx<WithCtx<I, NodeFilterCtx<'a, G, Ctx>>, NodeFilterFn<<I as Iterator>::Item, G, Ctx>>;
 
 impl<G, Ctx> PortView for NodeFiltered<'_, G, NodeFilter<Ctx>, Ctx>
 where
     G: PortView,
 {
-    type Nodes<'a> = FilterCtx<
-        WithCtx<<G as PortView>::Nodes<'a>, NodeFilterCtx<'a, G, Ctx>>,
-        NodeFilterFn<NodeIndex, G, Ctx>,
-    >
+    type Nodes<'a> = NodeFilteredIter<'a, G, Ctx, <G as PortView>::Nodes<'a>>
     where
         Self: 'a;
 
-    type Ports<'a> = FilterCtx<
-        WithCtx<<G as PortView>::Ports<'a>, NodeFilterCtx<'a, G, Ctx>>,
-        NodeFilterFn<PortIndex, G, Ctx>,
-    >
+    type Ports<'a> = NodeFilteredIter<'a, G, Ctx, <G as PortView>::Ports<'a>>
     where
         Self: 'a;
 
@@ -185,31 +182,19 @@ where
 {
     type LinkEndpoint = G::LinkEndpoint;
 
-    type Neighbours<'a> = FilterCtx<
-        WithCtx<<G as LinkView>::Neighbours<'a>, NodeFilterCtx<'a, G, Ctx>>,
-        NodeFilterFn<NodeIndex, G, Ctx>,
-    >
+    type Neighbours<'a> = NodeFilteredIter<'a, G, Ctx, <G as LinkView>::Neighbours<'a>>
     where
         Self: 'a;
 
-    type NodeConnections<'a> = FilterCtx<
-        WithCtx<<G as LinkView>::NodeConnections<'a>, NodeFilterCtx<'a, G, Ctx>>,
-        NodeFilterFn<(Self::LinkEndpoint, Self::LinkEndpoint), G, Ctx>,
-    >
+    type NodeConnections<'a> = NodeFilteredIter<'a, G, Ctx, <G as LinkView>::NodeConnections<'a>>
     where
         Self: 'a;
 
-    type NodeLinks<'a> = FilterCtx<
-        WithCtx<<G as LinkView>::NodeLinks<'a>, NodeFilterCtx<'a, G, Ctx>>,
-        NodeFilterFn<(Self::LinkEndpoint, Self::LinkEndpoint), G, Ctx>,
-    >
+    type NodeLinks<'a> = NodeFilteredIter<'a, G, Ctx, <G as LinkView>::NodeLinks<'a>>
     where
         Self: 'a;
 
-    type PortLinks<'a> = FilterCtx<
-        WithCtx<<G as LinkView>::PortLinks<'a>, NodeFilterCtx<'a, G, Ctx>>,
-        NodeFilterFn<(Self::LinkEndpoint, Self::LinkEndpoint), G, Ctx>,
-    >
+    type PortLinks<'a> = NodeFilteredIter<'a, G, Ctx, <G as LinkView>::PortLinks<'a>>
     where
         Self: 'a;
 
@@ -266,10 +251,7 @@ impl<G, Ctx> MultiView for NodeFiltered<'_, G, NodeFilter<Ctx>, Ctx>
 where
     G: MultiView,
 {
-    type NodeSubports<'a> = FilterCtx<
-        WithCtx<<G as MultiView>::NodeSubports<'a>, NodeFilterCtx<'a, G, Ctx>>,
-        NodeFilterFn<Self::LinkEndpoint, G, Ctx>,
-    >
+    type NodeSubports<'a> = NodeFilteredIter<'a, G, Ctx, <G as MultiView>::NodeSubports<'a>>
     where
         Self: 'a;
 

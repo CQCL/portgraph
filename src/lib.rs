@@ -314,11 +314,7 @@ pub struct IndexError {
 #[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub enum PortOffset {
-    /// Input to a node
-    ///
-    /// The index is shifted by one to allow for [null pointer optimizations].
-    ///
-    /// [null pointer optimizations]: https://doc.rust-lang.org/std/option/#representation
+    /// Input to a node.
     Incoming(u16),
     /// Output from a node.
     Outgoing(u16),
@@ -337,15 +333,21 @@ impl PortOffset {
     /// Creates a new incoming port offset.
     #[inline(always)]
     pub fn new_incoming(offset: usize) -> Self {
-        assert!(offset <= u16::MAX as usize);
-        PortOffset::Incoming(offset as u16)
+        PortOffset::Incoming(
+            offset
+                .try_into()
+                .expect("The offset must be less than 2^16."),
+        )
     }
 
     /// Creates a new outgoing port offset.
     #[inline(always)]
     pub fn new_outgoing(offset: usize) -> Self {
-        assert!(offset <= u16::MAX as usize);
-        PortOffset::Outgoing(offset as u16)
+        PortOffset::Outgoing(
+            offset
+                .try_into()
+                .expect("The offset must be less than 2^16."),
+        )
     }
 
     /// Returns the direction of the port.

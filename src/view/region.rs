@@ -21,7 +21,8 @@ pub type Region<'g, G> = NodeFiltered<'g, G, RegionCallback<'g>, RegionContext<'
 impl<'a, G> Region<'a, G> {
     /// Create a new region view including all the descendants of the root node.
     pub fn new_region(graph: &'a G, hierarchy: &'a Hierarchy, root: NodeIndex) -> Self {
-        let region_filter: RegionCallback<'a> = |node, context| context.is_descendant(node);
+        let region_filter: RegionCallback<'a> =
+            |node, context| node == context.root() || context.is_descendant(node);
         Self::new(graph, region_filter, RegionContext::new(hierarchy, root))
     }
 }
@@ -78,6 +79,11 @@ impl<'g> RegionContext<'g> {
         }
         is_descendant
     }
+
+    /// Get the root node of the region.
+    pub fn root(&self) -> NodeIndex {
+        self.root
+    }
 }
 
 type FlatRegionContext<'g> = (&'g Hierarchy, NodeIndex);
@@ -93,7 +99,7 @@ impl<'a, G> FlatRegion<'a, G> {
     pub fn new_flat_region(graph: &'a G, hierarchy: &'a Hierarchy, root: NodeIndex) -> Self {
         let region_filter: FlatRegionCallback<'a> = |node, context| {
             let (hierarchy, root) = context;
-            hierarchy.parent(node) == Some(*root)
+            node == *root || hierarchy.parent(node) == Some(*root)
         };
         Self::new(graph, region_filter, (hierarchy, root))
     }
@@ -108,31 +114,30 @@ mod test {
     use super::*;
 
     #[test]
-    fn empty_region() {
+    fn single_node_region() {
         let mut graph = PortGraph::new();
         let root = graph.add_node(0, 0);
 
         let hierarchy = Hierarchy::new();
 
         let region = FlatRegion::new_flat_region(&graph, &hierarchy, root);
-        assert!(region.is_empty());
-        assert_eq!(region.node_count(), 0);
+        assert_eq!(region.node_count(), 1);
         assert_eq!(region.port_count(), 0);
 
         let region = Region::new_region(&graph, &hierarchy, root);
-        assert!(region.is_empty());
-        assert_eq!(region.node_count(), 0);
+        assert_eq!(region.node_count(), 1);
         assert_eq!(region.port_count(), 0);
     }
 
     #[test]
     fn simple_flat_region() -> Result<(), Box<dyn Error>> {
         let mut graph = PortGraph::new();
-        let root = graph.add_node(42, 0);
+        let other = graph.add_node(42, 0);
+        let root = graph.add_node(1, 0);
         let a = graph.add_node(1, 2);
         let b = graph.add_node(0, 0);
         let c = graph.add_node(0, 0);
-        graph.link_nodes(a, 0, root, 0)?;
+        graph.link_nodes(a, 0, other, 0)?;
 
         let mut hierarchy = Hierarchy::new();
         hierarchy.push_child(a, root)?;
@@ -141,9 +146,9 @@ mod test {
 
         let region = FlatRegion::new_flat_region(&graph, &hierarchy, root);
 
-        assert!(region.nodes_iter().eq([a, b]));
-        assert_eq!(region.node_count(), 2);
-        assert_eq!(region.port_count(), 3);
+        assert!(region.nodes_iter().eq([root, a, b]));
+        assert_eq!(region.node_count(), 3);
+        assert_eq!(region.port_count(), 4);
         assert_eq!(region.link_count(), 0);
 
         assert!(region.all_links(a).eq([]));
@@ -155,11 +160,12 @@ mod test {
     #[test]
     fn simple_region() -> Result<(), Box<dyn Error>> {
         let mut graph = PortGraph::new();
-        let root = graph.add_node(42, 0);
+        let other = graph.add_node(42, 0);
+        let root = graph.add_node(1, 0);
         let a = graph.add_node(1, 2);
         let b = graph.add_node(0, 0);
         let c = graph.add_node(0, 0);
-        graph.link_nodes(a, 0, root, 0)?;
+        graph.link_nodes(a, 0, other, 0)?;
 
         let mut hierarchy = Hierarchy::new();
         hierarchy.push_child(a, root)?;
@@ -169,12 +175,12 @@ mod test {
         let region = Region::new_region(&graph, &hierarchy, root);
 
         assert!(
-            region.nodes_iter().eq([a, b, c]),
-            "{:?} != [a,b,c]",
+            region.nodes_iter().eq([root, a, b, c]),
+            "{:?} != [root, a,b,c]",
             region.nodes_iter().collect::<Vec<_>>()
         );
-        assert_eq!(region.node_count(), 3);
-        assert_eq!(region.port_count(), 3);
+        assert_eq!(region.node_count(), 4);
+        assert_eq!(region.port_count(), 4);
         assert_eq!(region.link_count(), 0);
 
         assert!(region.all_links(a).eq([]));

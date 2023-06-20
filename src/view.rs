@@ -1,9 +1,15 @@
 //! Abstractions over portgraph representations.
 
+pub mod filter;
+pub mod region;
+
 #[cfg(feature = "petgraph")]
 pub mod petgraph;
 
 use crate::{portgraph::PortOperation, Direction, LinkError, NodeIndex, PortIndex, PortOffset};
+
+pub use filter::{NodeFilter, NodeFiltered};
+pub use region::{FlatRegion, Region};
 
 /// Core capabilities for querying a graph containing nodes and ports.
 pub trait PortView {

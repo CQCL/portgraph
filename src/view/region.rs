@@ -41,7 +41,7 @@ impl<'a, G> Region<'a, G> {
     }
 }
 
-/// Internal context used in the [`Region`] iterators.
+/// Internal context used in the [`Region`] adaptor.
 #[derive(Debug, Clone)]
 pub struct RegionContext<'g> {
     hierarchy: &'g Hierarchy,

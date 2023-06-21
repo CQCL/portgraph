@@ -1,4 +1,4 @@
-//! View of a portgraph containing only the descendants of a node in a [`Hierarchy`].
+//! Views of a portgraph containing only the descendants of a node in a [`Hierarchy`].
 
 use std::{cell::RefCell, collections::HashMap, iter};
 
@@ -7,12 +7,12 @@ use crate::{Hierarchy, NodeIndex};
 
 type RegionCallback<'g> = fn(NodeIndex, &RegionContext<'g>) -> bool;
 
-/// View of a portgraph containing only the descendants of a node in a
+/// View of a portgraph containing only a root node and its descendants in a
 /// [`Hierarchy`].
 ///
-/// For a view of a portgraph containing only the direct children of a node, see
-/// [`FlatRegion`]. Prefer using [`FlatRegion`] if possible, as it is more
-/// efficient.
+/// For a view of a portgraph containing only the root and its direct children,
+/// see [`FlatRegion`]. Prefer using the flat variant when possible, as it is
+/// more efficient.
 ///
 /// [`Region`] does not implement `Sync` as it uses a [`RefCell`] to cache the
 /// node filtering.
@@ -89,7 +89,7 @@ impl<'g> RegionContext<'g> {
 type FlatRegionContext<'g> = (&'g Hierarchy, NodeIndex);
 type FlatRegionCallback<'g> = fn(NodeIndex, &FlatRegionContext<'g>) -> bool;
 
-/// View of a portgraph containing only the direct children of a node in a [`Hierarchy`].
+/// View of a portgraph containing only a root node and its direct children in a [`Hierarchy`].
 ///
 /// For a view of all descendants, see [`Region`].
 pub type FlatRegion<'g, G> = NodeFiltered<'g, G, FlatRegionCallback<'g>, FlatRegionContext<'g>>;

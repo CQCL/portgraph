@@ -1,3 +1,29 @@
+# Release notes
+
+## v0.6.0 (2023-06-21)
+
+### Added
+
+- `NodeFiltered`, `Region`, and `FlatRegion` graph wrappers ([#77][])
+- Implemented the petgraph visit traits for the graph wrappers ([#78][])
+- Benchmarks for the `toposort` algorithm ([#75][])
+
+### Changed
+
+- Split the `PortView`, `LinkView`, and `MultiView` traits into separate `*View` and `*Mut` traits ([#76][])
+- Replaced `NonZeroU16` in `PortOffset::Incoming` with `u16` ([#73][])
+
+### Fixed
+
+- Fix dot formatter not hiding "Hidden" ports ([#74][])
+
+  [#73]: https://github.com/CQCL/portgraph/issues/73
+  [#74]: https://github.com/CQCL/portgraph/issues/74
+  [#75]: https://github.com/CQCL/portgraph/issues/75
+  [#76]: https://github.com/CQCL/portgraph/issues/76
+  [#77]: https://github.com/CQCL/portgraph/issues/77
+  [#78]: https://github.com/CQCL/portgraph/issues/78
+
 ## v0.5.0 (2023-06-14)
 
 ### Added

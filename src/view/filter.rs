@@ -66,6 +66,7 @@ impl<G, Ctx> NodeFiltered<'_, G, NodeFilter<Ctx>, Ctx> {
 /// Context used internally for the [`NodeFiltered`] iterators.
 ///
 /// This is a named struct to make the iterator signatures more readable.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct NodeFilterCtx<'a, G, Ctx> {
     pub(self) graph: &'a G,
     pub(self) filter: NodeFilter<Ctx>,

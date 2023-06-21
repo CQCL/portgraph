@@ -5,6 +5,7 @@ use std::iter::FusedIterator;
 use bitvec::vec::BitVec;
 
 use crate::multiportgraph::MultiPortGraph;
+use crate::view::filter::{NodeFilter, NodeFiltered};
 use crate::{LinkView, NodeIndex, PortGraph, PortView, SecondaryMap};
 
 impl From<petgraph::Direction> for crate::Direction {
@@ -38,9 +39,19 @@ impl petgraph::visit::NodeRef for NodeIndex {
     }
 }
 
+/// Implement petgraph traits for a portgraph type or wrapper.
+///
+/// Can be called simply as `impl_petgraph_traits!(MyGraph)` for non-generic
+/// graphs, or
+/// ```ignore
+/// impl_petgraph_traits!(MyGraph<T, G>, [T, G] where T: Bound, G: OtherBound);
+/// ```
+/// for generic types with bounds.
 macro_rules! impl_petgraph_traits {
-    ($graph:ident) => {
-        impl petgraph::visit::GraphBase for $graph {
+    ($graph:ty) => {impl_petgraph_traits!($graph, []);};
+    ($graph:ty, [$($args:tt)*]) => {impl_petgraph_traits!($graph, [$($args)*] where );};
+    ($graph:ty, [$($args:tt)*] where $($where:tt)*) => {
+        impl<$($args)*> petgraph::visit::GraphBase for $graph where $($where)* {
             type NodeId = NodeIndex;
             type EdgeId = (
                 <$graph as LinkView>::LinkEndpoint,
@@ -48,17 +59,17 @@ macro_rules! impl_petgraph_traits {
             );
         }
 
-        impl petgraph::visit::GraphProp for $graph {
+        impl<$($args)*> petgraph::visit::GraphProp for $graph where $($where)* {
             type EdgeType = petgraph::Directed;
         }
 
-        impl petgraph::visit::NodeCount for $graph {
+        impl<$($args)*> petgraph::visit::NodeCount for $graph where $($where)* {
             fn node_count(&self) -> usize {
                 PortView::node_count(self)
             }
         }
 
-        impl petgraph::visit::NodeIndexable for $graph {
+        impl<$($args)*> petgraph::visit::NodeIndexable for $graph where $($where)* {
             fn node_bound(&self) -> usize {
                 PortView::node_count(self)
             }
@@ -72,18 +83,18 @@ macro_rules! impl_petgraph_traits {
             }
         }
 
-        impl petgraph::visit::EdgeCount for $graph {
+        impl<$($args)*> petgraph::visit::EdgeCount for $graph where $($where)* {
             fn edge_count(&self) -> usize {
                 LinkView::link_count(self)
             }
         }
 
-        impl petgraph::visit::Data for $graph {
+        impl<$($args)*> petgraph::visit::Data for $graph where $($where)* {
             type NodeWeight = ();
             type EdgeWeight = ();
         }
 
-        impl<'g> petgraph::visit::IntoNodeIdentifiers for &'g $graph {
+        impl<'g, $($args)*> petgraph::visit::IntoNodeIdentifiers for &'g $graph where $($where)* {
             type NodeIdentifiers = <$graph as PortView>::Nodes<'g>;
 
             fn node_identifiers(self) -> Self::NodeIdentifiers {
@@ -91,7 +102,7 @@ macro_rules! impl_petgraph_traits {
             }
         }
 
-        impl<'g> petgraph::visit::IntoNodeReferences for &'g $graph {
+        impl<'g, $($args)*> petgraph::visit::IntoNodeReferences for &'g $graph where $($where)* {
             type NodeRef = NodeIndex;
             type NodeReferences = <$graph as PortView>::Nodes<'g>;
 
@@ -100,7 +111,7 @@ macro_rules! impl_petgraph_traits {
             }
         }
 
-        impl<'g> petgraph::visit::IntoNeighbors for &'g $graph {
+        impl<'g, $($args)*> petgraph::visit::IntoNeighbors for &'g $graph where $($where)* {
             type Neighbors = <$graph as LinkView>::Neighbours<'g>;
 
             fn neighbors(self, n: Self::NodeId) -> Self::Neighbors {
@@ -108,7 +119,7 @@ macro_rules! impl_petgraph_traits {
             }
         }
 
-        impl<'g> petgraph::visit::IntoNeighborsDirected for &'g $graph {
+        impl<'g, $($args)*> petgraph::visit::IntoNeighborsDirected for &'g $graph where $($where)* {
             type NeighborsDirected = <$graph as LinkView>::Neighbours<'g>;
 
             fn neighbors_directed(
@@ -120,7 +131,7 @@ macro_rules! impl_petgraph_traits {
             }
         }
 
-        impl<'g> petgraph::visit::IntoEdgeReferences for &'g $graph {
+        impl<'g, $($args)*> petgraph::visit::IntoEdgeReferences for &'g $graph where $($where)* {
             type EdgeRef = EdgeRef<<$graph as LinkView>::LinkEndpoint>;
             type EdgeReferences = EdgeRefs<'g, $graph>;
 
@@ -129,7 +140,7 @@ macro_rules! impl_petgraph_traits {
             }
         }
 
-        impl<'g> petgraph::visit::IntoEdges for &'g $graph {
+        impl<'g, $($args)*> petgraph::visit::IntoEdges for &'g $graph where $($where)* {
             type Edges = NodeEdgeRefs<'g, $graph>;
 
             fn edges(self, n: Self::NodeId) -> Self::Edges {
@@ -137,7 +148,7 @@ macro_rules! impl_petgraph_traits {
             }
         }
 
-        impl<'g> petgraph::visit::IntoEdgesDirected for &'g $graph {
+        impl<'g, $($args)*> petgraph::visit::IntoEdgesDirected for &'g $graph where $($where)* {
             type EdgesDirected = NodeEdgeRefs<'g, $graph>;
 
             fn edges_directed(
@@ -148,12 +159,21 @@ macro_rules! impl_petgraph_traits {
                 NodeEdgeRefs::new_directed(self, n, d.into())
             }
         }
+    };
+}
 
-        impl petgraph::visit::Visitable for $graph {
+/// Implement petgraph's `Visitable` and `GetAdjacencyMatrix` traits for a portgraph type or wrapper.
+///
+/// Assumes that the node indices are dense and start at 0, and uses internal containers that consume O(#nodes) memory.
+macro_rules! impl_visit_dense {
+    ($graph:ty) => {impl_visit_dense!($graph, []);};
+    ($graph:ty, [$($args:tt)*]) => {impl_visit_dense!($graph, [$($args)*] where );};
+    ($graph:ty, [$($args:tt)*] where $($where:tt)*) => {
+        impl<$($args)*> petgraph::visit::Visitable for $graph $($where)* {
             type Map = bitvec::vec::BitVec;
 
             fn visit_map(&self) -> Self::Map {
-                BitVec::with_capacity(self.node_count())
+                BitVec::with_capacity(self.node_capacity())
             }
 
             fn reset_map(&self, map: &mut Self::Map) {
@@ -161,7 +181,7 @@ macro_rules! impl_petgraph_traits {
             }
         }
 
-        impl petgraph::visit::GetAdjacencyMatrix for $graph {
+        impl<$($args)*> petgraph::visit::GetAdjacencyMatrix for $graph $($where)* {
             type AdjMatrix = (bitvec::vec::BitVec, usize);
 
             fn adjacency_matrix(&self) -> Self::AdjMatrix {
@@ -192,8 +212,65 @@ macro_rules! impl_petgraph_traits {
     };
 }
 
+/// Implement petgraph's `Visitable` and `GetAdjacencyMatrix` traits for a sparse portgraph type or wrapper.
+///
+/// Uses sparse containers to keep track of visited nodes.
+macro_rules! impl_visit_sparse {
+    ($graph:ty) => {impl_visit_sparse!($graph, []);};
+    ($graph:ty, [$($args:tt)*]) => {impl_visit_sparse!($graph, [$($args)*] where );};
+    ($graph:ty, [$($args:tt)*] where $($where:tt)*) => {
+        impl<$($args)*> petgraph::visit::Visitable for $graph where $($where)* {
+            type Map = std::collections::HashSet<Self::NodeId>;
+
+            fn visit_map(&self) -> Self::Map {
+                std::collections::HashSet::new()
+            }
+
+            fn reset_map(&self, map: &mut Self::Map) {
+                map.clear();
+            }
+        }
+
+        impl<$($args)*> petgraph::visit::GetAdjacencyMatrix for $graph where $($where)* {
+            type AdjMatrix = std::collections::HashSet<(Self::NodeId, Self::NodeId)>;
+
+            fn adjacency_matrix(&self) -> Self::AdjMatrix {
+                let mut matrix = std::collections::HashSet::new();
+                for node in self.nodes_iter() {
+                    for neighbour in self.output_neighbours(node) {
+                        matrix.insert((node, neighbour));
+                    }
+                }
+                matrix
+            }
+
+            fn is_adjacent(
+                &self,
+                matrix: &Self::AdjMatrix,
+                a: Self::NodeId,
+                b: Self::NodeId,
+            ) -> bool {
+                matrix.contains(&(a, b))
+            }
+        }
+    };
+}
+
 impl_petgraph_traits!(PortGraph);
 impl_petgraph_traits!(MultiPortGraph);
+impl_petgraph_traits!(NodeFiltered<'a, G, NodeFilter<Ctx>, Ctx>, ['a, G, Ctx]
+    where
+        G: LinkView,
+        <G as LinkView>::LinkEndpoint: Eq
+);
+
+impl_visit_dense!(PortGraph);
+impl_visit_dense!(MultiPortGraph);
+impl_visit_sparse!(NodeFiltered<'a, G, NodeFilter<Ctx>, Ctx>, ['a, G, Ctx]
+    where
+        G: LinkView,
+        <G as LinkView>::LinkEndpoint: Eq
+);
 
 impl petgraph::visit::VisitMap<NodeIndex> for BitVec {
     fn visit(&mut self, a: NodeIndex) -> bool {

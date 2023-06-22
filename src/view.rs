@@ -6,6 +6,8 @@ pub mod region;
 #[cfg(feature = "petgraph")]
 pub mod petgraph;
 
+use std::collections::HashMap;
+
 use crate::{portgraph::PortOperation, Direction, LinkError, NodeIndex, PortIndex, PortOffset};
 
 pub use filter::{NodeFilter, NodeFiltered};
@@ -545,6 +547,33 @@ pub trait LinkMut: LinkView + PortMut {
     /// Unlinks all connections to the `port`. If the port was connected,
     /// returns one of the ports it was connected to.
     fn unlink_port(&mut self, port: PortIndex) -> Option<Self::LinkEndpoint>;
+
+    /// Inserts another graph into this graph.
+    ///
+    /// Returns a map from the old node indices to the new node indices.
+    fn insert_graph(
+        &mut self,
+        other: &impl LinkView,
+    ) -> Result<HashMap<NodeIndex, NodeIndex>, LinkError> {
+        self.reserve(other.node_count(), other.port_count());
+        let mut rekeys = HashMap::with_capacity(other.node_count());
+        for old in other.nodes_iter() {
+            let new = self.add_node(other.num_inputs(old), other.num_outputs(old));
+            rekeys.insert(old, new);
+            for (from, to) in other.all_links(old) {
+                let Some(&other_node) = rekeys.get(&other.port_node(to).unwrap()) else {
+                    continue
+                };
+                self.link_offsets(
+                    new,
+                    other.port_offset(from).unwrap(),
+                    other_node,
+                    other.port_offset(to).unwrap(),
+                )?;
+            }
+        }
+        Ok(rekeys)
+    }
 }
 
 /// Abstraction over a portgraph that may have multiple connections per node.

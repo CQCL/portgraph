@@ -1525,6 +1525,35 @@ pub mod test {
         assert!(g.port_node(i).is_some());
     }
 
+    #[test]
+    fn insert_graph() -> Result<(), Box<dyn std::error::Error>> {
+        let mut g = PortGraph::new();
+        let node0g = g.add_node(1, 1);
+        let node1g = g.add_node(1, 1);
+        g.link_nodes(node0g, 0, node1g, 0)?;
+
+        let mut h = PortGraph::new();
+        let node0h = h.add_node(1, 2);
+        let node1h = h.add_node(2, 1);
+        h.link_nodes(node0h, 0, node1h, 1)?;
+        h.link_nodes(node0h, 1, node1h, 0)?;
+        h.link_nodes(node1h, 0, node0h, 0)?;
+
+        let map = g.insert_graph(&h)?;
+        assert_eq!(map.len(), 2);
+
+        assert_eq!(g.node_count(), 4);
+        assert_eq!(g.link_count(), 4);
+        assert!(g.contains_node(map[&node0h]));
+        assert!(g.contains_node(map[&node1h]));
+        assert!(g.input_neighbours(map[&node0h]).eq([map[&node1g]]));
+        assert!(g
+            .output_neighbours(map[&node0h])
+            .eq([map[&node1g], map[&node1g]]));
+
+        Ok(())
+    }
+
     #[cfg(feature = "serde")]
     pub fn ser_roundtrip<T: Serialize + serde::de::DeserializeOwned>(g: &T) -> T {
         let v = rmp_serde::to_vec_named(g).unwrap();

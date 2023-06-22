@@ -1528,6 +1528,9 @@ pub mod test {
     #[test]
     fn insert_graph() -> Result<(), Box<dyn std::error::Error>> {
         let mut g = PortGraph::new();
+        // Add dummy nodes to produce different node ids than in the other graph.
+        g.add_node(0, 0);
+        g.add_node(0, 0);
         let node0g = g.add_node(1, 1);
         let node1g = g.add_node(1, 1);
         g.link_nodes(node0g, 0, node1g, 0)?;
@@ -1542,14 +1545,14 @@ pub mod test {
         let map = g.insert_graph(&h)?;
         assert_eq!(map.len(), 2);
 
-        assert_eq!(g.node_count(), 4);
+        assert_eq!(g.node_count(), 6);
         assert_eq!(g.link_count(), 4);
         assert!(g.contains_node(map[&node0h]));
         assert!(g.contains_node(map[&node1h]));
-        assert!(g.input_neighbours(map[&node0h]).eq([map[&node1g]]));
+        assert!(g.input_neighbours(map[&node0h]).eq([map[&node1h]]));
         assert!(g
             .output_neighbours(map[&node0h])
-            .eq([map[&node1g], map[&node1g]]));
+            .eq([map[&node1h], map[&node1h]]));
 
         Ok(())
     }

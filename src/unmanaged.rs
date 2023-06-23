@@ -100,7 +100,7 @@ where
     ///
     /// This does not allocate any memory until a value is modified.
     #[inline]
-    pub fn with_default(default: V) -> Self {
+    pub const fn with_default(default: V) -> Self {
         Self {
             data: Vec::new(),
             phantom: PhantomData,
@@ -394,7 +394,7 @@ where
 }
 
 /// Iterator over non-default entries of an unmanaged map.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct UnmanagedIter<'a, K, V> {
     iter: Enumerate<slice::Iter<'a, V>>,
     phantom: std::marker::PhantomData<K>,

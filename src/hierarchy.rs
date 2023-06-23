@@ -72,9 +72,9 @@ pub struct Hierarchy {
 
 impl Hierarchy {
     /// Creates a new empty layout.
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
-            data: UnmanagedDenseMap::new(),
+            data: UnmanagedDenseMap::with_default(NodeData::new()),
         }
     }
 
@@ -493,6 +493,18 @@ pub struct Children<'a> {
     next: Option<NodeIndex>,
     prev: Option<NodeIndex>,
     len: usize,
+}
+
+impl Default for Children<'static> {
+    fn default() -> Self {
+        static HIERARCHY: Hierarchy = Hierarchy::new();
+        Self {
+            layout: &HIERARCHY,
+            next: None,
+            prev: None,
+            len: 0,
+        }
+    }
 }
 
 impl<'a> Iterator for Children<'a> {

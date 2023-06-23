@@ -78,7 +78,7 @@ pub enum RewriteError {
     /// There was an error connecting the ports of the [`OpenGraph`] to the
     /// boundary.
     #[error("There was an error connecting the ports of the OpenGraph to the boundary")]
-    Link(#[source] LinkError),
+    Link(#[from] LinkError),
 }
 
 /// A subgraph defined as a subset of the nodes in a graph.
@@ -336,30 +336,25 @@ impl Rewrite {
         self.subgraph.nodes().for_each(node_removed);
         self.subgraph.remove_from(graph);
 
-        // Insert the new graph.
-        let node_count = self.replacement.graph.node_count();
+        // Run the replacement
         let port_count = self.replacement.graph.port_count();
+        let node_map = graph.insert_graph(&self.replacement.graph)?;
         let mut port_map = HashMap::with_capacity(port_count);
-        graph.reserve(node_count, port_count);
-        for node in self.replacement.graph.nodes_iter() {
-            let inputs = self.replacement.graph.inputs(node);
-            let outputs = self.replacement.graph.outputs(node);
-            let new_node = graph.add_node(inputs.len(), outputs.len());
 
-            // Trigger the callbacks and update the port map.
+        // Trigger the callbacks
+        for (node, new_node) in node_map {
             node_inserted(node, new_node);
-            inputs
-                .zip(graph.inputs(new_node))
-                .for_each(|(old_port, new_port)| {
-                    port_inserted(old_port, new_port);
-                    port_map.insert(old_port, new_port);
+            self.replacement
+                .graph
+                .all_ports(node)
+                .zip(graph.all_ports(new_node))
+                .for_each(|(p, np)| {
+                    port_map.insert(p, np);
+                    port_inserted(p, np)
                 });
-            outputs
-                .zip(graph.outputs(new_node))
-                .for_each(|(old_port, new_port)| {
-                    port_inserted(old_port, new_port);
-                    port_map.insert(old_port, new_port);
-                });
+            graph
+                .all_links(node)
+                .for_each(|(from, to)| ports_connected(from, to));
         }
 
         // Connect the inserted nodes to the old subgraph boundary.

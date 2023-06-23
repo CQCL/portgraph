@@ -1,5 +1,6 @@
 //! Iterators used by the implementation of HugrView for Hugr.
 
+use std::fmt::Debug;
 use std::iter::{Enumerate, FusedIterator};
 use std::ops::Range;
 
@@ -60,7 +61,7 @@ impl<'a> DoubleEndedIterator for Nodes<'a> {
 impl<'a> FusedIterator for Nodes<'a> {}
 
 /// Iterator over the ports of a node.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct NodeSubports<'a> {
     multigraph: &'a MultiPortGraph,
     ports: portgraph::NodePorts,
@@ -121,7 +122,7 @@ impl<'a> Iterator for NodeSubports<'a> {
 impl<'a> FusedIterator for NodeSubports<'a> {}
 
 /// Iterator over the ports of a node.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Neighbours<'a> {
     multigraph: &'a MultiPortGraph,
     subports: NodeSubports<'a>,
@@ -172,8 +173,7 @@ impl<'a> FusedIterator for Neighbours<'a> {}
 ///
 /// In contrast to [`portgraph::NodeLinks`], this iterator
 /// only returns linked subports, and includes the source subport.
-#[derive(Clone)]
-#[allow(dead_code)]
+#[derive(Debug, Clone)]
 pub struct NodeLinks<'a> {
     multigraph: &'a MultiPortGraph,
     ports: NodePorts,
@@ -212,8 +212,7 @@ impl<'a> FusedIterator for NodeLinks<'a> {}
 
 /// Iterator over the links between two nodes, created by
 /// [`MultiPortGraph::get_connections`].
-#[derive(Clone)]
-#[allow(dead_code)]
+#[derive(Debug, Clone)]
 pub struct NodeConnections<'a> {
     multigraph: &'a MultiPortGraph,
     target: NodeIndex,
@@ -252,7 +251,7 @@ impl<'a> Iterator for NodeConnections<'a> {
 impl<'a> FusedIterator for NodeConnections<'a> {}
 
 /// Iterator over the links of a port
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 #[allow(missing_docs)]
 pub enum PortLinks<'a> {
     /// The port is not a multiport. The iterator returns exactly one link.

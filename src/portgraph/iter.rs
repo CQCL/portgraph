@@ -66,7 +66,7 @@ impl DoubleEndedIterator for NodePorts {
 impl FusedIterator for NodePorts {}
 
 /// Iterator over the nodes of a graph, created by [`PortGraph::nodes_iter`].
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Nodes<'a> {
     pub(super) iter: std::iter::Enumerate<std::slice::Iter<'a, NodeEntry>>,
     pub(super) len: usize,
@@ -123,7 +123,7 @@ impl<'a> DoubleEndedIterator for Nodes<'a> {
 impl<'a> FusedIterator for Nodes<'a> {}
 
 /// Iterator over the ports of a graph, created by [`PortGraph::ports_iter`].
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Ports<'a> {
     pub(super) iter: std::iter::Enumerate<std::slice::Iter<'a, PortEntry>>,
     pub(super) len: usize,
@@ -173,7 +173,7 @@ impl<'a> FusedIterator for Ports<'a> {}
 
 /// Iterator over the port offsets of a node. See [`PortGraph::input_offsets`],
 /// [`PortGraph::output_offsets`], and [`PortGraph::all_port_offsets`].
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct NodePortOffsets {
     pub(super) incoming: Range<u16>,
     // Outgoing port offsets can go up to u16::MAX, hence the u32

@@ -2,7 +2,7 @@
 
 use pyo3::{types::PyInt, IntoPy, PyErr, PyObject, Python};
 
-use crate::{substitute::RewriteError, LinkError, NodeIndex, PortIndex};
+use crate::{LinkError, NodeIndex, PortIndex};
 
 impl From<PyInt> for NodeIndex {
     fn from(x: PyInt) -> Self {
@@ -23,12 +23,6 @@ impl IntoPy<PyObject> for PortIndex {
 
 impl std::convert::From<LinkError> for PyErr {
     fn from(s: LinkError) -> Self {
-        pyo3::exceptions::PyRuntimeError::new_err(s.to_string())
-    }
-}
-
-impl std::convert::From<RewriteError> for PyErr {
-    fn from(s: RewriteError) -> Self {
         pyo3::exceptions::PyRuntimeError::new_err(s.to_string())
     }
 }

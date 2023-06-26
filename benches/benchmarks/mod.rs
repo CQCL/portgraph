@@ -2,5 +2,4 @@ pub mod generators;
 
 pub mod hierarchy;
 pub mod portgraph;
-pub mod substitute;
 pub mod toposort;

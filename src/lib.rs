@@ -68,7 +68,6 @@ pub mod hierarchy;
 pub mod multiportgraph;
 pub mod portgraph;
 pub mod secondary;
-pub mod substitute;
 pub mod unmanaged;
 pub mod view;
 pub mod weights;

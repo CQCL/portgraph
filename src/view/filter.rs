@@ -2,7 +2,7 @@
 
 use crate::{Direction, LinkView, MultiView, NodeIndex, PortIndex, PortView};
 
-use context_iterators::{ContextIterator, FilterCtx, IntoContextIterator, WithCtx};
+use context_iterators::{ContextIterator, FilterWithCtx, IntoContextIterator};
 use delegate::delegate;
 
 /// Node filter used by [`NodeFiltered`].
@@ -84,12 +84,8 @@ impl<'a, G, Ctx> NodeFilterCtx<'a, G, Ctx> {
     }
 }
 
-/// Non-capturing filter function used by [`NodeFiltered`].
-type NodeFilterFn<Item, G, Ctx> = fn(&Item, &NodeFilterCtx<G, Ctx>) -> bool;
-
 /// Node-filtered iterator wrapper used by [`NodeFiltered`].
-pub type NodeFilteredIter<'a, G, Ctx, I> =
-    FilterCtx<WithCtx<I, NodeFilterCtx<'a, G, Ctx>>, NodeFilterFn<<I as Iterator>::Item, G, Ctx>>;
+pub type NodeFilteredIter<'a, G, Ctx, I> = FilterWithCtx<I, NodeFilterCtx<'a, G, Ctx>>;
 
 impl<G, Ctx> PortView for NodeFiltered<'_, G, NodeFilter<Ctx>, Ctx>
 where

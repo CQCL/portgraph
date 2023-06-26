@@ -98,16 +98,17 @@ impl PortGraph {
     fn alloc_node(&mut self) -> NodeIndex {
         match self.node_free {
             Some(node) => {
-                let NodeEntry::Free(next) = self.node_meta[node.index()] else {
-                    unreachable!("non free node on free list");
-                };
-
-                self.node_free = next;
+                let free_entry = self.node_meta[node.index()].free_entry().unwrap();
+                self.node_free = free_entry.next;
+                if let Some(next) = free_entry.next {
+                    let next_entry = self.node_meta[next.index()].free_entry_mut().unwrap();
+                    next_entry.prev = None;
+                }
                 node
             }
             None => {
                 let index = self.node_meta.len();
-                self.node_meta.push(NodeEntry::Free(None));
+                self.node_meta.push(NodeEntry::new_free(None, None));
                 NodeIndex::new(index)
             }
         }
@@ -170,7 +171,11 @@ impl PortGraph {
 
     #[inline]
     fn free_node(&mut self, node: NodeIndex) {
-        self.node_meta[node.index()] = NodeEntry::Free(self.node_free);
+        if let Some(node_free) = self.node_free {
+            let free_list = self.node_meta[node_free.index()].free_entry_mut().unwrap();
+            free_list.prev = Some(node);
+        }
+        self.node_meta[node.index()] = NodeEntry::new_free(None, self.node_free);
         self.node_free = Some(node);
     }
 
@@ -333,9 +338,8 @@ impl PortView for PortGraph {
         let port_meta = self.port_meta_valid(port)?;
         let node = port_meta.node();
 
-        let node_meta = match self.node_meta[node.index()] {
-            NodeEntry::Free(_) => unreachable!("ports are only attached to valid nodes"),
-            NodeEntry::Node(node_meta) => node_meta,
+        let NodeEntry::Node(node_meta) = self.node_meta[node.index()] else {
+            unreachable!("ports are only attached to valid nodes");
         };
 
         let port_offset = port.index().wrapping_sub(node_meta.first_port().index());
@@ -636,6 +640,38 @@ impl PortMut for PortGraph {
         });
 
         self.node_free = None;
+    }
+
+    fn swap_nodes(&mut self, a: NodeIndex, b: NodeIndex) {
+        let meta_a = self.node_meta[a.index()];
+        let meta_b = self.node_meta[b.index()];
+        self.node_meta.swap(a.index(), b.index());
+        // Update the node indices in the ports metadata.
+        let mut update_ports = |new_node: NodeIndex, entry: NodeEntry| {
+            let NodeEntry::Node(node_meta) = entry else {return;};
+            for dir in Direction::BOTH {
+                for port in node_meta.ports(dir) {
+                    self.port_meta[port] = PortEntry::Port(PortMeta::new(new_node, dir));
+                }
+            }
+        };
+        update_ports(a, meta_b);
+        update_ports(b, meta_a);
+        // Update the free node linked list, only if we swapping empty and
+        // non-empty spaces.
+        let mut update_free_list = |new_node: NodeIndex, entry: FreeNodeEntry| {
+            if let Some(prev) = entry.prev {
+                self.node_meta[prev.index()].free_entry_mut().unwrap().next = Some(new_node);
+            }
+            if let Some(next) = entry.next {
+                self.node_meta[next.index()].free_entry_mut().unwrap().prev = Some(new_node);
+            }
+        };
+        match (meta_a, meta_b) {
+            (NodeEntry::Free(meta_a), NodeEntry::Node(_)) => update_free_list(b, meta_a),
+            (NodeEntry::Node(_), NodeEntry::Free(meta_b)) => update_free_list(a, meta_b),
+            _ => (),
+        }
     }
 
     fn compact_ports<F>(&mut self, mut rekey: F)
@@ -957,15 +993,53 @@ impl Default for NodeMeta {
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 enum NodeEntry {
     /// No node is stored at this entry.
-    /// Instead the entry contains the next index in the node free list.
+    /// Instead the entry forms a doubly-linked list of free nodes.
     #[cfg_attr(feature = "serde", serde(rename = "f",))]
-    Free(Option<NodeIndex>),
+    Free(FreeNodeEntry),
     /// A node is stored at this entry.
     ///
     /// This value allows for null-value optimization so that
     /// `size_of::<NodeEntry>() == size_of::<NodeMeta>()`.
     #[cfg_attr(feature = "serde", serde(rename = "n"))]
     Node(NodeMeta),
+}
+
+impl NodeEntry {
+    /// Returns the free node list entry.
+    #[inline]
+    pub fn free_entry(&self) -> Option<&FreeNodeEntry> {
+        match self {
+            NodeEntry::Free(entry) => Some(entry),
+            NodeEntry::Node(_) => None,
+        }
+    }
+
+    /// Returns the free node list entry.
+    #[inline]
+    pub fn free_entry_mut(&mut self) -> Option<&mut FreeNodeEntry> {
+        match self {
+            NodeEntry::Free(entry) => Some(entry),
+            NodeEntry::Node(_) => None,
+        }
+    }
+
+    /// Create a new free node entry
+    #[inline]
+    pub fn new_free(prev: Option<NodeIndex>, next: Option<NodeIndex>) -> Self {
+        NodeEntry::Free(FreeNodeEntry { prev, next })
+    }
+}
+
+/// Metadata for a free node space.
+///
+/// The entry forms a doubly-linked list of free nodes.
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+struct FreeNodeEntry {
+    /// The previous free node.
+    prev: Option<NodeIndex>,
+    /// The next free node.
+    next: Option<NodeIndex>,
 }
 
 impl std::fmt::Debug for PortGraph {

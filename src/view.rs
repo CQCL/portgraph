@@ -252,6 +252,9 @@ pub trait PortMut: PortView {
     where
         F: FnMut(PortIndex, PortOperation);
 
+    /// Swaps the indices of two nodes.
+    fn swap_nodes(&mut self, a: NodeIndex, b: NodeIndex);
+
     /// Compacts the storage of nodes in the portgraph as much as possible. Note
     /// that node indices won't necessarily be consecutive after this process.
     ///

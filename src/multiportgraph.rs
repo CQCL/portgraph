@@ -291,6 +291,11 @@ impl PortMut for MultiPortGraph {
         });
     }
 
+    fn swap_nodes(&mut self, a: NodeIndex, b: NodeIndex) {
+        self.graph.swap_nodes(a, b);
+        self.copy_node.swap(a, b);
+    }
+
     fn compact_ports<F>(&mut self, mut rekey: F)
     where
         F: FnMut(PortIndex, PortIndex),

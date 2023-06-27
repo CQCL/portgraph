@@ -53,7 +53,7 @@ use std::mem::{replace, take};
 use thiserror::Error;
 
 use crate::unmanaged::UnmanagedDenseMap;
-use crate::NodeIndex;
+use crate::{NodeIndex, SecondaryMap};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -402,6 +402,47 @@ impl Hierarchy {
         self.child_count(node) > 0
     }
 
+    /// Swap the positions of two nodes.
+    pub fn swap_nodes(&mut self, a: NodeIndex, b: NodeIndex) {
+        if a == b {
+            return;
+        }
+
+        // Get a copy of the data. We leave the original data in place for the
+        // moment in case one of the nodes is the parent of the other.
+        let mut a_data = *self.get(a);
+        let mut b_data = *self.get(b);
+
+        self.rekey_in_children(a_data, b);
+        self.rekey_in_children(b_data, a);
+
+        self.rekey_in_parent(a_data, b);
+        self.rekey_in_parent(b_data, a);
+
+        self.rekey_in_siblings(a_data, b);
+        self.rekey_in_siblings(b_data, a);
+
+        // Update the nodes' data, if they are siblings or one is the parent of
+        // the other.
+        let rekey_in_value =
+            |val: Option<&mut NodeIndex>, old_other: NodeIndex, new_other: NodeIndex| match val {
+                Some(val) if *val == old_other => *val = new_other,
+                _ => (),
+            };
+        let rekey_in_data = |data: &mut NodeData, old: NodeIndex, new: NodeIndex| {
+            rekey_in_value(data.parent.as_mut(), old, new);
+            rekey_in_value(data.children.as_mut().map(|c| &mut c[0]), old, new);
+            rekey_in_value(data.children.as_mut().map(|c| &mut c[1]), old, new);
+            rekey_in_value(data.siblings[0].as_mut(), old, new);
+            rekey_in_value(data.siblings[1].as_mut(), old, new);
+        };
+        rekey_in_data(&mut a_data, b, a);
+        rekey_in_data(&mut b_data, a, b);
+
+        self.data.set(a, b_data);
+        self.data.set(b, a_data);
+    }
+
     /// Changes the index of a node from `old` to `new`.
     ///
     /// # Panics
@@ -411,31 +452,51 @@ impl Hierarchy {
         if self.get(new) != &NodeData::default() {
             panic!("can not rekey into an occupied slot");
         }
-
+        if old == new {
+            return;
+        }
         let node_data = take(self.get_mut(old));
 
-        if let Some(parent) = node_data.parent {
-            match node_data.siblings[0] {
-                Some(prev) => self.get_mut(prev).siblings[1] = Some(new),
-                None => self.get_mut(parent).children.as_mut().unwrap()[0] = new,
-            }
+        self.rekey_in_children(node_data, new);
+        self.rekey_in_parent(node_data, new);
+        self.rekey_in_siblings(node_data, new);
 
-            match node_data.siblings[1] {
-                Some(next) => self.get_mut(next).siblings[0] = Some(new),
-                None => self.get_mut(parent).children.as_mut().unwrap()[1] = new,
+        self.data.set(new, node_data);
+    }
+
+    /// Update a node's key in its parent's children list.
+    #[inline]
+    fn rekey_in_parent(&mut self, data: NodeData, new_node: NodeIndex) {
+        if let Some(parent) = data.parent {
+            if data.siblings[0].is_none() {
+                self.get_mut(parent).children.as_mut().unwrap()[0] = new_node;
+            }
+            if data.siblings[1].is_none() {
+                self.get_mut(parent).children.as_mut().unwrap()[1] = new_node;
             }
         }
+    }
 
-        let mut next_child = node_data.children.map(|c| c[0]);
+    /// Update a node's key in its immediate siblings data.
+    #[inline]
+    fn rekey_in_siblings(&mut self, data: NodeData, new: NodeIndex) {
+        if let Some(prev) = data.siblings[0] {
+            self.get_mut(prev).siblings[1] = Some(new);
+        }
+        if let Some(next) = data.siblings[1] {
+            self.get_mut(next).siblings[0] = Some(new);
+        }
+    }
 
+    /// Update a node's key in it's children data.
+    #[inline]
+    fn rekey_in_children(&mut self, data: NodeData, new: NodeIndex) {
+        let mut next_child = data.children.map(|c| c[0]);
         while let Some(child) = next_child {
             let child_data = self.get_mut(child);
             child_data.parent = Some(new);
             next_child = child_data.siblings[1];
         }
-
-        *self.get_mut(new) = node_data;
-        *self.get_mut(old) = NodeData::default();
     }
 
     /// Reserves enough capacity to fit a maximum node index without reallocating.
@@ -456,7 +517,7 @@ impl Hierarchy {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 struct NodeData {
     /// The first and last child of the node, if any.
@@ -724,6 +785,64 @@ mod test {
             vec![child0, child2]
         );
         assert!(hierarchy.is_root(grandchild));
+    }
+
+    #[test]
+    fn test_swap() {
+        let mut hierarchy = Hierarchy::new();
+        let root = NodeIndex::new(4);
+
+        let child0 = NodeIndex::new(0);
+        let child1 = NodeIndex::new(1);
+        let child2 = NodeIndex::new(2);
+        hierarchy.push_child(child2, root).unwrap();
+        hierarchy.insert_before(child1, child2).unwrap();
+        hierarchy.insert_before(child0, child1).unwrap();
+
+        let grandchild1 = NodeIndex::new(42);
+        let grandchild2 = NodeIndex::new(8);
+        hierarchy.push_child(grandchild1, child1).unwrap();
+        hierarchy.push_child(grandchild2, child1).unwrap();
+
+        // Swap unrelated nodes
+        hierarchy.swap_nodes(child2, grandchild2);
+        let (child2, grandchild2) = (grandchild2, child2);
+
+        assert!(hierarchy.children(root).eq([child0, child1, child2]));
+        assert!(hierarchy.children(child2).eq([]));
+        assert!(hierarchy.children(child1).eq([grandchild1, grandchild2]));
+        assert_eq!(hierarchy.parent(child2), Some(root));
+        assert_eq!(hierarchy.parent(grandchild2), Some(child1));
+        assert_eq!(hierarchy.prev(grandchild2), Some(grandchild1));
+        assert_eq!(hierarchy.next(grandchild2), None);
+        assert_eq!(hierarchy.next(grandchild1), Some(grandchild2));
+
+        // Swap parent and child
+        hierarchy.swap_nodes(root, child1);
+        let (root, child1) = (child1, root);
+
+        assert!(hierarchy.children(root).eq([child0, child1, child2]));
+        assert!(hierarchy.children(child1).eq([grandchild1, grandchild2]));
+        assert_eq!(hierarchy.parent(child1), Some(root));
+        assert_eq!(hierarchy.parent(grandchild1), Some(child1));
+        assert_eq!(hierarchy.parent(grandchild2), Some(child1));
+
+        // Swap siblings
+        hierarchy.swap_nodes(child1, child2);
+        let (child1, child2) = (child2, child1);
+
+        assert!(hierarchy.children(root).eq([child0, child1, child2]));
+        assert!(hierarchy.children(child1).eq([grandchild1, grandchild2]));
+        assert!(hierarchy.children(child2).eq([]));
+        assert_eq!(hierarchy.next(child0), Some(child1));
+        assert_eq!(hierarchy.next(child1), Some(child2));
+        assert_eq!(hierarchy.next(child2), None);
+        assert_eq!(hierarchy.prev(child0), None);
+        assert_eq!(hierarchy.prev(child1), Some(child0));
+        assert_eq!(hierarchy.prev(child2), Some(child1));
+        assert_eq!(hierarchy.parent(child1), Some(root));
+        assert_eq!(hierarchy.parent(grandchild1), Some(child1));
+        assert_eq!(hierarchy.parent(grandchild2), Some(child1));
     }
 
     #[test]

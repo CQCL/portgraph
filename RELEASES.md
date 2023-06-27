@@ -6,6 +6,7 @@
 
 - `LinkMut::insert_graph` to insert a full graph into an existing graph ([#80][])
 - `PortMut::swap_nodes` to swap node indices ([#83][])
+- `Hierarchy::swap_nodes` to swap node indices ([#87][])
 - `Debug` and `Default` implementation for multiple iterators ([#81][])
 
 ### Removed
@@ -16,6 +17,7 @@
   [#81]: https://github.com/CQCL/portgraph/issues/81
   [#82]: https://github.com/CQCL/portgraph/issues/82
   [#83]: https://github.com/CQCL/portgraph/issues/83
+  [#87]: https://github.com/CQCL/portgraph/issues/87
 
 ## v0.6.0 (2023-06-21)
 

@@ -1,5 +1,22 @@
 # Release notes
 
+## v0.7.0 (2023-06-28)
+
+### Added
+
+- `LinkMut::insert_graph` to insert a full graph into an existing graph ([#80][])
+- `PortMut::swap_nodes` to swap node indices ([#83][])
+- `Debug` and `Default` implementation for multiple iterators ([#81][])
+
+### Removed
+
+- Removed the `substitute` module ([#82][])
+
+  [#80]: https://github.com/CQCL/portgraph/issues/80
+  [#81]: https://github.com/CQCL/portgraph/issues/81
+  [#82]: https://github.com/CQCL/portgraph/issues/82
+  [#83]: https://github.com/CQCL/portgraph/issues/83
+
 ## v0.6.0 (2023-06-21)
 
 ### Added

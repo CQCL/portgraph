@@ -115,7 +115,7 @@ macro_rules! impl_petgraph_traits {
             type Neighbors = <$graph as LinkView>::Neighbours<'g>;
 
             fn neighbors(self, n: Self::NodeId) -> Self::Neighbors {
-                self.all_neighbours(n)
+                self.output_neighbours(n)
             }
         }
 

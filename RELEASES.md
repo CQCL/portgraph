@@ -1,5 +1,15 @@
 # Release notes
 
+## v0.7.1 (2023-07-13)
+
+### Fixed
+
+- Only yield output neighbours in petgraph's IntoNeighbors trait implementation ([#88][])
+- Fix incorrect dot rendering of the hierarchy for flat filtered regions ([#91][])
+
+  [#88]: https://github.com/CQCL/portgraph/issues/88
+  [#91]: https://github.com/CQCL/portgraph/issues/91
+
 ## v0.7.0 (2023-06-28)
 
 ### Added

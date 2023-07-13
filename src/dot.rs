@@ -336,17 +336,20 @@ where
                 dot.push_str(&node_str);
 
                 // Connect the parent to any existing children
-                forest.children(n).for_each(|child| {
-                    dot.push_str(&{
-                        let from_node = n;
-                        let to_node = child;
-                        format!(
-                            "{} -> {}  [style = \"dashed\"] \n",
-                            hier_node_id(from_node),
-                            hier_node_id(to_node),
-                        )
+                forest
+                    .children(n)
+                    .filter(|&c| self.graph.contains_node(c))
+                    .for_each(|child| {
+                        dot.push_str(&{
+                            let from_node = n;
+                            let to_node = child;
+                            format!(
+                                "{} -> {}  [style = \"dashed\"] \n",
+                                hier_node_id(from_node),
+                                hier_node_id(to_node),
+                            )
+                        });
                     });
-                });
             }
         }
     }

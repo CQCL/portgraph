@@ -9,7 +9,7 @@ use portgraph::{
 use super::generators::*;
 
 fn run_toposort(graph: &PortGraph, roots: impl IntoIterator<Item = NodeIndex>) {
-    let topo: TopoSort = toposort(graph, roots, Direction::Outgoing);
+    let topo: TopoSort<_> = toposort(graph, roots, Direction::Outgoing);
     for n in topo {
         black_box(n);
     }

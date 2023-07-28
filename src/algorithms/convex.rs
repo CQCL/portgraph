@@ -35,7 +35,7 @@ where
         while topsort_nodes.len() < graph.node_count() {
             let inputs = graph.nodes_iter().filter(|&n| {
                 graph
-                    .neighbours(n, Direction::Incoming)
+                    .input_neighbours(n)
                     .all(|n| topsort_nodes.contains(&n))
             });
             let topsort: TopoSort<_> = toposort(graph, inputs, Direction::Outgoing);

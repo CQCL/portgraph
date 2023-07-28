@@ -77,14 +77,14 @@ where
 /// ```
 pub fn toposort_filtered<'f, Map, G>(
     graph: G,
-    source: impl IntoIterator<Item = NodeIndex> + 'f,
+    source: impl IntoIterator<Item = NodeIndex>,
     direction: Direction,
     node_filter: impl FnMut(NodeIndex) -> bool + 'f,
     port_filter: impl FnMut(NodeIndex, PortIndex) -> bool + 'f,
 ) -> TopoSort<'f, G, Map>
 where
     Map: SecondaryMap<PortIndex, bool>,
-    G: LinkView + 'f,
+    G: LinkView,
 {
     TopoSort::new(
         graph,

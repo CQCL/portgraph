@@ -31,16 +31,11 @@ where
 {
     /// Create a new ConvexChecker.
     pub fn new(graph: G) -> Self {
-        let mut topsort_nodes = Vec::with_capacity(graph.node_count());
-        while topsort_nodes.len() < graph.node_count() {
-            let inputs = graph.nodes_iter().filter(|&n| {
-                graph
-                    .input_neighbours(n)
-                    .all(|n| topsort_nodes.contains(&n))
-            });
-            let topsort: TopoSort<_> = toposort(graph, inputs, Direction::Outgoing);
-            topsort_nodes.extend(topsort);
-        }
+        let inputs = graph
+            .nodes_iter()
+            .filter(|&n| graph.input_neighbours(n).count() == 0);
+        let topsort: TopoSort<_> = toposort(graph, inputs, Direction::Outgoing);
+        let topsort_nodes: Vec<_> = topsort.collect();
         let mut topsort_ind = UnmanagedDenseMap::with_capacity(graph.node_count());
         for (i, &n) in topsort_nodes.iter().enumerate() {
             topsort_ind.set(n, i);

@@ -4,8 +4,8 @@ mod benchmarks;
 use criterion::criterion_main;
 
 criterion_main! {
-    // benchmarks::hierarchy::benches,
-    // benchmarks::portgraph::benches,
-    // benchmarks::toposort::benches,
+    benchmarks::hierarchy::benches,
+    benchmarks::portgraph::benches,
+    benchmarks::toposort::benches,
     benchmarks::convex::benches,
 }

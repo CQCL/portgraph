@@ -223,10 +223,7 @@ mod tests {
                 g.input(o2, 1).unwrap(),
                 g.input(o2, 0).unwrap()
             ],
-            [
-                g.output(n1, 0).unwrap(),
-                g.output(n1, 1).unwrap()
-            ]
+            [g.output(n1, 0).unwrap(), g.output(n1, 1).unwrap()]
         ));
     }
 }

@@ -2,7 +2,7 @@ use crate::{Direction, LinkView, NodeIndex, PortIndex, SecondaryMap};
 use bitvec::prelude::BitVec;
 use std::{collections::VecDeque, fmt::Debug, iter::FusedIterator};
 
-/// Returns an iterator over a [`PortGraph`] in topological order.
+/// Returns an iterator over a [`LinkView`] in topological order.
 ///
 /// The `Map` type parameter specifies the type of the secondary map that is
 /// used to store the dominator tree data. The default is [`BitVec`], which is

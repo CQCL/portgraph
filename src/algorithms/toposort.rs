@@ -4,6 +4,10 @@ use std::{collections::VecDeque, fmt::Debug, iter::FusedIterator};
 
 /// Returns an iterator over a [`LinkView`] in topological order.
 ///
+/// ## Type parameters
+/// - `G`: The graph type implementing [`LinkView`],
+/// - `Map`: Internal workspace for graph traversal (see below).
+///
 /// The `Map` type parameter specifies the type of the secondary map that is
 /// used to store the dominator tree data. The default is [`BitVec`], which is
 /// efficient for full graph traversal, i.e. when all nodes are reachable from
@@ -26,13 +30,14 @@ use std::{collections::VecDeque, fmt::Debug, iter::FusedIterator};
 /// let topo: TopoSort<_> = toposort(&graph, [node_a], Direction::Outgoing);
 /// assert_eq!(topo.collect::<Vec<_>>(), [node_a, node_b]);
 /// ```
-pub fn toposort<'f, Map, G: LinkView>(
+pub fn toposort<G, Map>(
     graph: G,
     source: impl IntoIterator<Item = NodeIndex>,
     direction: Direction,
-) -> TopoSort<'f, G, Map>
+) -> TopoSort<'static, G, Map>
 where
     Map: SecondaryMap<PortIndex, bool>,
+    G: LinkView,
 {
     TopoSort::new(graph, source, direction, None, None)
 }
@@ -42,6 +47,11 @@ where
 /// are any nodes only accessible via filtered nodes or filtered ports.
 ///
 /// If the filter closures return false for a node or port, it is skipped.
+///
+/// ## Type parameters
+/// - `'f`: The lifetime of the filter closures,
+/// - `G`: The graph type implementing [`LinkView`],
+/// - `Map`: Internal workspace for graph traversal (see below).
 ///
 /// The `Map` type parameter specifies the type of the secondary map that is
 /// used to store the dominator tree data. The default is [`BitVec`], which is
@@ -75,7 +85,7 @@ where
 /// );
 /// assert_eq!(topo.collect::<Vec<_>>(), [node_a, node_b]);
 /// ```
-pub fn toposort_filtered<'f, Map, G>(
+pub fn toposort_filtered<'f, G, Map>(
     graph: G,
     source: impl IntoIterator<Item = NodeIndex>,
     direction: Direction,

@@ -26,11 +26,11 @@ use std::{collections::VecDeque, fmt::Debug, iter::FusedIterator};
 /// let topo: TopoSort<_> = toposort(&graph, [node_a], Direction::Outgoing);
 /// assert_eq!(topo.collect::<Vec<_>>(), [node_a, node_b]);
 /// ```
-pub fn toposort<Map, G: LinkView>(
+pub fn toposort<'f, Map, G: LinkView>(
     graph: G,
     source: impl IntoIterator<Item = NodeIndex>,
     direction: Direction,
-) -> TopoSort<G, Map>
+) -> TopoSort<'f, G, Map>
 where
     Map: SecondaryMap<PortIndex, bool>,
 {
@@ -75,16 +75,16 @@ where
 /// );
 /// assert_eq!(topo.collect::<Vec<_>>(), [node_a, node_b]);
 /// ```
-pub fn toposort_filtered<Map, G>(
+pub fn toposort_filtered<'f, Map, G>(
     graph: G,
-    source: impl IntoIterator<Item = NodeIndex>,
+    source: impl IntoIterator<Item = NodeIndex> + 'f,
     direction: Direction,
-    node_filter: impl FnMut(NodeIndex) -> bool,
-    port_filter: impl FnMut(NodeIndex, PortIndex) -> bool,
-) -> TopoSort<G, Map>
+    node_filter: impl FnMut(NodeIndex) -> bool + 'f,
+    port_filter: impl FnMut(NodeIndex, PortIndex) -> bool + 'f,
+) -> TopoSort<'f, G, Map>
 where
     Map: SecondaryMap<PortIndex, bool>,
-    G: LinkView,
+    G: LinkView + 'f,
 {
     TopoSort::new(
         graph,
@@ -100,7 +100,7 @@ where
 /// See [`toposort`] for more information.
 ///
 /// Implements [Kahn's algorithm](https://en.wikipedia.org/wiki/Topological_sorting#Kahn's_algorithm).
-pub struct TopoSort<G, Map = BitVec> {
+pub struct TopoSort<'f, G, Map = BitVec> {
     graph: G,
     visited_ports: Map,
     /// A VecDeque is used for the node list to produce a canonical ordering,
@@ -112,13 +112,13 @@ pub struct TopoSort<G, Map = BitVec> {
     nodes_seen: usize,
     /// A filter closure for the nodes to visit. If the closure returns false,
     /// the node is skipped.
-    node_filter: Option<Box<dyn FnMut(NodeIndex) -> bool>>,
+    node_filter: Option<Box<dyn FnMut(NodeIndex) -> bool + 'f>>,
     /// A filter closure for the ports to visit. If the closure returns false,
     /// the port is skipped.
-    port_filter: Option<Box<dyn FnMut(NodeIndex, PortIndex) -> bool>>,
+    port_filter: Option<Box<dyn FnMut(NodeIndex, PortIndex) -> bool + 'f>>,
 }
 
-impl<Map, G> TopoSort<G, Map>
+impl<'f, Map, G> TopoSort<'f, G, Map>
 where
     Map: SecondaryMap<PortIndex, bool>,
     G: LinkView,
@@ -131,8 +131,8 @@ where
         graph: G,
         source: impl IntoIterator<Item = NodeIndex>,
         direction: Direction,
-        mut node_filter: Option<Box<dyn FnMut(NodeIndex) -> bool>>,
-        port_filter: Option<Box<dyn FnMut(NodeIndex, PortIndex) -> bool>>,
+        mut node_filter: Option<Box<dyn FnMut(NodeIndex) -> bool + 'f>>,
+        port_filter: Option<Box<dyn FnMut(NodeIndex, PortIndex) -> bool + 'f>>,
     ) -> Self {
         let mut visited_ports: Map = SecondaryMap::new();
 
@@ -179,11 +179,13 @@ where
     /// Checks if a node becomes ready once it is visited from `from_port`, i.e.
     /// it has been reached from all its linked ports.
     fn becomes_ready(&mut self, node: NodeIndex, from_port: impl Into<PortIndex>) -> bool {
+        let from_port = from_port.into();
         if self.ignore_node(node) {
             return false;
         }
-        self.graph.ports(node, self.direction.reverse()).all(|p| {
-            if p == from_port.into() {
+        let ports: Vec<_> = self.graph.ports(node, self.direction.reverse()).collect();
+        ports.into_iter().all(|p| {
+            if p == from_port {
                 // This port must have not been visited yet. Otherwise, the node
                 // would have been already been reported as ready and added to
                 // the candidate list.
@@ -219,7 +221,7 @@ where
     }
 }
 
-impl<Map, G> Iterator for TopoSort<G, Map>
+impl<'f, Map, G> Iterator for TopoSort<'f, G, Map>
 where
     Map: SecondaryMap<PortIndex, bool>,
     G: LinkView,
@@ -228,8 +230,9 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         let node = self.candidate_nodes.pop_front()?;
+        let ports = self.graph.ports(node, self.direction).collect::<Vec<_>>();
 
-        for port in self.graph.ports(node, self.direction) {
+        for port in ports {
             self.visited_ports.set(port, true);
 
             if self.ignore_port(node, port) {
@@ -259,14 +262,14 @@ where
     }
 }
 
-impl<Map, G> FusedIterator for TopoSort<G, Map>
+impl<'f, Map, G> FusedIterator for TopoSort<'f, G, Map>
 where
     Map: SecondaryMap<PortIndex, bool>,
     G: LinkView,
 {
 }
 
-impl<Map, G> Debug for TopoSort<G, Map>
+impl<'f, Map, G> Debug for TopoSort<'f, G, Map>
 where
     Map: Debug,
     G: Debug,

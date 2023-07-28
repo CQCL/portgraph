@@ -1,5 +1,20 @@
 # Release notes
 
+## Unreleased (2023-XX-XX)
+
+### Added
+
+- `algorithms::ConvexChecker` to check convexity property of subgraphs of `LinkView`s ([#97][])
+
+### Changed
+
+- References to `PortView`s and `LinkView`s also implement the traits ([#94][])
+- `Toposort` now works with any `LinkView` object ([#96][])
+
+  [#94]: https://github.com/CQCL/portgraph/issues/94
+  [#96]: https://github.com/CQCL/portgraph/issues/96
+  [#97]: https://github.com/CQCL/portgraph/issues/97
+
 ## v0.7.1 (2023-07-13)
 
 ### Fixed

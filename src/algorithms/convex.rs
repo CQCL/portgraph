@@ -31,9 +31,16 @@ where
 {
     /// Create a new ConvexChecker.
     pub fn new(graph: G) -> Self {
-        let inputs = graph.nodes_iter().filter(|&n| graph.num_inputs(n) == 0);
-        let topsort: TopoSort<_> = toposort(graph, inputs, Direction::Outgoing);
-        let topsort_nodes: Vec<_> = topsort.collect();
+        let mut topsort_nodes = Vec::with_capacity(graph.node_count());
+        while topsort_nodes.len() < graph.node_count() {
+            let inputs = graph.nodes_iter().filter(|&n| {
+                graph
+                    .neighbours(n, Direction::Incoming)
+                    .all(|n| topsort_nodes.contains(&n))
+            });
+            let topsort: TopoSort<_> = toposort(graph, inputs, Direction::Outgoing);
+            topsort_nodes.extend(topsort);
+        }
         let mut topsort_ind = UnmanagedDenseMap::with_capacity(graph.node_count());
         for (i, &n) in topsort_nodes.iter().enumerate() {
             topsort_ind.set(n, i);
@@ -265,5 +272,22 @@ mod tests {
             ],
             [g.output(n1, 0).unwrap(), g.output(n1, 1).unwrap()]
         ));
+    }
+
+    #[test]
+    fn dangling_input() {
+        let mut g = PortGraph::new();
+        let n = g.add_node(1, 1);
+        let mut checker = ConvexChecker::new(&g);
+        assert!(checker.is_node_convex([n]));
+    }
+
+    #[test]
+    fn disconnected_graph() {
+        let mut g = PortGraph::new();
+        let n = g.add_node(1, 1);
+        g.add_node(1, 1);
+        let mut checker = ConvexChecker::new(&g);
+        assert!(checker.is_node_convex([n]));
     }
 }

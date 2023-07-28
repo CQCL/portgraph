@@ -285,7 +285,7 @@ where
 mod test {
     use super::*;
 
-    use crate::{Direction, PortGraph, PortMut, LinkMut, PortView};
+    use crate::{Direction, LinkMut, PortGraph, PortMut, PortView};
 
     #[test]
     fn small_toposort() {

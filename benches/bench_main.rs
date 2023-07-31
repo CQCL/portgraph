@@ -7,4 +7,5 @@ criterion_main! {
     benchmarks::hierarchy::benches,
     benchmarks::portgraph::benches,
     benchmarks::toposort::benches,
+    benchmarks::convex::benches,
 }

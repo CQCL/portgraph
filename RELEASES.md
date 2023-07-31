@@ -1,6 +1,6 @@
 # Release notes
 
-## Unreleased (2023-XX-XX)
+## v0.7.2 (2023-07-31)
 
 ### Added
 

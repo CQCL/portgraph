@@ -60,8 +60,8 @@ impl<'a, G: LinkView> Subgraph<'a, G> {
     /// ### Arguments
     ///
     /// - `graph`: the graph to take a subgraph from,
-    /// - `boundary`: the boundary ports. Target ports are incoming boundary edges,
-    /// and source ports are outgoing boundary edges.
+    /// - `boundary`: the boundary ports. Incoming ports are incoming boundary edges,
+    /// and outgoing ports are outgoing boundary edges.
     ///
     /// This initialisation is linear in the size of the subgraph.
     pub fn new_subgraph(graph: &'a G, boundary: impl IntoIterator<Item = PortIndex>) -> Self {

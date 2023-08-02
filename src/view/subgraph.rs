@@ -46,6 +46,7 @@ type PortCallback = fn(PortIndex, &SubgraphContext) -> bool;
 pub type Subgraph<'g, G> = PortFiltered<'g, G, NodeCallback, PortCallback, SubgraphContext>;
 
 /// Internal context used in the [`Subgraph`] adaptor.
+#[derive(Debug, Clone)]
 pub struct SubgraphContext {
     nodes: HashMap<NodeIndex, bool>,
     ports: HashMap<PortIndex, bool>,

@@ -3,6 +3,7 @@
 pub mod filter;
 pub mod refs;
 pub mod region;
+pub mod subgraph;
 
 #[cfg(feature = "petgraph")]
 pub mod petgraph;

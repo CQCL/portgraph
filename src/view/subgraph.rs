@@ -1,10 +1,10 @@
 //! Views into non-hierarchical parts of `PortView`s.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 
 use crate::{algorithms::ConvexChecker, Direction, LinkView, NodeIndex, PortIndex, PortView};
 
-use super::filter::PortFiltered;
+use super::filter::FilteredGraph;
 
 type NodeCallback = fn(NodeIndex, &SubgraphContext) -> bool;
 type PortCallback = fn(PortIndex, &SubgraphContext) -> bool;
@@ -28,7 +28,7 @@ type PortCallback = fn(PortIndex, &SubgraphContext) -> bool;
 /// Then the subgraph is made of the interior edges and contains all nodes that
 /// are
 ///  - adjacent to an interior edge, or
-///  - in-adjacent to an incoming edge and out-adjacent to an outgoing edge.
+///  - are the target of an incoming boundary edge AND the source of an outgoing boundary edge.
 ///
 /// An intuitive way of looking at this definition is to imagine that the
 /// boundary edges form a wall around the subgraph, and the subgraph is given
@@ -43,13 +43,13 @@ type PortCallback = fn(PortIndex, &SubgraphContext) -> bool;
 ///
 /// At initialisation, this performs a one-off expensive computation (linear in
 /// the size of the subgraph) to determine the nodes that are in the subgraph.
-pub type Subgraph<'g, G> = PortFiltered<'g, G, NodeCallback, PortCallback, SubgraphContext>;
+pub type Subgraph<'g, G> = FilteredGraph<'g, G, NodeCallback, PortCallback, SubgraphContext>;
 
 /// Internal context used in the [`Subgraph`] adaptor.
 #[derive(Debug, Clone)]
 pub struct SubgraphContext {
-    nodes: HashMap<NodeIndex, bool>,
-    ports: HashMap<PortIndex, bool>,
+    nodes: BTreeSet<NodeIndex>,
+    ports: BTreeSet<PortIndex>,
     inputs: Vec<PortIndex>,
     outputs: Vec<PortIndex>,
 }
@@ -78,15 +78,15 @@ impl<'a, G: LinkView> Subgraph<'a, G> {
 
         let (nodes, ports) = traverse_subgraph(graph, boundary);
         let context = SubgraphContext {
-            nodes: nodes.into_iter().map(|n| (n, true)).collect(),
-            ports: ports.into_iter().map(|p| (p, true)).collect(),
+            nodes: nodes.into_iter().collect(),
+            ports: ports.into_iter().collect(),
             inputs,
             outputs,
         };
         Self::new(
             graph,
-            |n, ctx| ctx.nodes.contains_key(&n),
-            |p, ctx| ctx.ports.contains_key(&p),
+            |n, ctx| ctx.nodes.contains(&n),
+            |p, ctx| ctx.ports.contains(&p),
             context,
         )
     }

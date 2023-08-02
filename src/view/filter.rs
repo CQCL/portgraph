@@ -39,7 +39,7 @@ impl<'a, G, FN, FP, Ctx> PortFiltered<'a, G, FN, FP, Ctx> {
         &self.context
     }
 
-    pub(super) fn graph(&self) -> &G {
+    pub(super) fn graph(&self) -> &'a G {
         self.graph
     }
 }

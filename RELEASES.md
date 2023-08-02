@@ -6,7 +6,7 @@
 
 - `views::SubGraph` for views into non-hierarchical subgraphs ([#100][])
 
-  [#94]: https://github.com/CQCL/portgraph/issues/100
+  [#100]: https://github.com/CQCL/portgraph/issues/100
 
 ## v0.7.2 (2023-07-31)
 

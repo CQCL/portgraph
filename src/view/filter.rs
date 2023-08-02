@@ -10,7 +10,7 @@ pub type NodeFilter<Ctx> = fn(NodeIndex, &Ctx) -> bool;
 /// Port filter used by [`PortFiltered`].
 pub type PortFilter<Ctx> = fn(PortIndex, &Ctx) -> bool;
 
-/// A wrapper around a portgraph that filters out nodes.
+/// A wrapper around a portgraph that filters out nodes and ports.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PortFiltered<'a, G, FN, FP, Context = ()> {
     graph: &'a G,

@@ -23,7 +23,7 @@ impl<'a, G> Region<'a, G> {
     pub fn new_region(graph: &'a G, hierarchy: &'a Hierarchy, root: NodeIndex) -> Self {
         let region_filter: RegionCallback<'a> =
             |node, context| node == context.root() || context.is_descendant(node);
-        Self::new(graph, region_filter, RegionContext::new(hierarchy, root))
+        Self::new_node_filtered(graph, region_filter, RegionContext::new(hierarchy, root))
     }
 }
 
@@ -101,7 +101,7 @@ impl<'a, G> FlatRegion<'a, G> {
             let (hierarchy, root) = context;
             node == *root || hierarchy.parent(node) == Some(*root)
         };
-        Self::new(graph, region_filter, (hierarchy, root))
+        Self::new_node_filtered(graph, region_filter, (hierarchy, root))
     }
 }
 

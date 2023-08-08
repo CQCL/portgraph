@@ -3,6 +3,7 @@
 pub mod filter;
 pub mod refs;
 pub mod region;
+pub mod subgraph;
 
 #[cfg(feature = "petgraph")]
 pub mod petgraph;
@@ -13,6 +14,7 @@ use crate::{portgraph::PortOperation, Direction, LinkError, NodeIndex, PortIndex
 
 pub use filter::{NodeFilter, NodeFiltered};
 pub use region::{FlatRegion, Region};
+pub use subgraph::Subgraph;
 
 /// Core capabilities for querying a graph containing nodes and ports.
 pub trait PortView {

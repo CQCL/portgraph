@@ -7,7 +7,9 @@ use delegate::delegate;
 
 /// Node filter used by [`FilteredGraph`].
 pub type NodeFilter<Ctx> = fn(NodeIndex, &Ctx) -> bool;
-/// Port filter used by [`FilteredGraph`].
+/// Link filter used by [`FilteredGraph`].
+///
+/// Ports that don't match this predicate will appear disconnected.
 pub type LinkFilter<Ctx> = fn(PortIndex, &Ctx) -> bool;
 
 /// A wrapper around a [`PortView`] that filters out nodes and links.

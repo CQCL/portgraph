@@ -9,7 +9,7 @@
 
 ### Changed
 
-- `view::NodeFiltered` is now a specialized version of `views::NodeFiltered`.
+- `view::NodeFiltered` is now a specialized version of `view::FilteredGraph`.
   Its constructor has been renamed to `NodeFiltered::new_node_filtered`. ([#100][])
 
   [#100]: https://github.com/CQCL/portgraph/issues/100

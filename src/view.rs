@@ -12,7 +12,7 @@ use std::collections::HashMap;
 
 use crate::{portgraph::PortOperation, Direction, LinkError, NodeIndex, PortIndex, PortOffset};
 
-pub use filter::{NodeFilter, NodeFiltered};
+pub use filter::{FilteredGraph, LinkFilter, NodeFilter, NodeFiltered};
 pub use region::{FlatRegion, Region};
 pub use subgraph::Subgraph;
 

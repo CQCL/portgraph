@@ -1,10 +1,16 @@
 # Release notes
 
-## unreleased (2023-XX-XX)
+## v0.8.0 (2023-08-08)
 
 ### Added
 
-- `views::SubGraph` for views into non-hierarchical subgraphs ([#100][])
+- `view::FilteredGraph` for filtering both nodes and links of a graph ([#100][])
+- `view::SubGraph` for views into non-hierarchical subgraphs ([#100][])
+
+### Changed
+
+- `view::NodeFiltered` is now a specialized version of `view::FilteredGraph`.
+  Its constructor has been renamed to `NodeFiltered::new_node_filtered`. ([#100][])
 
   [#100]: https://github.com/CQCL/portgraph/issues/100
 

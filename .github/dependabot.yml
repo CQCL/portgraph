@@ -9,3 +9,6 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: "weekly"
+    commit-message:
+      # Use a conventional commit tag
+      prefix: "chore(deps)"

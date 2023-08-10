@@ -38,7 +38,7 @@ jobs:
 
   miri:
     # Not required, we can ignore it for the merge queue check.
-    if: github.event_name == 'pull_request_target'
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -54,7 +54,7 @@ jobs:
 
   benches:
     # Not required, we can ignore it for the merge queue check.
-    if: github.event_name == 'pull_request_target'
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -72,7 +72,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        rust: [1.70, stable, beta, nightly]
+        rust: ['1.70', stable, beta, nightly]
     steps:
       - uses: actions/checkout@v3
       - id: toolchain

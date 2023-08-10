@@ -72,7 +72,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        rust: [1.69, stable, beta, nightly]
+        rust: [1.70, stable, beta, nightly]
     steps:
       - uses: actions/checkout@v3
       - id: toolchain

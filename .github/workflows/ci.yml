@@ -7,6 +7,8 @@ on:
   pull_request:
     branches:
       - main
+  merge_group:
+    types: [checks_requested]
 
 env:
   CARGO_TERM_COLOR: always
@@ -35,6 +37,8 @@ jobs:
           RUSTDOCFLAGS: "-Dwarnings"
 
   miri:
+    # Not required, we can ignore it for the merge queue check.
+    if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -49,6 +53,8 @@ jobs:
         run: cargo miri test
 
   benches:
+    # Not required, we can ignore it for the merge queue check.
+    if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -66,15 +72,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        include:
-          #- rust: 1.69.0  # Update once MSRV != stable
-          - rust: stable
-            cache: true
-          - rust: beta
-            cache: true
-          - rust: nightly
-            cache: true
-
+        rust: [1.69, stable, beta, nightly]
     steps:
       - uses: actions/checkout@v3
       - id: toolchain
@@ -84,7 +82,6 @@ jobs:
       - name: Configure default rust toolchain
         run: rustup override set ${{steps.toolchain.outputs.name}}
       - uses: Swatinem/rust-cache@v2
-        if: ${{ matrix.cache }}
         with:
           prefix-key: v0-rust-${{ matrix.rust }}
       - name: Build with no features

@@ -38,7 +38,7 @@ jobs:
 
   miri:
     # Not required, we can ignore it for the merge queue check.
-    if: github.event_name == 'pull_request'
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -54,7 +54,7 @@ jobs:
 
   benches:
     # Not required, we can ignore it for the merge queue check.
-    if: github.event_name == 'pull_request'
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -73,6 +73,18 @@ jobs:
     strategy:
       matrix:
         rust: ['1.70', stable, beta, nightly]
+        # workaround to ignore non-stable tests when running the merge queue checks
+        # see: https://github.community/t/how-to-conditionally-include-exclude-items-in-matrix-eg-based-on-branch/16853/6
+        isMerge:
+            - ${{ github.event_name == 'merge_group' }}
+        exclude:
+          - rust: '1.70'
+            isMerge: true
+          - rust: beta
+            isMerge: true
+          - rust: nightly
+            isMerge: true
+    name: tests (Rust ${{ matrix.rust }})
     steps:
       - uses: actions/checkout@v3
       - id: toolchain

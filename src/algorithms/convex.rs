@@ -27,14 +27,14 @@ pub struct ConvexChecker<G> {
 
 impl<G> ConvexChecker<G>
 where
-    G: LinkView + Copy,
+    G: LinkView + Clone,
 {
     /// Create a new ConvexChecker.
     pub fn new(graph: G) -> Self {
         let inputs = graph
             .nodes_iter()
             .filter(|&n| graph.input_neighbours(n).count() == 0);
-        let topsort: TopoSort<_> = toposort(graph, inputs, Direction::Outgoing);
+        let topsort: TopoSort<_> = toposort(graph.clone(), inputs, Direction::Outgoing);
         let topsort_nodes: Vec<_> = topsort.collect();
         let mut topsort_ind = UnmanagedDenseMap::with_capacity(graph.node_count());
         for (i, &n) in topsort_nodes.iter().enumerate() {
@@ -51,7 +51,7 @@ where
 
     /// The graph on which convexity queries can be made.
     pub fn graph(&self) -> G {
-        self.graph
+        self.graph.clone()
     }
 
     /// Whether the subgraph induced by the node set is convex.

@@ -17,14 +17,14 @@ pub type LinkFilter<Ctx> = fn(PortIndex, &Ctx) -> bool;
 /// Both nodes and links can be filtered by providing the filter functions
 /// `node_filter` and `link_filter`.
 ///
-/// As ports always occopy a contiguous interval of indices, they cannot be
+/// As ports always occupy a contiguous interval of indices, they cannot be
 /// filtered out directly. Instead, when `link_filter` filters out a port it
 /// appears as disconnected, effectively remove the link between ports. A link
 /// is removed whenever either of its ports is filtered out.
 ///
 /// For the special case of filtering out nodes only, the type alias
 /// [`NodeFiltered`] is provided, along with [`NodeFiltered::new_node_filtered`].
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct FilteredGraph<'a, G, FN, FP, Context = ()> {
     graph: &'a G,
     node_filter: FN,
@@ -119,7 +119,7 @@ impl<G, Ctx> FilteredGraph<'_, G, NodeFilter<Ctx>, LinkFilter<Ctx>, Ctx> {
 /// Context used internally for the [`FilteredGraph`] iterators.
 ///
 /// This is a named struct to make the iterator signatures more readable.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct FilteredGraphCtx<'a, G, Ctx> {
     pub(self) graph: &'a G,
     pub(self) node_filter: NodeFilter<Ctx>,

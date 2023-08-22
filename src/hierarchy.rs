@@ -201,7 +201,7 @@ impl Hierarchy {
         }
 
         let Some(parent) = self.get(before).parent else {
-            return Err(AttachError::RootSibling{root: before});
+            return Err(AttachError::RootSibling { root: before });
         };
 
         if !self.cycle_check(node, parent) {
@@ -242,7 +242,7 @@ impl Hierarchy {
         }
 
         let Some(parent) = self.get(after).parent else {
-            return Err(AttachError::RootSibling{root: after});
+            return Err(AttachError::RootSibling { root: after });
         };
 
         if !self.cycle_check(node, parent) {

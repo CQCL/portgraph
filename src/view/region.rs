@@ -16,11 +16,14 @@ type RegionCallback<'g> = fn(NodeIndex, &RegionContext<'g>) -> bool;
 ///
 /// [`Region`] does not implement `Sync` as it uses a [`RefCell`] to cache the
 /// node filtering.
-pub type Region<'g, G> = NodeFiltered<'g, G, RegionCallback<'g>, RegionContext<'g>>;
+pub type Region<'g, G> = NodeFiltered<G, RegionCallback<'g>, RegionContext<'g>>;
 
-impl<'a, G> Region<'a, G> {
+impl<'a, G> Region<'a, G>
+where
+    G: Clone,
+{
     /// Create a new region view including all the descendants of the root node.
-    pub fn new_region(graph: &'a G, hierarchy: &'a Hierarchy, root: NodeIndex) -> Self {
+    pub fn new_region(graph: G, hierarchy: &'a Hierarchy, root: NodeIndex) -> Self {
         let region_filter: RegionCallback<'a> =
             |node, context| node == context.root() || context.is_descendant(node);
         Self::new_node_filtered(graph, region_filter, RegionContext::new(hierarchy, root))
@@ -92,11 +95,14 @@ type FlatRegionCallback<'g> = fn(NodeIndex, &FlatRegionContext<'g>) -> bool;
 /// View of a portgraph containing only a root node and its direct children in a [`Hierarchy`].
 ///
 /// For a view of all descendants, see [`Region`].
-pub type FlatRegion<'g, G> = NodeFiltered<'g, G, FlatRegionCallback<'g>, FlatRegionContext<'g>>;
+pub type FlatRegion<'g, G> = NodeFiltered<G, FlatRegionCallback<'g>, FlatRegionContext<'g>>;
 
-impl<'a, G> FlatRegion<'a, G> {
+impl<'a, G> FlatRegion<'a, G>
+where
+    G: Clone,
+{
     /// Create a new region view including all the descendants of the root node.
-    pub fn new_flat_region(graph: &'a G, hierarchy: &'a Hierarchy, root: NodeIndex) -> Self {
+    pub fn new_flat_region(graph: G, hierarchy: &'a Hierarchy, root: NodeIndex) -> Self {
         let region_filter: FlatRegionCallback<'a> = |node, context| {
             let (hierarchy, root) = context;
             node == *root || hierarchy.parent(node) == Some(*root)

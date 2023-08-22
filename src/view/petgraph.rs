@@ -258,17 +258,17 @@ macro_rules! impl_visit_sparse {
 
 impl_petgraph_traits!(PortGraph);
 impl_petgraph_traits!(MultiPortGraph);
-impl_petgraph_traits!(NodeFiltered<'a, G, NodeFilter<Ctx>, Ctx>, ['a, G, Ctx]
+impl_petgraph_traits!(NodeFiltered<G, NodeFilter<Ctx>, Ctx>, ['a, G, Ctx]
     where
-        G: LinkView,
+        G: LinkView + Clone,
         <G as LinkView>::LinkEndpoint: Eq
 );
 
 impl_visit_dense!(PortGraph);
 impl_visit_dense!(MultiPortGraph);
-impl_visit_sparse!(NodeFiltered<'a, G, NodeFilter<Ctx>, Ctx>, ['a, G, Ctx]
+impl_visit_sparse!(NodeFiltered<G, NodeFilter<Ctx>, Ctx>, ['a, G, Ctx]
     where
-        G: LinkView,
+        G: LinkView + Clone,
         <G as LinkView>::LinkEndpoint: Eq
 );
 

@@ -478,7 +478,7 @@ impl MultiPortGraph {
         port: PortIndex,
     ) -> Result<(SubportIndex, PortIndex), LinkError> {
         let Some(dir) = self.graph.port_direction(port) else {
-            return Err(LinkError::UnknownPort{port});
+            return Err(LinkError::UnknownPort { port });
         };
         let multiport = *self.multiport.get(port.index());
         let link = self.graph.port_link(port);

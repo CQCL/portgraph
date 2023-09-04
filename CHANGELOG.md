@@ -4,8 +4,8 @@
 
 ### Features
 
-- Require Clone instead of Copy in ConvexChecker, add `Copy` to filters ([#104](https://github.com/orhun/git-cliff/issues/104))
-- Allow non-references in the portgraph wrappers ([#105](https://github.com/orhun/git-cliff/issues/105))
+- Require Clone instead of Copy in ConvexChecker, add `Copy` to filters ([#104](https://github.com/CQCL/portgraph/issues/104))
+- Allow non-references in the portgraph wrappers ([#105](https://github.com/CQCL/portgraph/issues/105))
 
 ## v0.8.0 (2023-08-08)
 

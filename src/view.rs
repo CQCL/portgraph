@@ -569,7 +569,7 @@ pub trait LinkMut: LinkView + PortMut {
             for (from, to) in other.all_links(old) {
                 // If the other node has already been inserted, we can link
                 let Some(&other_node) = rekeys.get(&other.port_node(to).unwrap()) else {
-                    continue
+                    continue;
                 };
                 self.link_offsets(
                     new,

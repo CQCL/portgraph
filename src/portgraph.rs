@@ -389,7 +389,9 @@ impl PortView for PortGraph {
     }
 
     fn num_ports(&self, node: NodeIndex, direction: Direction) -> usize {
-        let Some(node_meta) = self.node_meta_valid(node) else {return 0;};
+        let Some(node_meta) = self.node_meta_valid(node) else {
+            return 0;
+        };
         if Direction::Incoming == direction {
             node_meta.incoming() as usize
         } else {
@@ -558,7 +560,9 @@ impl PortMut for PortGraph {
 
         let new_total = incoming + outgoing;
 
-        let Some(node_meta) = self.node_meta_valid(node) else {return;};
+        let Some(node_meta) = self.node_meta_valid(node) else {
+            return;
+        };
         let old_incoming = node_meta.incoming() as usize;
         let old_outgoing = node_meta.outgoing() as usize;
         let old_capacity = node_meta.capacity();
@@ -648,7 +652,9 @@ impl PortMut for PortGraph {
         self.node_meta.swap(a.index(), b.index());
         // Update the node indices in the ports metadata.
         let mut update_ports = |new_node: NodeIndex, entry: NodeEntry| {
-            let NodeEntry::Node(node_meta) = entry else {return;};
+            let NodeEntry::Node(node_meta) = entry else {
+                return;
+            };
             for dir in Direction::BOTH {
                 for port in node_meta.ports(dir) {
                     self.port_meta[port] = PortEntry::Port(PortMeta::new(new_node, dir));
@@ -822,11 +828,11 @@ impl LinkMut for PortGraph {
         port_b: PortIndex,
     ) -> Result<(Self::LinkEndpoint, Self::LinkEndpoint), LinkError> {
         let Some(meta_a) = self.port_meta_valid(port_a) else {
-            return Err(LinkError::UnknownPort{port: port_a});
+            return Err(LinkError::UnknownPort { port: port_a });
         };
 
         let Some(meta_b) = self.port_meta_valid(port_b) else {
-            return Err(LinkError::UnknownPort{port: port_a});
+            return Err(LinkError::UnknownPort { port: port_a });
         };
 
         if meta_a.direction() == meta_b.direction() {

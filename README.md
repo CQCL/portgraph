@@ -19,7 +19,7 @@ Please read the [API documentation here][].
 
 ## Recent Changes
 
-See [RELEASES][] for a list of changes. The minimum supported rust
+See [CHANGELOG][] for a list of changes. The minimum supported rust
 version will only change on major releases.
 
 ## License
@@ -31,4 +31,4 @@ This project is licensed under Apache License, Version 2.0 ([LICENSE][] or http:
   [crates]: https://img.shields.io/crates/v/portgraph
   [LICENSE]: LICENCE
   [msrv]: https://img.shields.io/badge/rust-1.70.0%2B-blue.svg?maxAge=3600
-  [RELEASES]: RELEASES.rst
+  [CHANGELOG]: CHANGELOG.md

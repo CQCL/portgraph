@@ -1,12 +1,11 @@
 # Release notes
 
-## Unreleased (2023-XX-XX)
+## v0.9.0 (2023-09-05)
 
-### Changed
+### Features
 
-- `algorithms::ConvexChecker` now requires `Clone` instead of `Copy` ([#104][])
-
-  [#104]: https://github.com/CQCL/portgraph/issues/104
+- Require Clone instead of Copy in ConvexChecker, add `Copy` to filters ([#104](https://github.com/CQCL/portgraph/issues/104))
+- Allow non-references in the portgraph wrappers ([#105](https://github.com/CQCL/portgraph/issues/105))
 
 ## v0.8.0 (2023-08-08)
 

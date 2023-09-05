@@ -25,20 +25,22 @@ pub type LinkFilter<Ctx> = fn(PortIndex, &Ctx) -> bool;
 /// For the special case of filtering out nodes only, the type alias
 /// [`NodeFiltered`] is provided, along with [`NodeFiltered::new_node_filtered`].
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub struct FilteredGraph<'a, G, FN, FP, Context = ()> {
-    graph: &'a G,
+pub struct FilteredGraph<G, FN, FP, Context = ()> {
+    graph: G,
     node_filter: FN,
     link_filter: FP,
     context: Context,
 }
 
 /// A wrapper around a portgraph that filters out nodes.
-pub type NodeFiltered<'a, G, FN, Context = ()> =
-    FilteredGraph<'a, G, FN, LinkFilter<Context>, Context>;
+pub type NodeFiltered<G, FN, Context = ()> = FilteredGraph<G, FN, LinkFilter<Context>, Context>;
 
-impl<'a, G, FN, FP, Ctx> FilteredGraph<'a, G, FN, FP, Ctx> {
+impl<G, FN, FP, Ctx> FilteredGraph<G, FN, FP, Ctx>
+where
+    G: Clone,
+{
     /// Create a new node filtered portgraph.
-    pub fn new(graph: &'a G, node_filter: FN, link_filter: FP, context: Ctx) -> Self {
+    pub fn new(graph: G, node_filter: FN, link_filter: FP, context: Ctx) -> Self {
         Self {
             graph,
             node_filter,
@@ -52,20 +54,26 @@ impl<'a, G, FN, FP, Ctx> FilteredGraph<'a, G, FN, FP, Ctx> {
         &self.context
     }
 
-    pub(super) fn graph(&self) -> &'a G {
-        self.graph
+    pub(super) fn graph(&self) -> G {
+        self.graph.clone()
     }
 }
 
-impl<'a, G, F, Ctx> NodeFiltered<'a, G, F, Ctx> {
+impl<G, F, Ctx> NodeFiltered<G, F, Ctx>
+where
+    G: Clone,
+{
     /// Create a new node filtered portgraph.
-    pub fn new_node_filtered(graph: &'a G, node_filter: F, context: Ctx) -> Self {
+    pub fn new_node_filtered(graph: G, node_filter: F, context: Ctx) -> Self {
         Self::new(graph, node_filter, |_, _| true, context)
     }
 }
 
 /// Filter functions used on the items of the [`FilteredGraph`] iterators.
-impl<G, Ctx> FilteredGraph<'_, G, NodeFilter<Ctx>, LinkFilter<Ctx>, Ctx> {
+impl<G, Ctx> FilteredGraph<G, NodeFilter<Ctx>, LinkFilter<Ctx>, Ctx>
+where
+    G: Clone,
+{
     /// Node filter used for the iterators
     fn node_filter(node: &NodeIndex, ctx: &FilteredGraphCtx<G, Ctx>) -> bool
     where
@@ -103,12 +111,12 @@ impl<G, Ctx> FilteredGraph<'_, G, NodeFilter<Ctx>, LinkFilter<Ctx>, Ctx> {
     }
 
     /// The full context used for the iterators
-    fn as_context(&self) -> FilteredGraphCtx<G, Ctx>
+    fn as_context(&self) -> FilteredGraphCtx<'_, G, Ctx>
     where
         G: PortView,
     {
         FilteredGraphCtx::new(
-            self.graph,
+            self.graph.clone(),
             self.node_filter,
             self.link_filter,
             &self.context,
@@ -121,7 +129,7 @@ impl<G, Ctx> FilteredGraph<'_, G, NodeFilter<Ctx>, LinkFilter<Ctx>, Ctx> {
 /// This is a named struct to make the iterator signatures more readable.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct FilteredGraphCtx<'a, G, Ctx> {
-    pub(self) graph: &'a G,
+    pub(self) graph: G,
     pub(self) node_filter: NodeFilter<Ctx>,
     pub(self) link_filter: LinkFilter<Ctx>,
     pub(self) context: &'a Ctx,
@@ -130,7 +138,7 @@ pub struct FilteredGraphCtx<'a, G, Ctx> {
 impl<'a, G, Ctx> FilteredGraphCtx<'a, G, Ctx> {
     /// Create a new context.
     pub(self) fn new(
-        graph: &'a G,
+        graph: G,
         node_filter: NodeFilter<Ctx>,
         link_filter: LinkFilter<Ctx>,
         context: &'a Ctx,
@@ -149,9 +157,9 @@ pub type FilteredGraphIter<'a, G, Ctx, I> = FilterWithCtx<I, FilteredGraphCtx<'a
 /// Filtered + mapped iterator wrapper used by [`FilteredGraph`].
 pub type MapFilteredGraphIter<'a, G, Ctx, I, O> = MapWithCtx<I, FilteredGraphCtx<'a, G, Ctx>, O>;
 
-impl<G, Ctx> PortView for FilteredGraph<'_, G, NodeFilter<Ctx>, LinkFilter<Ctx>, Ctx>
+impl<G, Ctx> PortView for FilteredGraph<G, NodeFilter<Ctx>, LinkFilter<Ctx>, Ctx>
 where
-    G: PortView,
+    G: PortView + Clone,
 {
     type Nodes<'a> = FilteredGraphIter<'a, G, Ctx, <G as PortView>::Nodes<'a>>
     where
@@ -235,9 +243,9 @@ where
     }
 }
 
-impl<G, Ctx> LinkView for FilteredGraph<'_, G, NodeFilter<Ctx>, LinkFilter<Ctx>, Ctx>
+impl<G, Ctx> LinkView for FilteredGraph<G, NodeFilter<Ctx>, LinkFilter<Ctx>, Ctx>
 where
-    G: LinkView,
+    G: LinkView + Clone,
 {
     type LinkEndpoint = G::LinkEndpoint;
 
@@ -304,9 +312,9 @@ where
     }
 }
 
-impl<G, Ctx> MultiView for FilteredGraph<'_, G, NodeFilter<Ctx>, LinkFilter<Ctx>, Ctx>
+impl<G, Ctx> MultiView for FilteredGraph<G, NodeFilter<Ctx>, LinkFilter<Ctx>, Ctx>
 where
-    G: MultiView,
+    G: MultiView + Clone,
 {
     type NodeSubports<'a> = FilteredGraphIter<'a, G, Ctx, <G as MultiView>::NodeSubports<'a>>
     where

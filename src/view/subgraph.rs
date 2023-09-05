@@ -43,7 +43,7 @@ type PortCallback = fn(PortIndex, &SubgraphContext) -> bool;
 ///
 /// At initialisation, this performs a one-off expensive computation (linear in
 /// the size of the subgraph) to determine the nodes that are in the subgraph.
-pub type Subgraph<'g, G> = FilteredGraph<'g, G, NodeCallback, PortCallback, SubgraphContext>;
+pub type Subgraph<G> = FilteredGraph<G, NodeCallback, PortCallback, SubgraphContext>;
 
 /// Internal context used in the [`Subgraph`] adaptor.
 #[derive(Debug, Clone)]
@@ -54,7 +54,10 @@ pub struct SubgraphContext {
     outputs: Vec<PortIndex>,
 }
 
-impl<'a, G: LinkView> Subgraph<'a, G> {
+impl<G: LinkView> Subgraph<G>
+where
+    G: Clone,
+{
     /// Create a new subgraph view of `graph`.
     ///
     /// ### Arguments
@@ -64,7 +67,7 @@ impl<'a, G: LinkView> Subgraph<'a, G> {
     /// and outgoing ports are outgoing boundary edges.
     ///
     /// This initialisation is linear in the size of the subgraph.
-    pub fn new_subgraph(graph: &'a G, boundary: impl IntoIterator<Item = PortIndex>) -> Self {
+    pub fn new_subgraph(graph: G, boundary: impl IntoIterator<Item = PortIndex>) -> Self {
         let mut inputs = Vec::new();
         let mut outputs = Vec::new();
 
@@ -76,7 +79,7 @@ impl<'a, G: LinkView> Subgraph<'a, G> {
             p
         });
 
-        let (nodes, ports) = traverse_subgraph(graph, boundary);
+        let (nodes, ports) = traverse_subgraph(graph.clone(), boundary);
         let context = SubgraphContext {
             nodes: nodes.into_iter().collect(),
             ports: ports.into_iter().collect(),
@@ -98,7 +101,7 @@ impl<'a, G: LinkView> Subgraph<'a, G> {
     }
 
     /// Whether the subgraph is convex, using a pre-existing checker.
-    pub fn is_convex_with_checker(&self, checker: &mut ConvexChecker<&G>) -> bool {
+    pub fn is_convex_with_checker(&self, checker: &mut ConvexChecker<G>) -> bool {
         checker.is_convex(
             self.nodes_iter(),
             self.context().inputs.iter().copied(),
@@ -112,7 +115,7 @@ impl<'a, G: LinkView> Subgraph<'a, G> {
 /// Start just inside the boundaries and follow each edge that is not itself
 /// a boundary.
 fn traverse_subgraph<G: LinkView>(
-    graph: &G,
+    graph: G,
     boundary: impl IntoIterator<Item = PortIndex>,
 ) -> (BTreeSet<NodeIndex>, BTreeSet<PortIndex>) {
     // Nodes within subgraph

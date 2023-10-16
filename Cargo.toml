@@ -21,7 +21,7 @@ path = "src/lib.rs"
 
 [dependencies]
 thiserror = "1.0.28"
-pyo3 = { version = "0.19", optional = true, features = [
+pyo3 = { version = "0.20", optional = true, features = [
     "multiple-pymethods",
 ] }
 bitvec = "1.0.1"

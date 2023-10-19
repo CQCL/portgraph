@@ -6,9 +6,6 @@
 
 use std::collections::BTreeSet;
 
-use bitvec::bitvec;
-use bitvec::vec::BitVec;
-
 use crate::algorithms::toposort;
 use crate::{Direction, LinkView, NodeIndex, PortIndex, SecondaryMap, UnmanagedDenseMap};
 
@@ -21,8 +18,6 @@ pub struct ConvexChecker<G> {
     topsort_nodes: Vec<NodeIndex>,
     // The index of a node in the topological order (the inverse of topsort_nodes)
     topsort_ind: UnmanagedDenseMap<NodeIndex, usize>,
-    // A temporary data structure used during `is_convex`
-    causal: CausalVec,
 }
 
 impl<G> ConvexChecker<G>
@@ -40,12 +35,10 @@ where
         for (i, &n) in topsort_nodes.iter().enumerate() {
             topsort_ind.set(n, i);
         }
-        let causal = CausalVec::new(topsort_nodes.len());
         Self {
             graph,
             topsort_nodes,
             topsort_ind,
-            causal,
         }
     }
 
@@ -78,31 +71,53 @@ where
     /// in some topological order. In the worst case this will traverse every
     /// node in the graph and can be improved on in the future.
     pub fn is_node_convex(&mut self, nodes: impl IntoIterator<Item = NodeIndex>) -> bool {
+        // The nodes in the subgraph, in topological order.
         let nodes: BTreeSet<_> = nodes.into_iter().map(|n| self.topsort_ind[n]).collect();
+        if nodes.is_empty() {
+            return true;
+        }
+
+        // The range of considered nodes, as positions in the toposorted vector.
+        // Since the nodes are ordered, any node outside of this range will
+        // necessarily be outside the convex hull.
         let min_ind = *nodes.first().unwrap();
         let max_ind = *nodes.last().unwrap();
-        for ind in min_ind..=max_ind {
-            let n = self.topsort_nodes[ind];
-            let mut in_inds = {
-                let in_neighs = self.graph.input_neighbours(n);
-                in_neighs
+        let node_range = min_ind..=max_ind;
+
+        let mut node_iter = nodes.iter().copied().peekable();
+
+        // Nodes in the causal future of `nodes` (inside `node_range`).
+        let mut other_nodes = BTreeSet::new();
+
+        loop {
+            if node_iter.peek().is_none() {
+                break;
+            }
+            if other_nodes.is_empty() || node_iter.peek() < other_nodes.first() {
+                let current = node_iter.next().unwrap();
+                let current_node = self.topsort_nodes[current];
+                for neighbour in self.graph.output_neighbours(current_node)
                     .map(|n| self.topsort_ind[n])
-                    .filter(|&ind| ind >= min_ind)
-            };
-            if nodes.contains(&ind) {
-                if in_inds.any(|ind| self.causal.get(ind) == Causal::Future) {
-                    // There is a node in the past that is also in the future!
-                    return false;
-                }
-                self.causal.set(ind, Causal::Past);
-            } else {
-                let ind_causal = match in_inds
-                    .any(|ind| nodes.contains(&ind) || self.causal.get(ind) == Causal::Future)
+                    .filter(|ind| node_range.contains(ind))
                 {
-                    true => Causal::Future,
-                    false => Causal::Past,
-                };
-                self.causal.set(ind, ind_causal);
+                    if !nodes.contains(&neighbour) {
+                        other_nodes.insert(neighbour);
+                    }
+                }
+            } else {
+                let current = other_nodes.pop_first().unwrap();
+                let current_node = self.topsort_nodes[current];
+                for neighbour in self.graph.output_neighbours(current_node)
+                    .map(|n| self.topsort_ind[n])
+                    .filter(|ind| node_range.contains(ind))
+                {
+                    if nodes.contains(&neighbour) {
+                        // A non-subgraph node in the causal future of the subgraph has an output neighbour in the subgraph.
+                        return false;
+                    } else {
+                        other_nodes.insert(neighbour);
+                    }
+                }
             }
         }
         true
@@ -145,49 +160,6 @@ where
             return false;
         }
         self.is_node_convex(nodes)
-    }
-}
-
-/// Whether a node is in the past or in the future of a subgraph.
-#[derive(Default, Clone, Debug, PartialEq, Eq)]
-enum Causal {
-    #[default]
-    Past,
-    Future,
-}
-
-/// A memory-efficient substitute for `Vec<Causal>`.
-struct CausalVec(BitVec);
-
-impl From<bool> for Causal {
-    fn from(b: bool) -> Self {
-        match b {
-            true => Self::Future,
-            false => Self::Past,
-        }
-    }
-}
-
-impl From<Causal> for bool {
-    fn from(c: Causal) -> Self {
-        match c {
-            Causal::Past => false,
-            Causal::Future => true,
-        }
-    }
-}
-
-impl CausalVec {
-    fn new(len: usize) -> Self {
-        Self(bitvec![0; len])
-    }
-
-    fn set(&mut self, index: usize, causal: Causal) {
-        self.0.set(index, causal.into());
-    }
-
-    fn get(&self, index: usize) -> Causal {
-        self.0[index].into()
     }
 }
 

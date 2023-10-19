@@ -70,7 +70,7 @@ where
     /// that are in the interval between the first and last node of the subgraph
     /// in some topological order. In the worst case this will traverse every
     /// node in the graph and can be improved on in the future.
-    pub fn is_node_convex(&mut self, nodes: impl IntoIterator<Item = NodeIndex>) -> bool {
+    pub fn is_node_convex(&self, nodes: impl IntoIterator<Item = NodeIndex>) -> bool {
         // The nodes in the subgraph, in topological order.
         let nodes: BTreeSet<_> = nodes.into_iter().map(|n| self.topsort_ind[n]).collect();
         if nodes.is_empty() {
@@ -96,7 +96,9 @@ where
             if other_nodes.is_empty() || node_iter.peek() < other_nodes.first() {
                 let current = node_iter.next().unwrap();
                 let current_node = self.topsort_nodes[current];
-                for neighbour in self.graph.output_neighbours(current_node)
+                for neighbour in self
+                    .graph
+                    .output_neighbours(current_node)
                     .map(|n| self.topsort_ind[n])
                     .filter(|ind| node_range.contains(ind))
                 {
@@ -107,7 +109,9 @@ where
             } else {
                 let current = other_nodes.pop_first().unwrap();
                 let current_node = self.topsort_nodes[current];
-                for neighbour in self.graph.output_neighbours(current_node)
+                for neighbour in self
+                    .graph
+                    .output_neighbours(current_node)
                     .map(|n| self.topsort_ind[n])
                     .filter(|ind| node_range.contains(ind))
                 {
@@ -147,7 +151,7 @@ where
     /// Any edge between two nodes of the subgraph that does not have an explicit
     /// input or output port is considered within the subgraph.
     pub fn is_convex(
-        &mut self,
+        &self,
         nodes: impl IntoIterator<Item = NodeIndex>,
         inputs: impl IntoIterator<Item = PortIndex>,
         outputs: impl IntoIterator<Item = PortIndex>,
@@ -197,7 +201,7 @@ mod tests {
     #[test]
     fn induced_convexity_test() {
         let (g, [i1, i2, i3, n1, n2, o1, o2]) = graph();
-        let mut checker = ConvexChecker::new(&g);
+        let checker = ConvexChecker::new(&g);
 
         assert!(checker.is_node_convex([i1, i2, i3]));
         assert!(checker.is_node_convex([i1, n2]));
@@ -212,7 +216,7 @@ mod tests {
     #[test]
     fn edge_convexity_test() {
         let (g, [i1, i2, _, n1, n2, _, o2]) = graph();
-        let mut checker = ConvexChecker::new(&g);
+        let checker = ConvexChecker::new(&g);
 
         assert!(checker.is_convex(
             [i1, n2],
@@ -245,7 +249,7 @@ mod tests {
     fn dangling_input() {
         let mut g = PortGraph::new();
         let n = g.add_node(1, 1);
-        let mut checker = ConvexChecker::new(&g);
+        let checker = ConvexChecker::new(&g);
         assert!(checker.is_node_convex([n]));
     }
 
@@ -254,7 +258,7 @@ mod tests {
         let mut g = PortGraph::new();
         let n = g.add_node(1, 1);
         g.add_node(1, 1);
-        let mut checker = ConvexChecker::new(&g);
+        let checker = ConvexChecker::new(&g);
         assert!(checker.is_node_convex([n]));
     }
 }

@@ -29,7 +29,7 @@ fn bench_convex_full(c: &mut Criterion) {
 
     for size in [100, 1_000, 10_000] {
         let graph = make_two_track_dag(size);
-        let mut checker = ConvexChecker::new(&graph);
+        let checker = ConvexChecker::new(&graph);
         g.bench_with_input(
             BenchmarkId::new("check_convexity_full", size),
             &size,
@@ -47,7 +47,7 @@ fn bench_convex_sparse(c: &mut Criterion) {
     for size in [100usize, 1_000, 5_000] {
         let graph_size = size.pow(2);
         let graph = make_two_track_dag(graph_size);
-        let mut checker = ConvexChecker::new(&graph);
+        let checker = ConvexChecker::new(&graph);
         let nodes = graph.nodes_iter().step_by(graph_size / size).collect_vec();
         g.bench_with_input(
             BenchmarkId::new("check_convexity_sparse", size),

@@ -14,14 +14,14 @@ use crate::{Direction, LinkView, NodeIndex, PortIndex, SecondaryMap, UnmanagedDe
 
 use super::TopoSort;
 
-/// A pre-computed datastructure for fast convexity checking.
+/// A pre-computed data structure for fast convexity checking.
 pub struct ConvexChecker<G> {
     graph: G,
     // The nodes in topological order
     topsort_nodes: Vec<NodeIndex>,
     // The index of a node in the topological order (the inverse of topsort_nodes)
     topsort_ind: UnmanagedDenseMap<NodeIndex, usize>,
-    // A temporary datastructure used during `is_convex`
+    // A temporary data structure used during `is_convex`
     causal: CausalVec,
 }
 
@@ -60,7 +60,7 @@ where
     /// past and in the future of another node of the subgraph.
     ///
     /// This function requires mutable access to `self` because it uses a
-    /// temporary datastructure within the object.
+    /// temporary data structure within the object.
     ///
     /// ## Arguments
     ///
@@ -111,7 +111,7 @@ where
     /// Whether a subgraph is convex.
     ///
     /// A subgraph is convex if there is no path between two nodes of the
-    /// sugraph that has an edge outside of the subgraph.
+    /// subgraph that has an edge outside of the subgraph.
     ///
     /// Equivalently, we check the following two conditions:
     ///  - There is no node that is both in the past and in the future of
@@ -119,7 +119,7 @@ where
     ///  - There is no edge from an output port to an input port.
     ///
     /// This function requires mutable access to `self` because it uses a
-    /// temporary datastructure within the object.
+    /// temporary data structure within the object.
     ///
     /// ## Arguments
     ///

@@ -1,4 +1,18 @@
-# Release notes
+# Changelog
+
+## 0.10.0 (2023-10-20)
+
+### Features
+
+- Simpler convex checker, no longer requires `&mut` ([#114](https://github.com/CQCL/portgraph/pull/114))
+
+### Miscellaneous Tasks
+
+- [**breaking**] Update pyo3 requirement from 0.19 to 0.20 ([#110](https://github.com/CQCL/portgraph/pull/110))
+
+### Doc
+
+- Add DEVELOPMENT.md
 
 ## v0.9.0 (2023-09-05)
 

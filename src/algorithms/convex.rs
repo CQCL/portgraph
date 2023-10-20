@@ -6,23 +6,18 @@
 
 use std::collections::BTreeSet;
 
-use bitvec::bitvec;
-use bitvec::vec::BitVec;
-
 use crate::algorithms::toposort;
 use crate::{Direction, LinkView, NodeIndex, PortIndex, SecondaryMap, UnmanagedDenseMap};
 
 use super::TopoSort;
 
-/// A pre-computed datastructure for fast convexity checking.
+/// A pre-computed data structure for fast convexity checking.
 pub struct ConvexChecker<G> {
     graph: G,
     // The nodes in topological order
     topsort_nodes: Vec<NodeIndex>,
     // The index of a node in the topological order (the inverse of topsort_nodes)
     topsort_ind: UnmanagedDenseMap<NodeIndex, usize>,
-    // A temporary datastructure used during `is_convex`
-    causal: CausalVec,
 }
 
 impl<G> ConvexChecker<G>
@@ -40,12 +35,10 @@ where
         for (i, &n) in topsort_nodes.iter().enumerate() {
             topsort_ind.set(n, i);
         }
-        let causal = CausalVec::new(topsort_nodes.len());
         Self {
             graph,
             topsort_nodes,
             topsort_ind,
-            causal,
         }
     }
 
@@ -60,7 +53,7 @@ where
     /// past and in the future of another node of the subgraph.
     ///
     /// This function requires mutable access to `self` because it uses a
-    /// temporary datastructure within the object.
+    /// temporary data structure within the object.
     ///
     /// ## Arguments
     ///
@@ -77,32 +70,58 @@ where
     /// that are in the interval between the first and last node of the subgraph
     /// in some topological order. In the worst case this will traverse every
     /// node in the graph and can be improved on in the future.
-    pub fn is_node_convex(&mut self, nodes: impl IntoIterator<Item = NodeIndex>) -> bool {
+    pub fn is_node_convex(&self, nodes: impl IntoIterator<Item = NodeIndex>) -> bool {
+        // The nodes in the subgraph, in topological order.
         let nodes: BTreeSet<_> = nodes.into_iter().map(|n| self.topsort_ind[n]).collect();
+        if nodes.is_empty() {
+            return true;
+        }
+
+        // The range of considered nodes, as positions in the toposorted vector.
+        // Since the nodes are ordered, any node outside of this range will
+        // necessarily be outside the convex hull.
         let min_ind = *nodes.first().unwrap();
         let max_ind = *nodes.last().unwrap();
-        for ind in min_ind..=max_ind {
-            let n = self.topsort_nodes[ind];
-            let mut in_inds = {
-                let in_neighs = self.graph.input_neighbours(n);
-                in_neighs
+        let node_range = min_ind..=max_ind;
+
+        let mut node_iter = nodes.iter().copied().peekable();
+
+        // Nodes in the causal future of `nodes` (inside `node_range`).
+        let mut other_nodes = BTreeSet::new();
+
+        loop {
+            if node_iter.peek().is_none() {
+                break;
+            }
+            if other_nodes.is_empty() || node_iter.peek() < other_nodes.first() {
+                let current = node_iter.next().unwrap();
+                let current_node = self.topsort_nodes[current];
+                for neighbour in self
+                    .graph
+                    .output_neighbours(current_node)
                     .map(|n| self.topsort_ind[n])
-                    .filter(|&ind| ind >= min_ind)
-            };
-            if nodes.contains(&ind) {
-                if in_inds.any(|ind| self.causal.get(ind) == Causal::Future) {
-                    // There is a node in the past that is also in the future!
-                    return false;
-                }
-                self.causal.set(ind, Causal::Past);
-            } else {
-                let ind_causal = match in_inds
-                    .any(|ind| nodes.contains(&ind) || self.causal.get(ind) == Causal::Future)
+                    .filter(|ind| node_range.contains(ind))
                 {
-                    true => Causal::Future,
-                    false => Causal::Past,
-                };
-                self.causal.set(ind, ind_causal);
+                    if !nodes.contains(&neighbour) {
+                        other_nodes.insert(neighbour);
+                    }
+                }
+            } else {
+                let current = other_nodes.pop_first().unwrap();
+                let current_node = self.topsort_nodes[current];
+                for neighbour in self
+                    .graph
+                    .output_neighbours(current_node)
+                    .map(|n| self.topsort_ind[n])
+                    .filter(|ind| node_range.contains(ind))
+                {
+                    if nodes.contains(&neighbour) {
+                        // A non-subgraph node in the causal future of the subgraph has an output neighbour in the subgraph.
+                        return false;
+                    } else {
+                        other_nodes.insert(neighbour);
+                    }
+                }
             }
         }
         true
@@ -111,7 +130,7 @@ where
     /// Whether a subgraph is convex.
     ///
     /// A subgraph is convex if there is no path between two nodes of the
-    /// sugraph that has an edge outside of the subgraph.
+    /// subgraph that has an edge outside of the subgraph.
     ///
     /// Equivalently, we check the following two conditions:
     ///  - There is no node that is both in the past and in the future of
@@ -119,7 +138,7 @@ where
     ///  - There is no edge from an output port to an input port.
     ///
     /// This function requires mutable access to `self` because it uses a
-    /// temporary datastructure within the object.
+    /// temporary data structure within the object.
     ///
     /// ## Arguments
     ///
@@ -132,7 +151,7 @@ where
     /// Any edge between two nodes of the subgraph that does not have an explicit
     /// input or output port is considered within the subgraph.
     pub fn is_convex(
-        &mut self,
+        &self,
         nodes: impl IntoIterator<Item = NodeIndex>,
         inputs: impl IntoIterator<Item = PortIndex>,
         outputs: impl IntoIterator<Item = PortIndex>,
@@ -145,49 +164,6 @@ where
             return false;
         }
         self.is_node_convex(nodes)
-    }
-}
-
-/// Whether a node is in the past or in the future of a subgraph.
-#[derive(Default, Clone, Debug, PartialEq, Eq)]
-enum Causal {
-    #[default]
-    Past,
-    Future,
-}
-
-/// A memory-efficient substitute for `Vec<Causal>`.
-struct CausalVec(BitVec);
-
-impl From<bool> for Causal {
-    fn from(b: bool) -> Self {
-        match b {
-            true => Self::Future,
-            false => Self::Past,
-        }
-    }
-}
-
-impl From<Causal> for bool {
-    fn from(c: Causal) -> Self {
-        match c {
-            Causal::Past => false,
-            Causal::Future => true,
-        }
-    }
-}
-
-impl CausalVec {
-    fn new(len: usize) -> Self {
-        Self(bitvec![0; len])
-    }
-
-    fn set(&mut self, index: usize, causal: Causal) {
-        self.0.set(index, causal.into());
-    }
-
-    fn get(&self, index: usize) -> Causal {
-        self.0[index].into()
     }
 }
 
@@ -225,7 +201,7 @@ mod tests {
     #[test]
     fn induced_convexity_test() {
         let (g, [i1, i2, i3, n1, n2, o1, o2]) = graph();
-        let mut checker = ConvexChecker::new(&g);
+        let checker = ConvexChecker::new(&g);
 
         assert!(checker.is_node_convex([i1, i2, i3]));
         assert!(checker.is_node_convex([i1, n2]));
@@ -240,7 +216,7 @@ mod tests {
     #[test]
     fn edge_convexity_test() {
         let (g, [i1, i2, _, n1, n2, _, o2]) = graph();
-        let mut checker = ConvexChecker::new(&g);
+        let checker = ConvexChecker::new(&g);
 
         assert!(checker.is_convex(
             [i1, n2],
@@ -273,7 +249,7 @@ mod tests {
     fn dangling_input() {
         let mut g = PortGraph::new();
         let n = g.add_node(1, 1);
-        let mut checker = ConvexChecker::new(&g);
+        let checker = ConvexChecker::new(&g);
         assert!(checker.is_node_convex([n]));
     }
 
@@ -282,7 +258,7 @@ mod tests {
         let mut g = PortGraph::new();
         let n = g.add_node(1, 1);
         g.add_node(1, 1);
-        let mut checker = ConvexChecker::new(&g);
+        let checker = ConvexChecker::new(&g);
         assert!(checker.is_node_convex([n]));
     }
 }

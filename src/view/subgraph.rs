@@ -96,12 +96,12 @@ where
 
     /// Whether the subgraph is convex.
     pub fn is_convex(&self) -> bool {
-        let mut checker = ConvexChecker::new(self.graph());
-        self.is_convex_with_checker(&mut checker)
+        let checker = ConvexChecker::new(self.graph());
+        self.is_convex_with_checker(&checker)
     }
 
     /// Whether the subgraph is convex, using a pre-existing checker.
-    pub fn is_convex_with_checker(&self, checker: &mut ConvexChecker<G>) -> bool {
+    pub fn is_convex_with_checker(&self, checker: &ConvexChecker<G>) -> bool {
         checker.is_convex(
             self.nodes_iter(),
             self.context().inputs.iter().copied(),

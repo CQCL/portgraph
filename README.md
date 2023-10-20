@@ -22,6 +22,10 @@ Please read the [API documentation here][].
 See [CHANGELOG][] for a list of changes. The minimum supported rust
 version will only change on major releases.
 
+## Development
+
+See [DEVELOPMENT.md](DEVELOPMENT.md) for instructions on setting up the development environment.
+
 ## License
 
 This project is licensed under Apache License, Version 2.0 ([LICENSE][] or http://www.apache.org/licenses/LICENSE-2.0).

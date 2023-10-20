@@ -14,8 +14,6 @@
 
 - Add DEVELOPMENT.md
 
-# Release notes
-
 ## v0.9.0 (2023-09-05)
 
 ### Features

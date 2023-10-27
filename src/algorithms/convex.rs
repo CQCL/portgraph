@@ -14,10 +14,16 @@ use super::TopoSort;
 /// A pre-computed data structure for fast convexity checking.
 pub struct ConvexChecker<G> {
     graph: G,
-    // The nodes in topological order
+    // The nodes in topological order.
     topsort_nodes: Vec<NodeIndex>,
-    // The index of a node in the topological order (the inverse of topsort_nodes)
+    // The index of a node in the topological order (the inverse of topsort_nodes).
     topsort_ind: UnmanagedDenseMap<NodeIndex, usize>,
+    // The layer of each node in `topsort_nodes`.
+    //
+    // Layer 0 contains the end nodes of the DAG (nodes without output
+    // neighbours). Layer `n` contains nodes where all output neighbours are in
+    // lower layers, and at least one is in layer `n-1`.
+    layer_from_end: Vec<usize>,
 }
 
 impl<G> ConvexChecker<G>
@@ -25,6 +31,7 @@ where
     G: LinkView + Clone,
 {
     /// Create a new ConvexChecker.
+    #[inline]
     pub fn new(graph: G) -> Self {
         let inputs = graph
             .nodes_iter()
@@ -32,17 +39,27 @@ where
         let topsort: TopoSort<_> = toposort(graph.clone(), inputs, Direction::Outgoing);
         let topsort_nodes: Vec<_> = topsort.collect();
         let mut topsort_ind = UnmanagedDenseMap::with_capacity(graph.node_count());
-        for (i, &n) in topsort_nodes.iter().enumerate() {
+        let mut layer_from_end = vec![usize::MAX; graph.node_count()];
+        for (i, &n) in topsort_nodes.iter().enumerate().rev() {
             topsort_ind.set(n, i);
+            // Compute the layer of each node.
+            // Since we are traversing the graph in reverse topological order, this is a simple bfs.
+            layer_from_end[i] = graph
+                .output_neighbours(n)
+                .map(|neigh| layer_from_end[topsort_ind[neigh]] + 1)
+                .max()
+                .unwrap_or(0);
         }
         Self {
             graph,
             topsort_nodes,
             topsort_ind,
+            layer_from_end,
         }
     }
 
     /// The graph on which convexity queries can be made.
+    #[inline]
     pub fn graph(&self) -> G {
         self.graph.clone()
     }
@@ -84,6 +101,19 @@ where
         let max_ind = *nodes.last().unwrap();
         let node_range = min_ind..=max_ind;
 
+        // Nodes that can break the convexity must also be in the range of layers.
+        let (min_layer, max_layer) =
+            nodes
+                .iter()
+                .fold((usize::MAX, usize::MIN), |(min, max), &n| {
+                    let layer = self.layer_from_end[n];
+                    (min.min(layer), max.max(layer))
+                });
+        let layer_range = min_layer..=max_layer;
+
+        let node_filter =
+            |n| node_range.contains(&n) && layer_range.contains(&self.layer_from_end[n]);
+
         let mut node_iter = nodes.iter().copied().peekable();
 
         // Nodes in the causal future of `nodes` (inside `node_range`).
@@ -100,7 +130,7 @@ where
                     .graph
                     .output_neighbours(current_node)
                     .map(|n| self.topsort_ind[n])
-                    .filter(|ind| node_range.contains(ind))
+                    .filter(|&n| node_filter(n))
                 {
                     if !nodes.contains(&neighbour) {
                         other_nodes.insert(neighbour);
@@ -113,7 +143,7 @@ where
                     .graph
                     .output_neighbours(current_node)
                     .map(|n| self.topsort_ind[n])
-                    .filter(|ind| node_range.contains(ind))
+                    .filter(|&n| node_filter(n))
                 {
                     if nodes.contains(&neighbour) {
                         // A non-subgraph node in the causal future of the subgraph has an output neighbour in the subgraph.
@@ -150,6 +180,7 @@ where
     ///
     /// Any edge between two nodes of the subgraph that does not have an explicit
     /// input or output port is considered within the subgraph.
+    #[inline]
     pub fn is_convex(
         &self,
         nodes: impl IntoIterator<Item = NodeIndex>,

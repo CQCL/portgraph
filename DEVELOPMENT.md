@@ -58,6 +58,20 @@ We also check for clippy warnings, which are a set of linting rules for rust. To
 cargo clippy --all-targets
 ```
 
+## 📈 Code Coverage
+
+We run coverage checks on the CI. Once you submit a PR, you can review the
+line-by-line coverage report on
+[codecov](https://app.codecov.io/gh/CQCL/portgraph/commits?branch=All%20branches).
+
+To run the coverage checks locally, install `cargo-llvm-cov`, generate the report with:
+```bash
+cargo llvm-cov --lcov > lcov.info
+```
+
+and open it with your favourite coverage viewer. In VSCode, you can use
+[`coverage-gutters`](https://marketplace.visualstudio.com/items?itemName=ryanluker.vscode-coverage-gutters).
+
 ## 🌐 Contributing to portgraph
 
 We welcome contributions to portgraph! Please open [an issue](https://github.com/CQCL/portgraph/issues/new) or [pull request](https://github.com/CQCL/portgraph/compare) if you have any questions or suggestions.

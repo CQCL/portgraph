@@ -2,7 +2,10 @@
 
 use std::collections::BTreeSet;
 
-use crate::{algorithms::ConvexChecker, Direction, LinkView, NodeIndex, PortIndex, PortView};
+use crate::{
+    algorithms::{ConvexChecker, TopoConvexChecker},
+    Direction, LinkView, NodeIndex, PortIndex, PortView,
+};
 
 use super::filter::FilteredGraph;
 
@@ -96,12 +99,12 @@ where
 
     /// Whether the subgraph is convex.
     pub fn is_convex(&self) -> bool {
-        let checker = ConvexChecker::new(self.graph());
+        let checker = TopoConvexChecker::new(self.graph());
         self.is_convex_with_checker(&checker)
     }
 
     /// Whether the subgraph is convex, using a pre-existing checker.
-    pub fn is_convex_with_checker(&self, checker: &ConvexChecker<G>) -> bool {
+    pub fn is_convex_with_checker(&self, checker: &impl ConvexChecker) -> bool {
         checker.is_convex(
             self.nodes_iter(),
             self.context().inputs.iter().copied(),

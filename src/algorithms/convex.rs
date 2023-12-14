@@ -11,9 +11,9 @@ use crate::{Direction, LinkView, NodeIndex, PortIndex, SecondaryMap, UnmanagedDe
 
 use super::TopoSort;
 
-/// Pre-computed data for fast convexity checking.
+/// Pre-computed data for fast subgraph convexity checking on a given graph.
 pub trait ConvexChecker {
-    /// Whether a subgraph is convex.
+    /// Returns `true` if the subgraph is convex.
     ///
     /// A subgraph is convex if there is no path between two nodes of the
     /// subgraph that has an edge outside of the subgraph.
@@ -23,15 +23,12 @@ pub trait ConvexChecker {
     ///    another node of the subgraph (convexity on induced subgraph),
     ///  - There is no edge from an output port to an input port.
     ///
-    /// This function requires mutable access to `self` because it uses a
-    /// temporary data structure within the object.
-    ///
     /// ## Arguments
     ///
-    /// - `nodes`: The nodes of the subgraph of `self.graph`,
-    /// - `inputs`: The input ports of the subgraph of `self.graph`. These must
+    /// - `nodes`: The nodes of the subgraph,
+    /// - `inputs`: The input ports of the subgraph. These must
     ///   be [`Direction::Incoming`] ports of a node in `nodes`,
-    /// - `outputs`: The output ports of the subgraph of `self.graph`. These
+    /// - `outputs`: The output ports of the subgraph. These
     ///   must be [`Direction::Outgoing`] ports of a node in `nodes`.
     ///
     /// Any edge between two nodes of the subgraph that does not have an explicit

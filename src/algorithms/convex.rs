@@ -11,8 +11,38 @@ use crate::{Direction, LinkView, NodeIndex, PortIndex, SecondaryMap, UnmanagedDe
 
 use super::TopoSort;
 
-/// A pre-computed data structure for fast convexity checking.
-pub struct ConvexChecker<G> {
+/// Pre-computed data for fast subgraph convexity checking on a given graph.
+pub trait ConvexChecker {
+    /// Returns `true` if the subgraph is convex.
+    ///
+    /// A subgraph is convex if there is no path between two nodes of the
+    /// subgraph that has an edge outside of the subgraph.
+    ///
+    /// Equivalently, we check the following two conditions:
+    ///  - There is no node that is both in the past and in the future of
+    ///    another node of the subgraph (convexity on induced subgraph),
+    ///  - There is no edge from an output port to an input port.
+    ///
+    /// ## Arguments
+    ///
+    /// - `nodes`: The nodes of the subgraph,
+    /// - `inputs`: The input ports of the subgraph. These must
+    ///   be [`Direction::Incoming`] ports of a node in `nodes`,
+    /// - `outputs`: The output ports of the subgraph. These
+    ///   must be [`Direction::Outgoing`] ports of a node in `nodes`.
+    ///
+    /// Any edge between two nodes of the subgraph that does not have an explicit
+    /// input or output port is considered within the subgraph.
+    fn is_convex(
+        &self,
+        nodes: impl IntoIterator<Item = NodeIndex>,
+        inputs: impl IntoIterator<Item = PortIndex>,
+        outputs: impl IntoIterator<Item = PortIndex>,
+    ) -> bool;
+}
+
+/// Convexity checking using a pre-computed topological node order.
+pub struct TopoConvexChecker<G> {
     graph: G,
     // The nodes in topological order
     topsort_nodes: Vec<NodeIndex>,
@@ -20,7 +50,7 @@ pub struct ConvexChecker<G> {
     topsort_ind: UnmanagedDenseMap<NodeIndex, usize>,
 }
 
-impl<G> ConvexChecker<G>
+impl<G> TopoConvexChecker<G>
 where
     G: LinkView + Clone,
 {
@@ -126,31 +156,13 @@ where
         }
         true
     }
+}
 
-    /// Whether a subgraph is convex.
-    ///
-    /// A subgraph is convex if there is no path between two nodes of the
-    /// subgraph that has an edge outside of the subgraph.
-    ///
-    /// Equivalently, we check the following two conditions:
-    ///  - There is no node that is both in the past and in the future of
-    ///    another node of the subgraph (convexity on induced subgraph),
-    ///  - There is no edge from an output port to an input port.
-    ///
-    /// This function requires mutable access to `self` because it uses a
-    /// temporary data structure within the object.
-    ///
-    /// ## Arguments
-    ///
-    /// - `nodes`: The nodes of the subgraph of `self.graph`,
-    /// - `inputs`: The input ports of the subgraph of `self.graph`. These must
-    ///   be [`Direction::Incoming`] ports of a node in `nodes`,
-    /// - `outputs`: The output ports of the subgraph of `self.graph`. These
-    ///   must be [`Direction::Outgoing`] ports of a node in `nodes`.
-    ///
-    /// Any edge between two nodes of the subgraph that does not have an explicit
-    /// input or output port is considered within the subgraph.
-    pub fn is_convex(
+impl<G> ConvexChecker for TopoConvexChecker<G>
+where
+    G: LinkView + Clone,
+{
+    fn is_convex(
         &self,
         nodes: impl IntoIterator<Item = NodeIndex>,
         inputs: impl IntoIterator<Item = PortIndex>,
@@ -169,9 +181,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{LinkMut, NodeIndex, PortGraph, PortMut, PortView};
+    use crate::{
+        algorithms::convex::ConvexChecker, LinkMut, NodeIndex, PortGraph, PortMut, PortView,
+    };
 
-    use super::ConvexChecker;
+    use super::TopoConvexChecker;
 
     fn graph() -> (PortGraph, [NodeIndex; 7]) {
         let mut g = PortGraph::new();
@@ -201,7 +215,7 @@ mod tests {
     #[test]
     fn induced_convexity_test() {
         let (g, [i1, i2, i3, n1, n2, o1, o2]) = graph();
-        let checker = ConvexChecker::new(&g);
+        let checker = TopoConvexChecker::new(&g);
 
         assert!(checker.is_node_convex([i1, i2, i3]));
         assert!(checker.is_node_convex([i1, n2]));
@@ -216,7 +230,7 @@ mod tests {
     #[test]
     fn edge_convexity_test() {
         let (g, [i1, i2, _, n1, n2, _, o2]) = graph();
-        let checker = ConvexChecker::new(&g);
+        let checker = TopoConvexChecker::new(&g);
 
         assert!(checker.is_convex(
             [i1, n2],
@@ -249,7 +263,7 @@ mod tests {
     fn dangling_input() {
         let mut g = PortGraph::new();
         let n = g.add_node(1, 1);
-        let checker = ConvexChecker::new(&g);
+        let checker = TopoConvexChecker::new(&g);
         assert!(checker.is_node_convex([n]));
     }
 
@@ -258,7 +272,7 @@ mod tests {
         let mut g = PortGraph::new();
         let n = g.add_node(1, 1);
         g.add_node(1, 1);
-        let checker = ConvexChecker::new(&g);
+        let checker = TopoConvexChecker::new(&g);
         assert!(checker.is_node_convex([n]));
     }
 }

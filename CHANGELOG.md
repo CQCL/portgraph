@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.11.0 (2023-12-14)
+
+### Documentation
+
+- Coverage check section in DEVELOPMENT.md ([#117](https://github.com/CQCL/portgraph/pull/117))
+
+### Features
+
+- [**breaking**] ConvexChecker is a trait ([#121](https://github.com/CQCL/portgraph/pull/121))
+
 ## 0.10.0 (2023-10-20)
 
 ### Features

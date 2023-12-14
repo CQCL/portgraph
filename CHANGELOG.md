@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.0 (2023-12-14)
+
+### Features
+
+- [**breaking**] Make the ConvexChecker into a trait ([#121](https://github.com/CQCL/portgraph/pull/121))
+
 ## 0.10.0 (2023-10-20)
 
 ### Features

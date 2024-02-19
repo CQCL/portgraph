@@ -152,6 +152,48 @@ fn graph_from_edges<G: PortMut + LinkMut + Default>(edges: &[Edge]) -> G {
     g
 }
 
+/// Parameters for random portgraph generation using proptest
+#[derive(Debug, Clone)]
+pub struct GenPortGraphParams {
+    /// Maximum number of nodes in the graph.
+    pub max_n_nodes: usize,
+    /// Maximum number of incoming and outgoing ports per node.
+    ///
+    /// The maximum applies to incoming and outgoing ports separately. The total
+    /// maximum number of ports per node is `2 * max_n_ports`.
+    pub max_n_ports: usize,
+    /// Maximum number of edges in the graph.
+    pub max_n_edges: usize,
+}
+
+impl Default for GenPortGraphParams {
+    fn default() -> Self {
+        Self {
+            max_n_nodes: 100,
+            max_n_ports: 4,
+            max_n_edges: 200,
+        }
+    }
+}
+
+impl Arbitrary for PortGraph {
+    type Parameters = GenPortGraphParams;
+    type Strategy = BoxedStrategy<Self>;
+
+    fn arbitrary_with(args: Self::Parameters) -> Self::Strategy {
+        gen_portgraph(args.max_n_nodes, args.max_n_ports, args.max_n_edges).boxed()
+    }
+}
+
+impl Arbitrary for MultiPortGraph {
+    type Parameters = GenPortGraphParams;
+    type Strategy = BoxedStrategy<Self>;
+
+    fn arbitrary_with(args: Self::Parameters) -> Self::Strategy {
+        gen_multiportgraph(args.max_n_nodes, args.max_n_ports, args.max_n_edges).boxed()
+    }
+}
+
 fn ensure_non_empty<G: PortView + PortMut>(g: &mut G) {
     if g.node_count() == 0 {
         g.add_node(0, 0);

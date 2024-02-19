@@ -12,7 +12,7 @@ keywords = ["data-structure", "graph"]
 categories = ["data-structures"]
 
 edition = "2021"
-rust-version = "1.70"
+rust-version = "1.75"
 
 [lib]
 bench = false

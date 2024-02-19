@@ -35,6 +35,6 @@ This project is licensed under Apache License, Version 2.0 ([LICENSE][] or http:
   [build_status]: https://github.com/CQCL/portgraph/workflows/Continuous%20integration/badge.svg?branch=main
   [crates]: https://img.shields.io/crates/v/portgraph
   [LICENSE]: LICENCE
-  [msrv]: https://img.shields.io/badge/rust-1.70.0%2B-blue.svg?maxAge=3600
+  [msrv]: https://img.shields.io/badge/rust-1.75.0%2B-blue.svg?maxAge=3600
   [codecov]: https://img.shields.io/codecov/c/gh/CQCL/portgraph?logo=codecov
   [CHANGELOG]: CHANGELOG.md

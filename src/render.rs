@@ -1,9 +1,13 @@
 //! This module contains rendering logic from portgraphs into graphviz and
 //! mermaid diagrams.
 
-pub mod dot;
+mod dot;
+mod mermaid;
+
+use std::borrow::Cow;
 
 pub use dot::{DotFormat, DotFormatter};
+pub use mermaid::{MermaidFormat, MermaidFormatter};
 
 /// Style of a rendered edge.
 ///
@@ -77,10 +81,22 @@ pub enum EdgeStyle {
     /// Dashed line
     Dashed,
     /// Custom style
+    Labelled(String, Box<EdgeStyle>),
+    /// Custom style
     Custom(String),
 }
 
 impl EdgeStyle {
+    /// Adds a label to the edge style.
+    ///
+    /// If the edge style already has a label, it will be replaced.
+    pub fn with_label(self, label: impl ToString) -> Self {
+        match self {
+            Self::Labelled(_, e) => Self::Labelled(label.to_string(), e),
+            _ => Self::Labelled(label.to_string(), Box::new(self)),
+        }
+    }
+
     /// Get the style as a graphviz style string
     pub(super) fn as_dot_str(&self) -> &str {
         match self {
@@ -88,6 +104,26 @@ impl EdgeStyle {
             Self::Dotted => "dotted",
             Self::Dashed => "dashed",
             Self::Custom(s) => s,
+            // Ignore edge labels.
+            Self::Labelled(_lbl, e) => e.as_dot_str(),
+        }
+    }
+
+    /// Get the style as a graphviz style string
+    pub(super) fn as_mermaid_str(&self) -> Cow<'_, str> {
+        match self {
+            Self::Solid => "-->".into(),
+            Self::Dotted => "-.->".into(),
+            // Dashed links are not supported in mermaid, we use dots instead.
+            Self::Dashed => "-.->".into(),
+            Self::Custom(s) => s.into(),
+            Self::Labelled(lbl, e) => match e.as_ref() {
+                Self::Solid => format!("--{}-->", lbl).into(),
+                Self::Dotted => format!("-.{}.-", lbl).into(),
+                Self::Dashed => format!("-.{}.-", lbl).into(),
+                Self::Custom(s) => s.into(),
+                Self::Labelled(_, _) => panic!("Nested labelled edges are not supported"),
+            },
         }
     }
 }

@@ -4,98 +4,9 @@ use std::fmt::Display;
 
 use crate::{Direction, Hierarchy, LinkView, NodeIndex, PortIndex, Weights};
 
-/// Style of an edge in a dot graph. Defaults to "None".
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum NodeStyle {
-    /// Ignore the node. No edges will be connected to it.
-    Hidden,
-    /// Draw a box with the label inside.
-    Box(String),
-}
+use super::{EdgeStyle, NodeStyle, PortStyle};
 
-impl NodeStyle {
-    /// Show a node label with the default style.
-    pub fn new(label: impl ToString) -> Self {
-        Self::Box(label.to_string())
-    }
-}
-
-impl Default for NodeStyle {
-    fn default() -> Self {
-        Self::Box(String::new())
-    }
-}
-
-/// Style of an edge in a dot graph. Defaults to `Box("")`.
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum PortStyle {
-    /// Do not draw a label. Edges will be connected to the node.
-    Hidden,
-    /// Just the port label. Optionally prepend the port index.
-    #[deprecated(note = "Use `PortStyle::Plain(_, true)` instead")]
-    Text(String),
-    /// Draw a box around the label. Optionally prepend the port index.
-    #[deprecated(note = "Use `PortStyle::Boxed(_, true)` instead")]
-    Box(String),
-    /// Just the port label. Optionally prepend the port index.
-    Plain(String, bool),
-    /// Draw a box around the label. Optionally prepend the port index.
-    Boxed(String, bool),
-}
-
-impl PortStyle {
-    /// Show a port label with the default style.
-    pub fn new(label: impl ToString) -> Self {
-        Self::Boxed(label.to_string(), true)
-    }
-
-    /// Just the port label. Optionally prepend the port index.
-    pub fn text(label: impl ToString, show_offset: bool) -> Self {
-        Self::Plain(label.to_string(), show_offset)
-    }
-
-    /// Draw a box around the label. Optionally prepend the port index.
-    pub fn boxed(label: impl ToString, show_offset: bool) -> Self {
-        Self::Boxed(label.to_string(), show_offset)
-    }
-}
-
-impl Default for PortStyle {
-    fn default() -> Self {
-        Self::Boxed(String::new(), true)
-    }
-}
-
-/// Style of an edge in a dot graph. Defaults to [`EdgeStyle::Solid`].
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-#[non_exhaustive]
-pub enum EdgeStyle {
-    /// Normal line
-    #[default]
-    Solid,
-    /// Dotted line
-    Dotted,
-    /// Dashed line
-    Dashed,
-    /// Custom style
-    Custom(String),
-}
-
-impl EdgeStyle {
-    /// Get the style as a graphviz style string
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Solid => "",
-            Self::Dotted => "dotted",
-            Self::Dashed => "dashed",
-            Self::Custom(s) => s,
-        }
-    }
-}
-
-/// Configurable dot formatter for a `PortGraph`.
+/// Configurable mermaid formatter for a `PortGraph`.
 pub struct DotFormatter<'g, G: LinkView> {
     graph: &'g G,
     forest: Option<&'g Hierarchy>,
@@ -148,6 +59,9 @@ where
     }
 
     /// Encode some `Weights` in the dot format.
+    ///
+    /// This is a convenience method to set the node and port styles based on the weight values.
+    /// It overrides any previous node or port style set.
     pub fn with_weights<'w, N, P>(self, weights: &'w Weights<N, P>) -> Self
     where
         'w: 'g,
@@ -266,18 +180,6 @@ where
                     style: String::new(),
                     label: make_label(offset, show_offset, &label),
                 }),
-                #[allow(deprecated)]
-                PortStyle::Text(label) => Some(PortCellStrings {
-                    id: format!("{}{}", dir, offset),
-                    style: "border=\"0\"".to_string(),
-                    label: make_label(offset, true, &label),
-                }),
-                #[allow(deprecated)]
-                PortStyle::Box(label) => Some(PortCellStrings {
-                    id: format!("{}{}", dir, offset),
-                    style: String::new(),
-                    label: make_label(offset, true, &label),
-                }),
             })
             .collect()
     }
@@ -313,7 +215,7 @@ where
         let to_node = self.graph.port_node(to).expect("missing node");
         let to_offset = self.graph.port_offset(to).expect("missing port").index();
         let edge_style = self.edge_style(from, to);
-        let edge_label = edge_style.as_str();
+        let edge_label = edge_style.as_dot_str();
         format!(
             "{}:out{} -> {}:in{} [style=\"{edge_label}\"]\n",
             from_node.index(),

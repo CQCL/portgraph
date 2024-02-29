@@ -9,6 +9,8 @@ use std::borrow::Cow;
 pub use dot::{DotFormat, DotFormatter};
 pub use mermaid::{MermaidFormat, MermaidFormatter};
 
+use self::mermaid::encode_label;
+
 /// Style of a rendered edge.
 ///
 /// Defaults to a box with no label.
@@ -117,13 +119,16 @@ impl EdgeStyle {
             // Dashed links are not supported in mermaid, we use dots instead.
             Self::Dashed => "-.->".into(),
             Self::Custom(s) => s.into(),
-            Self::Labelled(lbl, e) => match e.as_ref() {
-                Self::Solid => format!("--{}-->", lbl).into(),
-                Self::Dotted => format!("-.{}.-", lbl).into(),
-                Self::Dashed => format!("-.{}.-", lbl).into(),
-                Self::Custom(s) => s.into(),
-                Self::Labelled(_, _) => panic!("Nested labelled edges are not supported"),
-            },
+            Self::Labelled(lbl, e) => {
+                let lbl = encode_label("", lbl);
+                match e.as_ref() {
+                    Self::Solid => format!("--{}-->", lbl).into(),
+                    Self::Dotted => format!("-.{}.-", lbl).into(),
+                    Self::Dashed => format!("-.{}.-", lbl).into(),
+                    Self::Custom(s) => s.into(),
+                    Self::Labelled(_, _) => panic!("Nested labelled edges are not supported"),
+                }
+            }
         }
     }
 }

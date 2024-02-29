@@ -312,11 +312,16 @@ impl<'g, G: LinkView> MermaidBuilder<'g, G> {
 }
 
 /// Encode a label, or use the id if the label is empty.
+///
+/// We escape double quotes and newlines in the label.
+/// Other special characters may need escaping by the user.
+///
+/// See https://mermaid.js.org/syntax/flowchart.html#special-characters-that-break-syntax.
 pub fn encode_label(id: &str, label: &str) -> String {
     if label.is_empty() {
         return id.to_string();
     }
-    format!("\"{}\"", label.replace('#', "#35;").replace('"', "#quot;"))
+    format!("\"{}\"", label.replace('"', "#quot;").replace('\n', "<br>"))
 }
 
 #[cfg(test)]

@@ -6,6 +6,11 @@ use crate::{Hierarchy, LinkView, NodeIndex, Weights};
 
 use super::{EdgeStyle, NodeStyle};
 
+/// The indentation separator for the mermaid string.
+///
+/// This is purely cosmetic and does not affect the mermaid rendering.
+const INDENTATION_SEPARATOR: &str = "    ";
+
 /// Configurable mermaid formatter for a `PortGraph`.
 ///
 /// Use the [`MermaidFormat`] trait to encode a `PortGraph` in mermaid format.
@@ -186,7 +191,7 @@ where
     }
 }
 
-/// Helper struct to manage building a mermaid file.
+/// Helper struct to manage building a mermaid string.
 ///
 /// Splitting this from the `MermaidFormatter` allows us to mutate this freely
 /// while keeping references to the graph.
@@ -220,10 +225,11 @@ impl<'g, G: LinkView> MermaidBuilder<'g, G> {
     /// Push an arbitrary line of text to the output.
     /// Indents the line according to the current indentation level.
     pub fn push_line(&mut self, s: impl AsRef<str>) {
-        let extra_capacity = self.indent * 4 + s.as_ref().len() + 1;
+        let extra_capacity = self.indent * INDENTATION_SEPARATOR.len() + s.as_ref().len() + 1;
         self.output.reserve(extra_capacity);
 
-        self.output.push_str(&"    ".repeat(self.indent));
+        self.output
+            .push_str(&INDENTATION_SEPARATOR.repeat(self.indent));
         self.output.push_str(s.as_ref());
         self.output.push('\n');
     }
@@ -231,10 +237,13 @@ impl<'g, G: LinkView> MermaidBuilder<'g, G> {
     /// Push an arbitrary line of text to the output.
     /// Indents the line according to the current indentation level.
     fn push_strings(&mut self, strings: &[&str]) {
-        let extra_capacity = self.indent * 4 + strings.iter().map(|s| s.len()).sum::<usize>() + 1;
+        let extra_capacity = self.indent * INDENTATION_SEPARATOR.len()
+            + strings.iter().map(|s| s.len()).sum::<usize>()
+            + 1;
         self.output.reserve(extra_capacity);
 
-        self.output.push_str(&"    ".repeat(self.indent));
+        self.output
+            .push_str(&INDENTATION_SEPARATOR.repeat(self.indent));
         for s in strings {
             self.output.push_str(s);
         }
@@ -394,7 +403,6 @@ mod tests {
         weights[n3] = "node3".to_string();
 
         let mermaid = graph.mermaid_format().with_weights(&weights).finish();
-        println!("\n{}\n", mermaid);
         let expected = r#"graph LR
     0["node1"]
     0-->1

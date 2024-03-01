@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.12.0 (2024-03-01)
+
+### Features
+
+- Proptest for Multiportgraph
+- (Multi)Portgraph implement Arbitrary
+- [**breaking**] Mermaid rendering ([#125](https://github.com/CQCL/portgraph/pull/125))
+
+### Miscellaneous Tasks
+
+- [**breaking**] Hike MSRV to 1.75
+
 ## 0.11.0 (2023-12-14)
 
 ### Features

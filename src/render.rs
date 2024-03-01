@@ -82,7 +82,7 @@ pub enum EdgeStyle {
     Dotted,
     /// Dashed line
     Dashed,
-    /// Custom style
+    /// Edge style with a label
     Labelled(String, Box<EdgeStyle>),
     /// Custom style
     Custom(String),
@@ -96,6 +96,14 @@ impl EdgeStyle {
         match self {
             Self::Labelled(_, e) => Self::Labelled(label.to_string(), e),
             _ => Self::Labelled(label.to_string(), Box::new(self)),
+        }
+    }
+
+    /// Returns the base style of the edge, without labels.
+    pub fn strip_label(&self) -> &Self {
+        match self {
+            Self::Labelled(_, e) => e.strip_label(),
+            e => e,
         }
     }
 
@@ -121,12 +129,14 @@ impl EdgeStyle {
             Self::Custom(s) => s.into(),
             Self::Labelled(lbl, e) => {
                 let lbl = encode_label("", lbl);
-                match e.as_ref() {
+                match e.strip_label() {
                     Self::Solid => format!("--{}-->", lbl).into(),
                     Self::Dotted => format!("-.{}.->", lbl).into(),
                     Self::Dashed => format!("-.{}.->", lbl).into(),
                     Self::Custom(s) => s.into(),
-                    Self::Labelled(_, _) => panic!("Nested labelled edges are not supported"),
+                    Self::Labelled(_, _) => {
+                        unreachable!("`strip_label` cannot return a `Labelled`")
+                    }
                 }
             }
         }

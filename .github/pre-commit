@@ -9,10 +9,22 @@ if [[ "${IGNORE_RUSTHOOKS:=0}" -ne 0 ]]; then
     exit 0
 fi
 
-if ! cargo fmt -- --check
+if ! cargo fmt --all -- --check
 then
     echo "There are some code style issues."
     echo "Run cargo fmt first."
+    exit 1
+fi
+
+if ! cargo check --all --all-features --workspace
+then
+    echo "There are some compilation warnings."
+    exit 1
+fi
+
+if ! cargo test --all-features --workspace
+then
+    echo "There are some test issues."
     exit 1
 fi
 
@@ -22,9 +34,10 @@ then
     exit 1
 fi
 
-if ! cargo test --all-features
+RUSTDOCFLAGS="-Dwarnings"
+if ! cargo doc --no-deps --all-features --workspace
 then
-    echo "There are some test issues."
+    echo "There are some clippy issues."
     exit 1
 fi
 

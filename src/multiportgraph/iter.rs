@@ -6,7 +6,7 @@ use std::ops::Range;
 
 use super::{MultiPortGraph, SubportIndex};
 use crate::portgraph::{self, NodePorts};
-use crate::{LinkView, NodeIndex, PortIndex, PortOffset, PortView};
+use crate::{Direction, LinkView, NodeIndex, PortIndex, PortOffset, PortView};
 
 /// Iterator over the nodes of a graph.
 #[derive(Clone)]
@@ -127,14 +127,27 @@ pub struct Neighbours<'a> {
     multigraph: &'a MultiPortGraph,
     subports: NodeSubports<'a>,
     current_copy_node: Option<NodeIndex>,
+    /// The node for which the neighbours are being iterated.
+    node: NodeIndex,
+    /// Whether to ignore self-loops in the input -> output direction.
+    /// This is used to avoid counting self-loops twice when iterating both
+    /// input and output neighbours.
+    ignore_dupped_self_loops: bool,
 }
 
 impl<'a> Neighbours<'a> {
-    pub(super) fn new(multigraph: &'a MultiPortGraph, subports: NodeSubports<'a>) -> Self {
+    pub(super) fn new(
+        multigraph: &'a MultiPortGraph,
+        subports: NodeSubports<'a>,
+        node: NodeIndex,
+        ignore_dupped_self_loops: bool,
+    ) -> Self {
         Self {
             multigraph,
             subports,
             current_copy_node: None,
+            node,
+            ignore_dupped_self_loops,
         }
     }
 }
@@ -143,26 +156,42 @@ impl<'a> Iterator for Neighbours<'a> {
     type Item = NodeIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let link = self.subports.find_map(|subport| {
-            let port_index = subport.port();
-            if !self.multigraph.is_multiport(port_index) {
-                self.multigraph.graph.port_link(port_index)
-            } else {
-                // There is a copy node
-                if subport.offset() == 0 {
-                    self.current_copy_node = self.multigraph.get_copy_node(port_index);
+        loop {
+            let link = self.subports.find_map(|subport| {
+                let port_index = subport.port();
+                if !self.multigraph.is_multiport(port_index) {
+                    self.multigraph.graph.port_link(port_index)
+                } else {
+                    // There is a copy node
+                    if subport.offset() == 0 {
+                        self.current_copy_node = self.multigraph.get_copy_node(port_index);
+                    }
+                    let copy_node = self
+                        .current_copy_node
+                        .expect("Copy node not connected to a multiport.");
+                    let dir = self.multigraph.graph.port_direction(port_index).unwrap();
+                    let offset = PortOffset::new(dir, subport.offset());
+                    let subport_index =
+                        self.multigraph.graph.port_index(copy_node, offset).unwrap();
+                    self.multigraph.graph.port_link(subport_index)
                 }
-                let copy_node = self
-                    .current_copy_node
-                    .expect("Copy node not connected to a multiport.");
-                let dir = self.multigraph.graph.port_direction(port_index).unwrap();
-                let offset = PortOffset::new(dir, subport.offset());
-                let subport_index = self.multigraph.graph.port_index(copy_node, offset).unwrap();
-                self.multigraph.graph.port_link(subport_index)
+            })?;
+            let link_subport = self.multigraph.get_subport_from_index(link).unwrap();
+            let node = self
+                .multigraph
+                .graph
+                .port_node(link_subport.port())
+                .unwrap();
+            // Ignore self-loops in the input -> output direction.
+            if self.ignore_dupped_self_loops
+                && node == self.node
+                && self.multigraph.port_direction(link_subport.port()).unwrap()
+                    == Direction::Outgoing
+            {
+                continue;
             }
-        })?;
-        let link_subport = self.multigraph.get_subport_from_index(link).unwrap();
-        self.multigraph.graph.port_node(link_subport.port())
+            return Some(node);
+        }
     }
 }
 
@@ -178,14 +207,22 @@ pub struct NodeLinks<'a> {
     multigraph: &'a MultiPortGraph,
     ports: NodePorts,
     current_links: Option<PortLinks<'a>>,
+    /// Ignore links to the given target ports.
+    /// This is used to avoid counting self-loops twice.
+    ignore_target_ports: Range<usize>,
 }
 
 impl<'a> NodeLinks<'a> {
-    pub(super) fn new(multigraph: &'a MultiPortGraph, ports: NodePorts) -> Self {
+    pub(super) fn new(
+        multigraph: &'a MultiPortGraph,
+        ports: NodePorts,
+        ignore_target_ports: Range<usize>,
+    ) -> Self {
         Self {
             multigraph,
             ports,
             current_links: None,
+            ignore_target_ports,
         }
     }
 }
@@ -196,14 +233,20 @@ impl<'a> Iterator for NodeLinks<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            if let Some(links) = &mut self.current_links {
-                if let Some(link) = links.next() {
-                    return Some(link);
-                }
+            let Some(links) = &mut self.current_links else {
+                let port = self.ports.next()?;
+                self.current_links = Some(PortLinks::new(self.multigraph, port));
+                continue;
+            };
+            let Some((from, to)) = links.next() else {
                 self.current_links = None;
+                continue;
+            };
+            // Ignore self-loops in the input -> output direction.
+            if self.ignore_target_ports.contains(&to.port().index()) {
+                continue;
             }
-            let port = self.ports.next()?;
-            self.current_links = Some(PortLinks::new(self.multigraph, port));
+            return Some((from, to));
         }
     }
 }

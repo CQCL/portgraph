@@ -304,6 +304,14 @@ impl PortGraph {
         self.port_count -= node_meta.incoming() as usize + node_meta.outgoing() as usize;
         self.port_count += incoming + outgoing;
     }
+
+    /// Returns the range of outgoing port indices for a given node.
+    pub(crate) fn node_outgoing_ports(&self, node: NodeIndex) -> Range<usize> {
+        match self.node_meta_valid(node) {
+            Some(node_meta) => node_meta.outgoing_ports(),
+            None => 0..0,
+        }
+    }
 }
 
 impl PortView for PortGraph {

@@ -791,18 +791,24 @@ impl LinkView for PortGraph {
 
     fn links(&self, node: NodeIndex, direction: Direction) -> Self::NodeLinks<'_> {
         let Some(node_meta) = self.node_meta_valid(node) else {
-            return NodeLinks::new(self.ports(node, direction), &[]);
+            return NodeLinks::new(self.ports(node, direction), &[], 0..0);
         };
         let indices = node_meta.ports(direction);
-        NodeLinks::new(self.ports(node, direction), &self.port_link[indices])
+        NodeLinks::new(self.ports(node, direction), &self.port_link[indices], 0..0)
     }
 
     fn all_links(&self, node: NodeIndex) -> Self::NodeLinks<'_> {
         let Some(node_meta) = self.node_meta_valid(node) else {
-            return NodeLinks::new(self.all_ports(node), &[]);
+            return NodeLinks::new(self.all_ports(node), &[], 0..0);
         };
         let indices = node_meta.all_ports();
-        NodeLinks::new(self.all_ports(node), &self.port_link[indices])
+        // Ignore links where the target is one of the node's output ports.
+        // This way we only count self-links once.
+        NodeLinks::new(
+            self.all_ports(node),
+            &self.port_link[indices],
+            node_meta.outgoing_ports(),
+        )
     }
 
     #[inline]
@@ -1240,6 +1246,7 @@ pub mod test {
     #[cfg(feature = "serde")]
     #[cfg(feature = "proptest")]
     use crate::proptest::gen_portgraph;
+    use itertools::Itertools;
     #[cfg(feature = "proptest")]
     use proptest::prelude::*;
 
@@ -1397,10 +1404,12 @@ pub mod test {
     #[test]
     fn link_iterators() {
         let mut g = PortGraph::new();
-        let node0 = g.add_node(1, 2);
+        let node0 = g.add_node(1, 3);
         let node1 = g.add_node(2, 1);
+        let node0_input0 = g.input(node0, 0).unwrap();
         let node0_output0 = g.output(node0, 0).unwrap();
         let node0_output1 = g.output(node0, 1).unwrap();
+        let node0_output2 = g.output(node0, 2).unwrap();
         let node1_input0 = g.input(node1, 0).unwrap();
         let node1_input1 = g.input(node1, 1).unwrap();
 
@@ -1432,6 +1441,25 @@ pub mod test {
         assert!(g.input_neighbours(node0).eq([]));
         assert!(g.output_neighbours(node0).eq([node1, node1]));
         assert!(g.all_neighbours(node0).eq([node1, node1]));
+
+        // Self-link
+        g.link_nodes(node0, 2, node0, 0).unwrap();
+
+        assert!(g.input_links(node0).eq([(node0_input0, node0_output2)]));
+        assert!(g.output_links(node0).eq([
+            (node0_output0, node1_input0),
+            (node0_output1, node1_input1),
+            (node0_output2, node0_input0)
+        ]));
+        // The self-link should only appear once in the all_links iterator
+        assert!(g.all_links(node0).eq([
+            (node0_output0, node1_input0),
+            (node0_output1, node1_input1),
+            (node0_output2, node0_input0)
+        ]));
+        assert!(g.input_neighbours(node0).eq([node0]));
+        assert!(g.output_neighbours(node0).eq([node1, node1, node0]));
+        assert!(g.all_neighbours(node0).eq([node1, node1, node0]));
     }
 
     #[test]
@@ -1616,11 +1644,11 @@ pub mod test {
         g.link_nodes(node0g, 0, node1g, 0)?;
 
         let mut h = PortGraph::new();
-        let node0h = h.add_node(1, 2);
-        let node1h = h.add_node(2, 1);
-        h.link_nodes(node0h, 0, node1h, 1)?;
-        h.link_nodes(node0h, 1, node1h, 0)?;
-        h.link_nodes(node1h, 0, node0h, 0)?;
+        let node0h = h.add_node(2, 2);
+        let node1h = h.add_node(1, 1);
+        h.link_nodes(node0h, 0, node1h, 0)?;
+        h.link_nodes(node0h, 1, node0h, 0)?;
+        h.link_nodes(node1h, 0, node0h, 1)?;
 
         let map = g.insert_graph(&h)?;
         assert_eq!(map.len(), 2);
@@ -1629,10 +1657,18 @@ pub mod test {
         assert_eq!(g.link_count(), 4);
         assert!(g.contains_node(map[&node0h]));
         assert!(g.contains_node(map[&node1h]));
-        assert!(g.input_neighbours(map[&node0h]).eq([map[&node1h]]));
-        assert!(g
-            .output_neighbours(map[&node0h])
-            .eq([map[&node1h], map[&node1h]]));
+        assert_eq!(
+            g.input_neighbours(map[&node0h]).collect_vec(),
+            [map[&node0h], map[&node1h]]
+        );
+        assert_eq!(
+            g.output_neighbours(map[&node0h]).collect_vec(),
+            [map[&node1h], map[&node0h]]
+        );
+        assert_eq!(
+            g.all_neighbours(map[&node0h]).collect_vec(),
+            [map[&node1h], map[&node1h], map[&node0h]]
+        );
 
         Ok(())
     }

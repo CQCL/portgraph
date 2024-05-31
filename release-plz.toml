@@ -1,2 +1,18 @@
 [workspace]
-changelog_config = "cliff.toml" # use a custom git-cliff configuration
+pr_draft = true
+
+[changelog]
+sort_commits = "oldest"
+
+commit_parsers = [
+    { message = "^feat", group = "New Features" },
+    { message = "^fix", group = "Bug Fixes" },
+    { message = "^docs", group = "Documentation" },
+    { message = "^style", group = "Styling" },
+    { message = "^refactor", group = "Refactor" },
+    { message = "^perf", group = "Performance" },
+    { message = "^test", group = "Testing" },
+    { message = "^chore", group = "Miscellaneous Tasks", skip = true },
+    { message = "^revert", group = "Reverted changes", skip = true },
+    { message = "^ci", group = "CI", skip = true },
+]

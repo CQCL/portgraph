@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.12.1](https://github.com/CQCL/portgraph/compare/v0.12.0...v0.12.1) - 2024-06-03
+
+### Bug Fixes
+- Link and neighbour iterators counting self-loops twice ([#132](https://github.com/CQCL/portgraph/pull/132))
+
 ## 0.12.0 (2024-03-01)
 
 ### Features

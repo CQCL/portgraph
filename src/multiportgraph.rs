@@ -344,22 +344,23 @@ impl LinkView for MultiPortGraph {
 
     #[inline]
     fn links(&self, node: NodeIndex, direction: Direction) -> Self::NodeLinks<'_> {
-        NodeLinks::new(self, self.ports(node, direction))
+        NodeLinks::new(self, self.ports(node, direction), 0..0)
     }
 
     #[inline]
     fn all_links(&self, node: NodeIndex) -> Self::NodeLinks<'_> {
-        NodeLinks::new(self, self.all_ports(node))
+        let output_ports = self.graph.node_outgoing_ports(node);
+        NodeLinks::new(self, self.all_ports(node), output_ports)
     }
 
     #[inline]
     fn neighbours(&self, node: NodeIndex, direction: Direction) -> Self::Neighbours<'_> {
-        Neighbours::new(self, self.subports(node, direction))
+        Neighbours::new(self, self.subports(node, direction), node, false)
     }
 
     #[inline]
     fn all_neighbours(&self, node: NodeIndex) -> Self::Neighbours<'_> {
-        Neighbours::new(self, self.all_subports(node))
+        Neighbours::new(self, self.all_subports(node), node, true)
     }
 
     #[inline]
@@ -811,6 +812,7 @@ pub mod test {
         let mut g = MultiPortGraph::new();
         let node0 = g.add_node(1, 2);
         let node1 = g.add_node(2, 1);
+        let node0_input0 = g.input(node0, 0).unwrap();
         let (node0_output0, node0_output1) = g.outputs(node0).collect_tuple().unwrap();
         let (node1_input0, node1_input1) = g.inputs(node1).collect_tuple().unwrap();
 
@@ -866,5 +868,100 @@ pub mod test {
         );
         assert_eq!(g.all_neighbours(node0).collect_vec(), [node1, node1, node1]);
         assert_eq!(g.port_links(node0_output0).collect_vec(), links[0..2]);
+
+        // Self-link
+        // The `all_links` / `all_neighbours` iterators should only return these once.
+        g.link_nodes(node0, 0, node0, 0).unwrap();
+        assert_eq!(
+            g.subport_outputs(node0).collect_vec(),
+            [
+                SubportIndex::new_multi(node0_output0, 0),
+                SubportIndex::new_multi(node0_output0, 1),
+                SubportIndex::new_multi(node0_output0, 2),
+                SubportIndex::new_unique(node0_output1),
+            ]
+        );
+        assert_eq!(
+            g.subport_inputs(node0).collect_vec(),
+            [SubportIndex::new_unique(node0_input0)]
+        );
+
+        let links = [
+            (
+                SubportIndex::new_multi(node0_output0, 0),
+                SubportIndex::new_unique(node1_input0),
+            ),
+            (
+                SubportIndex::new_multi(node0_output0, 1),
+                SubportIndex::new_multi(node1_input1, 0),
+            ),
+            (
+                SubportIndex::new_multi(node0_output0, 2),
+                SubportIndex::new_unique(node0_input0),
+            ),
+            (
+                SubportIndex::new_unique(node0_output1),
+                SubportIndex::new_multi(node1_input1, 1),
+            ),
+        ];
+        assert_eq!(
+            g.input_links(node0).collect_vec(),
+            [(
+                SubportIndex::new_unique(node0_input0),
+                SubportIndex::new_multi(node0_output0, 2),
+            )]
+        );
+        assert_eq!(g.output_links(node0).collect_vec(), links);
+        assert_eq!(g.all_links(node0).collect_vec(), links);
+        assert_eq!(g.input_neighbours(node0).collect_vec(), [node0]);
+        assert_eq!(
+            g.output_neighbours(node0).collect_vec(),
+            [node1, node1, node0, node1]
+        );
+        assert_eq!(
+            g.all_neighbours(node0).collect_vec(),
+            [node1, node1, node0, node1]
+        );
+        assert_eq!(g.port_links(node0_output0).collect_vec(), links[0..3]);
+    }
+
+    #[test]
+    fn insert_graph() -> Result<(), Box<dyn std::error::Error>> {
+        let mut g = crate::MultiPortGraph::new();
+        // Add dummy nodes to produce different node ids than in the other graph.
+        g.add_node(0, 0);
+        g.add_node(0, 0);
+        let node0g = g.add_node(1, 1);
+        let node1g = g.add_node(1, 1);
+        g.link_nodes(node0g, 0, node1g, 0)?;
+
+        let mut h = PortGraph::new();
+        let node0h = h.add_node(2, 2);
+        let node1h = h.add_node(1, 1);
+        h.link_nodes(node0h, 0, node1h, 0)?;
+        h.link_nodes(node0h, 1, node0h, 0)?;
+        h.link_nodes(node1h, 0, node0h, 1)?;
+
+        let map = g.insert_graph(&h)?;
+        assert_eq!(map.len(), 2);
+
+        assert_eq!(g.node_count(), 6);
+        assert_eq!(g.link_count(), 4);
+        assert!(g.contains_node(map[&node0h]));
+        assert!(g.contains_node(map[&node1h]));
+        assert_eq!(
+            g.input_neighbours(map[&node0h]).collect_vec(),
+            vec![map[&node0h], map[&node1h]]
+        );
+        assert_eq!(
+            g.output_neighbours(map[&node0h]).collect_vec(),
+            vec![map[&node1h], map[&node0h]]
+        );
+        assert_eq!(
+            g.all_neighbours(map[&node0h]).collect_vec(),
+            vec![map[&node1h], map[&node1h], map[&node0h]]
+        );
+
+        Ok(())
     }
 }

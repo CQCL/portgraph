@@ -240,13 +240,21 @@ impl FusedIterator for NodePortOffsets {}
 #[derive(Clone, Debug)]
 pub struct NodeLinks<'a> {
     links: Zip<NodePorts, std::slice::Iter<'a, Option<PortIndex>>>,
+    /// Ignore links with target ports in the given range.
+    /// This is used to filter out duplicated self-links.
+    ignore_target_ports: Range<usize>,
 }
 
 impl<'a> NodeLinks<'a> {
     /// Returns a new iterator
-    pub(super) fn new(ports: NodePorts, links: &'a [Option<PortIndex>]) -> Self {
+    pub(super) fn new(
+        ports: NodePorts,
+        links: &'a [Option<PortIndex>],
+        ignore_target_ports: Range<usize>,
+    ) -> Self {
         Self {
             links: ports.zip(links.iter()),
+            ignore_target_ports,
         }
     }
 }
@@ -258,9 +266,13 @@ impl<'a> Iterator for NodeLinks<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let (port, link) = self.links.next()?;
-            if let Some(link) = link {
-                return Some((port, *link));
+            let Some(link) = link else {
+                continue;
+            };
+            if self.ignore_target_ports.contains(&link.index()) {
+                continue;
             }
+            return Some((port, *link));
         }
     }
 

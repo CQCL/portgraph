@@ -368,6 +368,18 @@ impl PortOffset {
             PortOffset::Outgoing(offset) => offset as usize,
         }
     }
+
+    /// Returns the opposite port offset.
+    ///
+    /// This maps `PortOffset::Incoming(x)` to `PortOffset::Outgoing(x)` and
+    /// vice versa.
+    #[inline(always)]
+    pub fn opposite(&self) -> Self {
+        match *self {
+            PortOffset::Incoming(idx) => PortOffset::Outgoing(idx),
+            PortOffset::Outgoing(idx) => PortOffset::Incoming(idx),
+        }
+    }
 }
 
 impl Default for PortOffset {

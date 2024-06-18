@@ -396,3 +396,17 @@ impl std::fmt::Debug for PortOffset {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_opposite() {
+        let incoming = PortOffset::Incoming(5);
+        let outgoing = PortOffset::Outgoing(5);
+
+        assert_eq!(incoming.opposite(), outgoing);
+        assert_eq!(outgoing.opposite(), incoming);
+    }
+}

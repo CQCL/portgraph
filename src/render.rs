@@ -142,3 +142,168 @@ impl EdgeStyle {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use std::fmt::Display;
+
+    use rstest::{fixture, rstest};
+
+    use crate::{Hierarchy, LinkMut, PortGraph, PortMut, PortView, Weights};
+
+    use super::{DotFormat, MermaidFormat};
+
+    /// A simple flat graph with some nodes and edges.
+    #[fixture]
+    fn flat_graph() -> (
+        &'static str,
+        PortGraph,
+        Option<Hierarchy>,
+        Option<Weights<String, String>>,
+    ) {
+        let mut graph = PortGraph::new();
+        let n1 = graph.add_node(3, 2);
+        let n2 = graph.add_node(1, 0);
+        let n3 = graph.add_node(1, 0);
+        graph.link_nodes(n1, 0, n2, 0).unwrap();
+        graph.link_nodes(n1, 1, n3, 0).unwrap();
+        ("flat", graph, None, None)
+    }
+
+    #[fixture]
+    fn hierarchy_graph() -> (
+        &'static str,
+        PortGraph,
+        Option<Hierarchy>,
+        Option<Weights<String, String>>,
+    ) {
+        let mut graph = PortGraph::new();
+        let n1 = graph.add_node(3, 2);
+        let n2 = graph.add_node(0, 1);
+        let n3 = graph.add_node(1, 0);
+        graph.link_nodes(n2, 0, n3, 0).unwrap();
+
+        let mut hier = Hierarchy::new();
+        hier.push_child(n2, n1).unwrap();
+        hier.push_child(n3, n1).unwrap();
+
+        ("hierarchy", graph, Some(hier), None)
+    }
+
+    /// A hierarchical graph with edges between different regions.
+    #[fixture]
+    fn hierarchy_interregional_graph() -> (
+        &'static str,
+        PortGraph,
+        Option<Hierarchy>,
+        Option<Weights<String, String>>,
+    ) {
+        let mut graph = PortGraph::new();
+        let n1 = graph.add_node(3, 2);
+        let n2 = graph.add_node(0, 1);
+        let n3 = graph.add_node(1, 0);
+        let n4 = graph.add_node(1, 1);
+        let n5 = graph.add_node(1, 1);
+        graph.link_nodes(n2, 0, n3, 0).unwrap();
+        graph.link_nodes(n4, 0, n5, 0).unwrap();
+
+        let mut hier = Hierarchy::new();
+        hier.push_child(n2, n1).unwrap();
+        hier.push_child(n3, n1).unwrap();
+        hier.push_child(n4, n2).unwrap();
+        hier.push_child(n5, n3).unwrap();
+
+        ("hierarchy_interregional", graph, Some(hier), None)
+    }
+
+    #[fixture]
+    fn weighted_graph() -> (
+        &'static str,
+        PortGraph,
+        Option<Hierarchy>,
+        Option<Weights<String, String>>,
+    ) {
+        let mut graph = PortGraph::new();
+        let n1 = graph.add_node(0, 2);
+        let n2 = graph.add_node(1, 0);
+        let n3 = graph.add_node(1, 0);
+        let p10 = graph.output(n1, 0).unwrap();
+        let p11 = graph.output(n1, 1).unwrap();
+        let p20 = graph.input(n2, 0).unwrap();
+        let p30 = graph.input(n3, 0).unwrap();
+
+        graph.link_ports(p10, p20).unwrap();
+        graph.link_ports(p11, p30).unwrap();
+
+        let mut weights = Weights::new();
+        weights[n1] = "node1".to_string();
+        weights[n2] = "node2".to_string();
+        weights[n3] = "node3".to_string();
+        weights[p10] = "out 0".to_string();
+        weights[p11] = "out 1".to_string();
+        weights[p20] = "in 0".to_string();
+        weights[p30] = "in 0".to_string();
+
+        ("weighted", graph, None, Some(weights))
+    }
+
+    #[rstest]
+    #[case::flat(flat_graph())]
+    #[case::hierarchy(hierarchy_graph())]
+    #[case::interregional(hierarchy_interregional_graph())]
+    #[case::weighted(weighted_graph())]
+    #[cfg_attr(miri, ignore)] // Opening files is not supported in (isolated) miri
+    fn mermaid_output<WN: Display + Clone, WP>(
+        #[case] graph_elems: (
+            &str,
+            impl MermaidFormat,
+            Option<Hierarchy>,
+            Option<Weights<WN, WP>>,
+        ),
+    ) {
+        let (name, graph, hierarchy, weights) = graph_elems;
+        let mermaid = match (hierarchy, weights) {
+            (Some(h), Some(w)) => graph
+                .mermaid_format()
+                .with_hierarchy(&h)
+                .with_weights(&w)
+                .finish(),
+            (Some(h), None) => graph.mermaid_format().with_hierarchy(&h).finish(),
+            (None, Some(w)) => graph.mermaid_format().with_weights(&w).finish(),
+            (None, None) => graph.mermaid_string(),
+        };
+
+        let name = format!("{}__mermaid", name);
+        insta::assert_snapshot!(name, mermaid);
+    }
+
+    #[rstest]
+    #[case::flat(flat_graph())]
+    #[case::hierarchy(hierarchy_graph())]
+    #[case::interregional(hierarchy_interregional_graph())]
+    #[case::weighted(weighted_graph())]
+    #[cfg_attr(miri, ignore)] // Opening files is not supported in (isolated) miri
+    fn dot_output<WN: Display + Clone, WP: Display + Clone>(
+        #[case] graph_elems: (
+            &str,
+            impl DotFormat,
+            Option<Hierarchy>,
+            Option<Weights<WN, WP>>,
+        ),
+    ) {
+        let (name, graph, hierarchy, weights) = graph_elems;
+        let dot = match (hierarchy, weights) {
+            (Some(h), Some(w)) => graph
+                .dot_format()
+                .with_hierarchy(&h)
+                .with_weights(&w)
+                .finish(),
+            (Some(h), None) => graph.dot_format().with_hierarchy(&h).finish(),
+            (None, Some(w)) => graph.dot_format().with_weights(&w).finish(),
+            (None, None) => graph.dot_string(),
+        };
+
+        let name = format!("{}__dot", name);
+        insta::assert_snapshot!(name, dot);
+    }
+}

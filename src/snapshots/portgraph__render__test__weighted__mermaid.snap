@@ -1,0 +1,10 @@
+---
+source: src/render.rs
+expression: mermaid
+---
+graph LR
+    0["node1"]
+    0-->1
+    0-->2
+    1["node2"]
+    2["node3"]

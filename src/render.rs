@@ -252,6 +252,7 @@ mod test {
     #[case::hierarchy(hierarchy_graph())]
     #[case::interregional(hierarchy_interregional_graph())]
     #[case::weighted(weighted_graph())]
+    #[cfg_attr(miri, ignore)] // Opening files is not supported in (isolated) miri
     fn mermaid_output<WN: Display + Clone, WP>(
         #[case] graph_elems: (
             &str,
@@ -281,6 +282,7 @@ mod test {
     #[case::hierarchy(hierarchy_graph())]
     #[case::interregional(hierarchy_interregional_graph())]
     #[case::weighted(weighted_graph())]
+    #[cfg_attr(miri, ignore)] // Opening files is not supported in (isolated) miri
     fn dot_output<WN: Display + Clone, WP: Display + Clone>(
         #[case] graph_elems: (
             &str,

@@ -8,11 +8,11 @@ graph LR
         subgraph 1 [1]
             direction LR
             3[3]
-            3-->4
         end
-        1-->2
         subgraph 2 [2]
             direction LR
             4[4]
         end
+        1-->2
+        3-->4
     end

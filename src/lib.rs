@@ -94,7 +94,7 @@ pub use crate::view::{LinkMut, LinkView, MultiMut, MultiView, PortMut, PortView}
 pub use crate::weights::Weights;
 
 /// Direction of a port.
-#[cfg_attr(feature = "pyo3", pyclass)]
+#[cfg_attr(feature = "pyo3", pyclass(eq, eq_int))]
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Eq, Ord, Hash, Default)]
 pub enum Direction {
     /// Input to a node.

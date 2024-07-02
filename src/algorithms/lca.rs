@@ -1,5 +1,7 @@
 //! Lowest common ancestor algorithm on hierarchy forests.
 
+use itertools::Itertools;
+
 use crate::{Hierarchy, NodeIndex, PortView, UnmanagedDenseMap};
 
 /// Constructs a data structure that allows efficient queries of the lowest
@@ -137,20 +139,12 @@ impl LCA {
         //
         // Invariant: `u` is an ancestor of `a` (or `a`), but not an ancestor of `b`.
         //
-        // We start by searching a `u` where the last ancestor in the climb nodes
-        // is an ancestor of `b`.
-        let mut u = a;
-        loop {
-            let Some(&last_climb) = self.climb_nodes[u].last() else {
-                // We reached a root, and it is not an ancestor of `b`.
-                return None;
-            };
-            if self.is_ancestor(last_climb, b) {
-                // We found a `u` where the last ancestor is an ancestor of `b`.
-                break;
-            }
-            u = last_climb;
-        }
+        // Find a `u` where the last ancestor is an ancestor of `b`.
+        let mut u = itertools::iterate(Some(a), |u| {
+            u.and_then(|u| self.climb_nodes[u].last().copied())
+        })
+        .take_while(|u| u.is_some_and(|u| !self.is_ancestor(u, b)))
+        .last()??;
 
         // Invariant: The 2^i ancestor of `u` is an ancestor of `b`.
         //

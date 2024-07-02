@@ -1,7 +1,5 @@
 //! Lowest common ancestor algorithm on hierarchy forests.
 
-use itertools::Itertools;
-
 use crate::{Hierarchy, NodeIndex, PortView, UnmanagedDenseMap};
 
 /// Constructs a data structure that allows efficient queries of the lowest
@@ -136,7 +134,11 @@ impl LCA {
         }
 
         // Search the ancestors of `a` to find the lowest common ancestor with `b`.
+        // We start by finding an ancestor of `a` that is not an ancestor of `b`,
+        // but has an ancestor in its climb nodes. We call this node `u`.
         //
+        // Once we find this, we can do binary search on the nodes to find the LCA.
+
         // Invariant: `u` is an ancestor of `a` (or `a`), but not an ancestor of `b`.
         //
         // Find a `u` where the last ancestor is an ancestor of `b`.
@@ -148,17 +150,19 @@ impl LCA {
 
         // Invariant: The 2^i ancestor of `u` is an ancestor of `b`.
         //
-        // We search the ancestors of a, each time decreasing `i`.
+        // Do a binary search on the ancestors to find the LCA.
+        // On each iteration, we start by knowing that the LCA is in the `2^i` ancestors of `u`.
+        // We then decrement `i` and update `u` if needed.
         let mut i = self.climb_nodes[u].len() - 1;
         while i > 0 {
             i -= 1;
-            // The 2^i ancestor of `u`.
+            // The updated 2^i ancestor of `u`. This is the middle point of the binary search.
             let v = self.climb_nodes[u][i];
             if !self.is_ancestor(v, b) {
-                // The 2^i ancestor is not an ancestor of `b`.
-                // Lets update `u`.
+                // The 2^i ancestor of `u` is not an ancestor of `b` so the LCA must be between
+                // the 2^i and 2^{i+1} ancestor of `u`. Hence update `u` to the 2^i ancestor.
                 u = v;
-                // Decrease `i`, and ensure it is within bounds.
+                // Ensure `i` is within bounds.
                 i = i.max(self.climb_nodes[u].len() - 1);
             }
         }

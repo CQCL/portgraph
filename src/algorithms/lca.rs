@@ -64,16 +64,15 @@ impl LCA {
 
                         // Compute the climb nodes.
                         // That is, the 1st, 2nd, 4th, 8th, ... ancestor.
-                        if let Some(parent) = parent {
-                            let mut climb = vec![parent];
-                            let mut prev = parent;
-                            for i in 1.. {
-                                let Some(&u) = lca.climb_nodes[prev].get(i - 1) else {
-                                    break;
-                                };
-                                climb.push(u);
-                                prev = u;
-                            }
+                        let climb: Vec<NodeIndex> = (0..)
+                            .scan(parent, |prev, i| {
+                                // The 2^i ancestor of `node`.
+                                let ith_parent = (*prev)?;
+                                *prev = lca.climb_nodes[ith_parent].get(i).copied();
+                                Some(ith_parent)
+                            })
+                            .collect();
+                        if !climb.is_empty() {
                             lca.climb_nodes[node] = climb;
                         }
 

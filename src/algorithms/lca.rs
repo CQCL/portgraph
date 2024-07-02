@@ -46,6 +46,9 @@ impl LCA {
         let mut timestamp = 0;
         let mut stack = vec![];
         for root in graph.nodes_iter() {
+            // We start with an empty stack
+            debug_assert!(stack.is_empty());
+
             if !hierarchy.is_root(root) {
                 continue;
             }

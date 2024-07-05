@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.12.2](https://github.com/CQCL/portgraph/compare/v0.12.1...v0.12.2) - 2024-07-05
+
+### Bug Fixes
+- Intergraph edges in mermaid rendering ([#139](https://github.com/CQCL/portgraph/pull/139))
+
+### New Features
+- Add PortOffset::opposite ([#136](https://github.com/CQCL/portgraph/pull/136))
+- Efficient LCA algorithm for the hierarchy ([#138](https://github.com/CQCL/portgraph/pull/138))
+
+### Testing
+- Use `insta` for mermaid/dot render tests ([#137](https://github.com/CQCL/portgraph/pull/137))
+
 ## [0.12.1](https://github.com/CQCL/portgraph/compare/v0.12.0...v0.12.1) - 2024-06-03
 
 ### Bug Fixes

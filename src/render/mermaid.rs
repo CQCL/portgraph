@@ -1,7 +1,9 @@
 //! Functions to encode a `PortGraph` in mermaid format.
 
+use std::collections::HashMap;
 use std::fmt::Display;
 
+use crate::algorithms::{lca, LCA};
 use crate::{Hierarchy, LinkView, NodeIndex, Weights};
 
 use super::{EdgeStyle, NodeStyle};
@@ -92,31 +94,76 @@ where
         let mut mermaid = MermaidBuilder::init(self.node_style.take(), self.edge_style.take());
 
         // Explore the hierarchy from the root nodes, and add the nodes and edges to the mermaid definition.
-        for root in self.graph.nodes_iter().filter(|n| self.is_root(*n)) {
-            self.explore_node(&mut mermaid, root);
-        }
+        self.explore_forest(&mut mermaid);
 
         mermaid.finish()
     }
 
-    /// Encode the nodes, starting from a set of roots.
-    fn explore_node(&self, mmd: &mut MermaidBuilder<'g, G>, node: NodeIndex) {
-        if self.is_leaf(node) {
-            mmd.add_leaf(node);
-        } else {
-            mmd.start_subgraph(node);
-            for child in self
-                .forest
-                .map_or_else(Vec::new, |f| f.children(node).collect())
-            {
-                self.explore_node(mmd, child);
-            }
-            mmd.end_subgraph();
+    /// Visit each tree of nodes and encode them in the mermaid format.
+    fn explore_forest(&self, mmd: &mut MermaidBuilder<'g, G>) {
+        // A stack of exploration steps to take.
+        let mut exploration_stack: Vec<ExplorationStep> = Vec::new();
+
+        // Add all the root nodes in the hierarchy to the stack.
+        for root in self.graph.nodes_iter().filter(|n| self.is_root(*n)) {
+            exploration_stack.push(ExplorationStep::ExploreNode { node: root });
         }
-        for (src, tgt) in self.graph.output_links(node) {
-            let src_node = self.graph.port_node(src).unwrap();
-            let tgt_node = self.graph.port_node(tgt).unwrap();
-            mmd.add_link(src_node, src, tgt_node, tgt);
+
+        // Delay emitting edges until we are in a region that is the parent of both the source and target nodes.
+        #[allow(clippy::type_complexity)]
+        let mut edges: HashMap<
+            Option<NodeIndex>,
+            Vec<(NodeIndex, G::LinkEndpoint, NodeIndex, G::LinkEndpoint)>,
+        > = HashMap::new();
+
+        // An efficient structure for retrieving the lowest common ancestor of two nodes.
+        let lca: Option<LCA> = self.forest.map(|f| lca(self.graph, f));
+
+        while let Some(instr) = exploration_stack.pop() {
+            match instr {
+                ExplorationStep::ExploreNode { node } => {
+                    if self.is_leaf(node) {
+                        mmd.add_leaf(node);
+                    } else {
+                        mmd.start_subgraph(node);
+
+                        // Add the descendants and an exit instruction to the
+                        // stack, in reverse order.
+                        exploration_stack.push(ExplorationStep::ExitSubgraph { subgraph: node });
+                        for child in self.node_children(node).rev() {
+                            exploration_stack.push(ExplorationStep::ExploreNode { node: child });
+                        }
+                    }
+
+                    // Add the edges originating from this node to the edge list.
+                    // They will be added once we reach a region that is the parent of both nodes.
+                    for (src, tgt) in self.graph.output_links(node) {
+                        let src_node = self.graph.port_node(src).unwrap();
+                        let tgt_node = self.graph.port_node(tgt).unwrap();
+                        let lca = lca.as_ref().and_then(|l| l.lca(src_node, tgt_node));
+                        edges
+                            .entry(lca)
+                            .or_insert_with(Vec::new)
+                            .push((src_node, src, tgt_node, tgt));
+                    }
+                }
+                ExplorationStep::ExitSubgraph { subgraph } => {
+                    if let Some(es) = edges.remove(&Some(subgraph)) {
+                        for (src_node, src, tgt_node, tgt) in es {
+                            mmd.add_link(src_node, src, tgt_node, tgt);
+                        }
+                    }
+
+                    mmd.end_subgraph();
+                }
+            }
+        }
+
+        // Add any remaining edges that were not added to the mermaid definition.
+        for (_, es) in edges {
+            for (src_node, src, tgt_node, tgt) in es {
+                mmd.add_link(src_node, src, tgt_node, tgt);
+            }
         }
     }
 
@@ -129,6 +176,19 @@ where
     fn is_leaf(&self, node: NodeIndex) -> bool {
         self.forest.map_or(true, |f| !f.has_children(node))
     }
+
+    /// Returns the children of a node in the hierarchy.
+    fn node_children(&self, node: NodeIndex) -> impl DoubleEndedIterator<Item = NodeIndex> + '_ {
+        self.forest.iter().flat_map(move |f| f.children(node))
+    }
+}
+
+/// A set of instructions to queue while exploring hierarchical graphs in [`MermaidFormatter::explore_tree`].
+enum ExplorationStep {
+    /// Explore a new node and its children.
+    ExploreNode { node: NodeIndex },
+    /// Finish the current subgraph, and continue with the parent node.
+    ExitSubgraph { subgraph: NodeIndex },
 }
 
 /// A trait for encoding a graph in mermaid format.

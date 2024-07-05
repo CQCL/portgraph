@@ -6,6 +6,6 @@ graph LR
     subgraph 0 [0]
         direction LR
         1[1]
-        1-->2
         2[2]
+        1-->2
     end

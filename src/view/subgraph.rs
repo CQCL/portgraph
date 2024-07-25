@@ -67,7 +67,7 @@ where
     ///
     /// - `graph`: the graph to take a subgraph from,
     /// - `boundary`: the boundary ports. Incoming ports are incoming boundary edges,
-    /// and outgoing ports are outgoing boundary edges.
+    ///   and outgoing ports are outgoing boundary edges.
     ///
     /// This initialisation is linear in the size of the subgraph.
     pub fn new_subgraph(graph: G, boundary: impl IntoIterator<Item = PortIndex>) -> Self {

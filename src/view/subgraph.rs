@@ -74,12 +74,11 @@ where
         let mut inputs = Vec::new();
         let mut outputs = Vec::new();
 
-        let boundary = boundary.into_iter().map(|p| {
+        let boundary = boundary.into_iter().inspect(|&p| {
             match graph.port_direction(p).unwrap() {
                 Direction::Incoming => inputs.push(p),
                 Direction::Outgoing => outputs.push(p),
             };
-            p
         });
 
         let (nodes, ports) = traverse_subgraph(graph.clone(), boundary);

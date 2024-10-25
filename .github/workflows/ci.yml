@@ -105,6 +105,13 @@ jobs:
         run: cargo test --verbose --all-features --no-run
       - name: Tests with all features
         run: cargo test --verbose --all-features
+  
+  rs-semver-checks:
+    needs: [check]
+    if: ${{ github.event_name == 'pull_request' }}
+    uses: CQCL/hugrverse-actions/.github/workflows/rs-semver-checks.yml@main
+    secrets:
+      GITHUB_PAT: ${{ secrets.HUGRBOT_PAT }}
 
   coverage:
     if: github.event_name != 'merge_group'

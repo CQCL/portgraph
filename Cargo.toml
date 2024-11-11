@@ -20,7 +20,7 @@ name = "portgraph"
 path = "src/lib.rs"
 
 [dependencies]
-thiserror = "1.0.28"
+thiserror = "2.0.3"
 pyo3 = { version = "0.22", optional = true, features = ["multiple-pymethods"] }
 bitvec = "1.0.1"
 serde = { version = "1.0.152", features = ["derive"], optional = true }

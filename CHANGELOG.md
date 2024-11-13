@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.12.3](https://github.com/CQCL/portgraph/compare/v0.12.2...v0.12.3) - 2024-11-13
+
+### New Features
+
+- Fastpath for `is_node_convex` on a single node ([#153](https://github.com/CQCL/portgraph/pull/153))
+
 ## [0.12.2](https://github.com/CQCL/portgraph/compare/v0.12.1...v0.12.2) - 2024-07-05
 
 ### Bug Fixes

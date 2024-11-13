@@ -11,6 +11,135 @@ use crate::{
 };
 use crate::{NodeIndex, PortIndex, PortOffset};
 
+/// Iterator methods for [`PortGraph`] with concrete return types.
+///
+/// Used internally by other iterator implementations to avoid the generic RPITIT return types.
+impl PortGraph {
+    /// Iterates over all the ports of the `node` in the given `direction`.
+    pub fn _ports(&self, node: NodeIndex, direction: Direction) -> NodePorts {
+        match self.node_meta_valid(node) {
+            Some(node_meta) => NodePorts {
+                indices: node_meta.ports(direction),
+            },
+            None => NodePorts::default(),
+        }
+    }
+
+    /// Iterates over all the input ports of the `node`.
+    ///
+    /// Shorthand for [`PortView::ports`].
+    #[must_use]
+    #[inline]
+    pub fn _inputs(&self, node: NodeIndex) -> NodePorts {
+        self._ports(node, Direction::Incoming)
+    }
+
+    /// Iterates over all the output ports of the `node`.
+    ///
+    /// Shorthand for [`PortView::ports`].
+    #[must_use]
+    #[inline]
+    pub fn _outputs(&self, node: NodeIndex) -> NodePorts {
+        self._ports(node, Direction::Outgoing)
+    }
+
+    /// Iterates over the input and output ports of the `node` in sequence.
+    pub fn _all_ports(&self, node: NodeIndex) -> NodePorts {
+        match self.node_meta_valid(node) {
+            Some(node_meta) => NodePorts {
+                indices: node_meta.all_ports(),
+            },
+            None => NodePorts::default(),
+        }
+    }
+
+    /// Iterates over all the port offsets of the `node` in the given `direction`.
+    pub fn _port_offsets(&self, node: NodeIndex, direction: Direction) -> NodePortOffsets {
+        match direction {
+            Direction::Incoming => NodePortOffsets {
+                incoming: 0..self.num_inputs(node) as u16,
+                outgoing: 0..0,
+            },
+            Direction::Outgoing => NodePortOffsets {
+                incoming: 0..0,
+                outgoing: 0..self.num_outputs(node) as u32,
+            },
+        }
+    }
+
+    /// Iterates over the input and output port offsets of the `node` in sequence.
+    #[inline]
+    pub fn _all_port_offsets(&self, node: NodeIndex) -> NodePortOffsets {
+        NodePortOffsets {
+            incoming: 0..self.num_inputs(node) as u16,
+            outgoing: 0..self.num_outputs(node) as u32,
+        }
+    }
+
+    /// Iterates over the nodes in the port graph.
+    #[inline]
+    pub fn _nodes_iter(&self) -> Nodes {
+        Nodes {
+            iter: self.node_meta.iter().enumerate(),
+            len: self.node_count,
+        }
+    }
+
+    /// Iterates over the ports in the port graph.
+    #[inline]
+    pub fn _ports_iter(&self) -> Ports {
+        Ports {
+            iter: self.port_meta.iter().enumerate(),
+            len: self.port_count,
+        }
+    }
+
+    /// Returns an iterator over every pair of matching ports connecting `from`
+    /// with `to`.
+    #[inline]
+    pub fn _get_connections(&self, from: NodeIndex, to: NodeIndex) -> NodeConnections {
+        NodeConnections::new(self, to, self._links(from, Direction::Outgoing))
+    }
+
+    /// Iterates over the connected links of the `node` in the given
+    /// `direction`.
+    pub fn _links(&self, node: NodeIndex, direction: Direction) -> NodeLinks {
+        let Some(node_meta) = self.node_meta_valid(node) else {
+            return NodeLinks::new(self._ports(node, direction), &[], 0..0);
+        };
+        let indices = node_meta.ports(direction);
+        NodeLinks::new(self._ports(node, direction), &self.port_link[indices], 0..0)
+    }
+
+    /// Iterates over the connected input and output links of the `node` in sequence.
+    pub fn _all_links(&self, node: NodeIndex) -> NodeLinks {
+        let Some(node_meta) = self.node_meta_valid(node) else {
+            return NodeLinks::new(self._all_ports(node), &[], 0..0);
+        };
+        let indices = node_meta.all_ports();
+        // Ignore links where the target is one of the node's output ports.
+        // This way we only count self-links once.
+        NodeLinks::new(
+            self._all_ports(node),
+            &self.port_link[indices],
+            node_meta.outgoing_ports(),
+        )
+    }
+
+    /// Iterates over neighbour nodes in the given `direction`.
+    /// May contain duplicates if the graph has multiple links between nodes.
+    #[inline]
+    pub fn _neighbours(&self, node: NodeIndex, direction: Direction) -> Neighbours {
+        Neighbours::from_node_links(self, self._links(node, direction))
+    }
+
+    /// Iterates over the input and output neighbours of the `node` in sequence.
+    #[inline]
+    pub fn _all_neighbours(&self, node: NodeIndex) -> Neighbours {
+        Neighbours::from_node_links(self, self._all_links(node))
+    }
+}
+
 /// Iterator over the ports of a node.
 /// See [`PortGraph::inputs`], [`PortGraph::outputs`], and [`PortGraph::all_ports`].
 #[derive(Debug, Clone, Default)]

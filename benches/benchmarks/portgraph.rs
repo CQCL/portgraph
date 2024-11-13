@@ -5,6 +5,7 @@ use super::generators::*;
 use criterion::{
     black_box, criterion_group, AxisScale, BatchSize, BenchmarkId, Criterion, PlotConfiguration,
 };
+use itertools::Itertools;
 use portgraph::{PortGraph, PortMut, PortView};
 
 /// Remove one every five nodes from the graph.
@@ -27,13 +28,20 @@ fn remove_all_unordered(graph: &mut PortGraph) {
     }
     // Remove all remaining nodes
     while graph.node_count() > 0 {
-        graph.remove_node(graph.nodes_iter().next().unwrap());
+        let next = graph.nodes_iter().next().unwrap();
+        graph.remove_node(next);
     }
 }
 
 /// Adds or removes one port from an arbitrary node, `amount` times.
 fn resize_ports(graph: &mut PortGraph, amount: usize) {
-    let nodes = graph.nodes_iter().cycle().take(amount).collect::<Vec<_>>();
+    let nodes = graph
+        .nodes_iter()
+        .collect_vec()
+        .into_iter()
+        .cycle()
+        .take(amount)
+        .collect::<Vec<_>>();
     for (i, node) in nodes.iter().copied().enumerate() {
         let mut inputs = graph.num_inputs(node);
         let mut outputs = graph.num_outputs(node);

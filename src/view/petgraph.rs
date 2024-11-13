@@ -6,7 +6,7 @@ use bitvec::vec::BitVec;
 
 use crate::multiportgraph::MultiPortGraph;
 use crate::view::filter::{NodeFilter, NodeFiltered};
-use crate::{LinkView, NodeIndex, PortGraph, PortView, SecondaryMap};
+use crate::{LinkView, NodeIndex, PortGraph, PortIndex, PortView, SecondaryMap};
 
 impl From<petgraph::Direction> for crate::Direction {
     fn from(d: petgraph::Direction) -> Self {
@@ -95,39 +95,39 @@ macro_rules! impl_petgraph_traits {
         }
 
         impl<'g, $($args)*> petgraph::visit::IntoNodeIdentifiers for &'g $graph where $($where)* {
-            type NodeIdentifiers = <$graph as PortView>::Nodes<'g>;
+            type NodeIdentifiers = Box<dyn Iterator<Item = NodeIndex> + 'g>;
 
             fn node_identifiers(self) -> Self::NodeIdentifiers {
-                self.nodes_iter()
+                Box::new(self.nodes_iter())
             }
         }
 
         impl<'g, $($args)*> petgraph::visit::IntoNodeReferences for &'g $graph where $($where)* {
             type NodeRef = NodeIndex;
-            type NodeReferences = <$graph as PortView>::Nodes<'g>;
+            type NodeReferences = Box<dyn Iterator<Item = NodeIndex> + 'g>;
 
             fn node_references(self) -> Self::NodeReferences {
-                self.nodes_iter()
+                Box::new(self.nodes_iter())
             }
         }
 
         impl<'g, $($args)*> petgraph::visit::IntoNeighbors for &'g $graph where $($where)* {
-            type Neighbors = <$graph as LinkView>::Neighbours<'g>;
+            type Neighbors = Box<dyn Iterator<Item = NodeIndex> + 'g>;
 
             fn neighbors(self, n: Self::NodeId) -> Self::Neighbors {
-                self.output_neighbours(n)
+                Box::new(self.output_neighbours(n))
             }
         }
 
         impl<'g, $($args)*> petgraph::visit::IntoNeighborsDirected for &'g $graph where $($where)* {
-            type NeighborsDirected = <$graph as LinkView>::Neighbours<'g>;
+            type NeighborsDirected = Box<dyn Iterator<Item = NodeIndex> + 'g>;
 
             fn neighbors_directed(
                 self,
                 n: Self::NodeId,
                 d: petgraph::Direction,
             ) -> Self::NeighborsDirected {
-                self.neighbours(n, d.into())
+                Box::new(self.neighbours(n, d.into()))
             }
         }
 
@@ -325,8 +325,9 @@ where
 /// Used for compatibility with petgraph.
 pub struct EdgeRefs<'g, G: LinkView> {
     graph: &'g G,
-    ports: G::Ports<'g>,
-    links: Option<G::PortLinks<'g>>,
+    ports: Box<dyn Iterator<Item = PortIndex> + 'g>,
+    #[allow(clippy::type_complexity)]
+    links: Option<Box<dyn Iterator<Item = (G::LinkEndpoint, G::LinkEndpoint)> + 'g>>,
     count: usize,
 }
 
@@ -338,7 +339,7 @@ where
     pub fn new(graph: &'g G) -> Self {
         Self {
             graph,
-            ports: graph.ports_iter(),
+            ports: Box::new(graph.ports_iter()),
             links: None,
             count: graph.link_count(),
         }
@@ -362,7 +363,7 @@ where
             }
 
             let port = self.ports.next()?;
-            self.links = Some(self.graph.port_links(port));
+            self.links = Some(Box::new(self.graph.port_links(port)));
         }
     }
 
@@ -394,7 +395,7 @@ impl<G: LinkView> FusedIterator for EdgeRefs<'_, G> {}
 /// Used for compatibility with petgraph.
 pub struct NodeEdgeRefs<'g, G: LinkView> {
     graph: &'g G,
-    links: G::NodeLinks<'g>,
+    links: Box<dyn Iterator<Item = (G::LinkEndpoint, G::LinkEndpoint)> + 'g>,
 }
 
 impl<'g, G> NodeEdgeRefs<'g, G>
@@ -405,7 +406,7 @@ where
     pub fn new(graph: &'g G, node: NodeIndex) -> Self {
         Self {
             graph,
-            links: graph.all_links(node),
+            links: Box::new(graph.all_links(node)),
         }
     }
 
@@ -413,7 +414,7 @@ where
     pub fn new_directed(graph: &'g G, node: NodeIndex, dir: crate::Direction) -> Self {
         Self {
             graph,
-            links: graph.links(node, dir),
+            links: Box::new(graph.links(node, dir)),
         }
     }
 }
@@ -446,15 +447,3 @@ where
         self.links.size_hint()
     }
 }
-
-impl<'g, G: LinkView> ExactSizeIterator for NodeEdgeRefs<'g, G>
-where
-    G::NodeLinks<'g>: ExactSizeIterator,
-{
-    #[inline]
-    fn len(&self) -> usize {
-        self.links.len()
-    }
-}
-
-impl<'g, G: LinkView> FusedIterator for NodeEdgeRefs<'g, G> where G::NodeLinks<'g>: FusedIterator {}

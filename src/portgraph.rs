@@ -255,9 +255,9 @@ impl PortGraph {
 
         // Disconnect any port to be removed.
         for port in self
-            .inputs(node)
+            ._inputs(node)
             .skip(incoming)
-            .chain(self.outputs(node).skip(outgoing))
+            .chain(self._outputs(node).skip(outgoing))
         {
             let old_link = self.unlink_port(port);
             rekey(port, PortOperation::Removed { old_link });
@@ -315,22 +315,6 @@ impl PortGraph {
 }
 
 impl PortView for PortGraph {
-    type Nodes<'a> = Nodes<'a>
-    where
-        Self: 'a;
-
-    type Ports<'a> = Ports<'a>
-    where
-        Self: 'a;
-
-    type NodePorts<'a> = NodePorts
-    where
-        Self: 'a;
-
-    type NodePortOffsets<'a> = NodePortOffsets
-    where
-        Self: 'a;
-
     #[inline]
     fn port_direction(&self, port: impl Into<PortIndex>) -> Option<Direction> {
         Some(self.port_meta_valid(port.into())?.direction())
@@ -368,22 +352,12 @@ impl PortView for PortGraph {
         node_meta.ports(direction).nth(offset).map(PortIndex::new)
     }
 
-    fn ports(&self, node: NodeIndex, direction: Direction) -> Self::NodePorts<'_> {
-        match self.node_meta_valid(node) {
-            Some(node_meta) => NodePorts {
-                indices: node_meta.ports(direction),
-            },
-            None => NodePorts::default(),
-        }
+    fn ports(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortIndex> {
+        self._ports(node, direction)
     }
 
-    fn all_ports(&self, node: NodeIndex) -> Self::NodePorts<'_> {
-        match self.node_meta_valid(node) {
-            Some(node_meta) => NodePorts {
-                indices: node_meta.all_ports(),
-            },
-            None => NodePorts::default(),
-        }
+    fn all_ports(&self, node: NodeIndex) -> impl Iterator<Item = PortIndex> {
+        self._all_ports(node)
     }
 
     #[inline]
@@ -407,25 +381,17 @@ impl PortView for PortGraph {
         }
     }
 
-    fn port_offsets(&self, node: NodeIndex, direction: Direction) -> Self::NodePortOffsets<'_> {
-        match direction {
-            Direction::Incoming => NodePortOffsets {
-                incoming: 0..self.num_inputs(node) as u16,
-                outgoing: 0..0,
-            },
-            Direction::Outgoing => NodePortOffsets {
-                incoming: 0..0,
-                outgoing: 0..self.num_outputs(node) as u32,
-            },
-        }
+    fn port_offsets(
+        &self,
+        node: NodeIndex,
+        direction: Direction,
+    ) -> impl Iterator<Item = PortOffset> {
+        self._port_offsets(node, direction)
     }
 
     #[inline]
-    fn all_port_offsets(&self, node: NodeIndex) -> Self::NodePortOffsets<'_> {
-        NodePortOffsets {
-            incoming: 0..self.num_inputs(node) as u16,
-            outgoing: 0..self.num_outputs(node) as u32,
-        }
+    fn all_port_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset> {
+        self._all_port_offsets(node)
     }
 
     #[inline]
@@ -454,19 +420,13 @@ impl PortView for PortGraph {
     }
 
     #[inline]
-    fn nodes_iter(&self) -> Self::Nodes<'_> {
-        Nodes {
-            iter: self.node_meta.iter().enumerate(),
-            len: self.node_count,
-        }
+    fn nodes_iter(&self) -> impl Iterator<Item = NodeIndex> {
+        self._nodes_iter()
     }
 
     #[inline]
-    fn ports_iter(&self) -> Self::Ports<'_> {
-        Ports {
-            iter: self.port_meta.iter().enumerate(),
-            len: self.port_count,
-        }
+    fn ports_iter(&self) -> impl Iterator<Item = PortIndex> {
+        self._ports_iter()
     }
 
     #[inline]
@@ -588,9 +548,9 @@ impl PortMut for PortGraph {
 
         // Disconnect any port to be removed.
         for port in self
-            .inputs(node)
+            ._inputs(node)
             .skip(incoming)
-            .chain(self.outputs(node).skip(outgoing))
+            .chain(self._outputs(node).skip(outgoing))
         {
             let old_link = self.unlink_port(port);
             rekey(port, PortOperation::Removed { old_link });
@@ -764,28 +724,16 @@ impl PortMut for PortGraph {
 impl LinkView for PortGraph {
     type LinkEndpoint = PortIndex;
 
-    type Neighbours<'a> = Neighbours<'a>
-    where
-        Self: 'a;
-
-    type NodeConnections<'a> = NodeConnections<'a>
-    where
-        Self: 'a;
-
-    type NodeLinks<'a> = NodeLinks<'a>
-    where
-        Self: 'a;
-
-    type PortLinks<'a> = std::iter::Once<(PortIndex, PortIndex)>
-    where
-        Self: 'a;
-
     #[inline]
-    fn get_connections(&self, from: NodeIndex, to: NodeIndex) -> Self::NodeConnections<'_> {
-        NodeConnections::new(self, to, self.output_links(from))
+    fn get_connections(
+        &self,
+        from: NodeIndex,
+        to: NodeIndex,
+    ) -> impl Iterator<Item = (PortIndex, PortIndex)> {
+        self._get_connections(from, to)
     }
 
-    fn port_links(&self, port: PortIndex) -> Self::PortLinks<'_> {
+    fn port_links(&self, port: PortIndex) -> impl Iterator<Item = (PortIndex, PortIndex)> {
         self.port_meta_valid(port).unwrap();
         match self.port_link[port.index()] {
             Some(link) => std::iter::once((port, link)),
@@ -797,36 +745,29 @@ impl LinkView for PortGraph {
         }
     }
 
-    fn links(&self, node: NodeIndex, direction: Direction) -> Self::NodeLinks<'_> {
-        let Some(node_meta) = self.node_meta_valid(node) else {
-            return NodeLinks::new(self.ports(node, direction), &[], 0..0);
-        };
-        let indices = node_meta.ports(direction);
-        NodeLinks::new(self.ports(node, direction), &self.port_link[indices], 0..0)
+    fn links(
+        &self,
+        node: NodeIndex,
+        direction: Direction,
+    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> {
+        self._links(node, direction)
     }
 
-    fn all_links(&self, node: NodeIndex) -> Self::NodeLinks<'_> {
-        let Some(node_meta) = self.node_meta_valid(node) else {
-            return NodeLinks::new(self.all_ports(node), &[], 0..0);
-        };
-        let indices = node_meta.all_ports();
-        // Ignore links where the target is one of the node's output ports.
-        // This way we only count self-links once.
-        NodeLinks::new(
-            self.all_ports(node),
-            &self.port_link[indices],
-            node_meta.outgoing_ports(),
-        )
+    fn all_links(
+        &self,
+        node: NodeIndex,
+    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> {
+        self._all_links(node)
     }
 
     #[inline]
-    fn neighbours(&self, node: NodeIndex, direction: Direction) -> Self::Neighbours<'_> {
-        Neighbours::from_node_links(self, self.links(node, direction))
+    fn neighbours(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = NodeIndex> {
+        self._neighbours(node, direction)
     }
 
     #[inline]
-    fn all_neighbours(&self, node: NodeIndex) -> Self::Neighbours<'_> {
-        Neighbours::from_node_links(self, self.all_links(node))
+    fn all_neighbours(&self, node: NodeIndex) -> impl Iterator<Item = NodeIndex> {
+        self._all_neighbours(node)
     }
 
     #[inline]
@@ -1091,8 +1032,8 @@ mod debug {
 
     impl<'a> std::fmt::Debug for NodeDebug<'a> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            let inputs = PortRangeDebug(self.0.inputs(self.1).as_range());
-            let outputs = PortRangeDebug(self.0.outputs(self.1).as_range());
+            let inputs = PortRangeDebug(self.0._inputs(self.1).as_range());
+            let outputs = PortRangeDebug(self.0._outputs(self.1).as_range());
 
             f.debug_struct("Node")
                 .field("inputs", &inputs)
@@ -1386,7 +1327,7 @@ pub mod test {
             vec![(node1_output, node0_input), (node1_output2, node0_input2)]
         );
         assert_eq!(
-            g.get_connections(node1, node0).rev().collect::<Vec<_>>(),
+            g._get_connections(node1, node0).rev().collect::<Vec<_>>(),
             vec![(node1_output2, node0_input2), (node1_output, node0_input)]
         );
     }

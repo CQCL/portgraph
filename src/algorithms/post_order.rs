@@ -213,7 +213,7 @@ impl<'graph> Iterator for PostOrder<'graph> {
             if !self.visited.replace(next.index(), true) {
                 // The node is visited for the first time. We leave the node on the stack and push
                 // all of its neighbours in the traversal direction.
-                for port in self.graph.ports(next, self.direction).rev() {
+                for port in self.graph._ports(next, self.direction).rev() {
                     if self.ignore_port(next, port) {
                         continue;
                     }

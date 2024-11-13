@@ -8,6 +8,71 @@ use super::{MultiPortGraph, SubportIndex};
 use crate::portgraph::{self, NodePorts};
 use crate::{Direction, LinkView, NodeIndex, PortIndex, PortOffset, PortView};
 
+/// Iterator methods for [`MultiPortGraph`] with concrete return types.
+///
+/// Used internally by other iterator implementations to avoid the generic RPITIT return types.
+impl MultiPortGraph {
+    #[inline]
+    /// Returns an iterator over every pair of matching ports connecting `from`
+    /// with `to`.
+    pub fn _get_connections(&self, from: NodeIndex, to: NodeIndex) -> NodeConnections {
+        NodeConnections::new(self, to, self._output_links(from))
+    }
+
+    /// Returns the port that the given `port` is linked to.
+    #[inline]
+    pub fn _port_links(&self, port: PortIndex) -> PortLinks {
+        PortLinks::new(self, port)
+    }
+
+    /// Iterates over the connected links of the `node` in the given
+    /// `direction`.
+    #[inline]
+    pub fn _links(&self, node: NodeIndex, direction: Direction) -> NodeLinks {
+        NodeLinks::new(self, self.graph._ports(node, direction), 0..0)
+    }
+
+    /// Iterates over the connected input and output links of the `node` in sequence.
+    #[inline]
+    pub fn _all_links(&self, node: NodeIndex) -> NodeLinks {
+        let output_ports = self.graph.node_outgoing_ports(node);
+        NodeLinks::new(self, self.graph._all_ports(node), output_ports)
+    }
+
+    /// Iterates over the connected output links of the `node`. Shorthand for
+    /// [`LinkView::links`].
+    #[must_use]
+    #[inline]
+    pub fn _output_links(&self, node: NodeIndex) -> NodeLinks {
+        self._links(node, Direction::Outgoing)
+    }
+
+    /// Iterates over neighbour nodes in the given `direction`.
+    /// May contain duplicates if the graph has multiple links between nodes.
+    #[inline]
+    pub fn _neighbours(&self, node: NodeIndex, direction: Direction) -> Neighbours {
+        Neighbours::new(self, self._subports(node, direction), node, false)
+    }
+
+    /// Iterates over the input and output neighbours of the `node` in sequence.
+    #[inline]
+    pub fn _all_neighbours(&self, node: NodeIndex) -> Neighbours {
+        Neighbours::new(self, self._all_subports(node), node, true)
+    }
+
+    /// Iterates over all the subports of the `node` in the given `direction`.
+    #[inline]
+    pub fn _subports(&self, node: NodeIndex, direction: Direction) -> NodeSubports {
+        NodeSubports::new(self, self.graph._ports(node, direction))
+    }
+
+    /// Iterates over the input and output subports of the `node` in sequence.
+    #[inline]
+    pub fn _all_subports(&self, node: NodeIndex) -> NodeSubports {
+        NodeSubports::new(self, self.graph._all_ports(node))
+    }
+}
+
 /// Iterator over the nodes of a graph.
 #[derive(Clone)]
 pub struct Nodes<'a> {
@@ -105,7 +170,7 @@ impl<'a> Iterator for NodeSubports<'a> {
                 self.current_subports = self
                     .multigraph
                     .graph
-                    .port_offsets(copy_node, dir)
+                    ._port_offsets(copy_node, dir)
                     .as_range(dir);
             } else {
                 // The port is not a multiport, return the single subport.
@@ -316,7 +381,7 @@ impl<'a> PortLinks<'a> {
         if multigraph.is_multiport(port) {
             let copy_node = multigraph.get_copy_node(port).unwrap();
             let dir = multigraph.graph.port_direction(port).unwrap();
-            let subports = multigraph.graph.ports(copy_node, dir).enumerate();
+            let subports = multigraph.graph._ports(copy_node, dir).enumerate();
             Self::Multiport {
                 multigraph,
                 port,

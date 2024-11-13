@@ -80,7 +80,7 @@ where
     /// Whether the subgraph induced by the node set is convex.
     ///
     /// An induced subgraph is convex if there is no node that is both in the
-    /// past and in the future of another node of the subgraph.
+    /// past and in the future of some nodes in the subgraph.
     ///
     /// This function requires mutable access to `self` because it uses a
     /// temporary data structure within the object.
@@ -103,7 +103,7 @@ where
     pub fn is_node_convex(&self, nodes: impl IntoIterator<Item = NodeIndex>) -> bool {
         // The nodes in the subgraph, in topological order.
         let nodes: BTreeSet<_> = nodes.into_iter().map(|n| self.topsort_ind[n]).collect();
-        if nodes.is_empty() {
+        if nodes.len() <= 1 {
             return true;
         }
 

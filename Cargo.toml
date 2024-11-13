@@ -28,7 +28,6 @@ proptest = { version = "1.1.0", optional = true }
 rand = { version = "0.8.5", optional = true }
 petgraph = { version = "0.6.3", optional = true }
 delegate = "0.13.0"
-context-iterators = "0.2.0"
 itertools = "0.13.0"
 
 [features]

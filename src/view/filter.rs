@@ -2,7 +2,6 @@
 
 use crate::{Direction, LinkView, MultiView, NodeIndex, PortIndex, PortOffset, PortView};
 
-use context_iterators::{ContextIterator, FilterWithCtx, IntoContextIterator, MapWithCtx};
 use delegate::delegate;
 
 /// Node filter used by [`FilteredGraph`].
@@ -75,87 +74,38 @@ where
     G: Clone,
 {
     /// Node filter used for the iterators
-    fn node_filter(node: &NodeIndex, ctx: &FilteredGraphCtx<G, Ctx>) -> bool
+    fn node_filter(&self, node: &NodeIndex) -> bool
     where
         G: PortView,
     {
-        (ctx.node_filter)(*node, ctx.context)
+        (self.node_filter)(*node, &self.context)
     }
 
     /// Port filter used for the iterators
     ///
     /// A port exists iff its node exists (don't use `link_filter`!)
-    fn port_filter(&port: &(impl Into<PortIndex> + Copy), ctx: &FilteredGraphCtx<G, Ctx>) -> bool
+    fn port_filter(&self, &port: &(impl Into<PortIndex> + Copy)) -> bool
     where
         G: PortView,
     {
-        let node = ctx.graph.port_node(port).unwrap();
-        FilteredGraph::node_filter(&node, ctx)
+        let node = self.graph.port_node(port).unwrap();
+        self.node_filter(&node)
     }
 
     /// Link filter used for the iterators
     ///
     /// A link exists if both its ports exist and satisfy `link_filter`.
-    fn link_filter(
-        link: &(G::LinkEndpoint, G::LinkEndpoint),
-        ctx: &FilteredGraphCtx<G, Ctx>,
-    ) -> bool
+    fn link_filter(&self, link: &(G::LinkEndpoint, G::LinkEndpoint)) -> bool
     where
         G: LinkView,
     {
         let &(from, to) = link;
-        FilteredGraph::port_filter(&from, ctx)
-            && FilteredGraph::port_filter(&to, ctx)
-            && (ctx.link_filter)(from.into(), ctx.context)
-            && (ctx.link_filter)(to.into(), ctx.context)
-    }
-
-    /// The full context used for the iterators
-    fn as_context(&self) -> FilteredGraphCtx<'_, G, Ctx>
-    where
-        G: PortView,
-    {
-        FilteredGraphCtx::new(
-            self.graph.clone(),
-            self.node_filter,
-            self.link_filter,
-            &self.context,
-        )
+        self.port_filter(&from)
+            && self.port_filter(&to)
+            && (self.link_filter)(from.into(), &self.context)
+            && (self.link_filter)(to.into(), &self.context)
     }
 }
-
-/// Context used internally for the [`FilteredGraph`] iterators.
-///
-/// This is a named struct to make the iterator signatures more readable.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct FilteredGraphCtx<'a, G, Ctx> {
-    pub(self) graph: G,
-    pub(self) node_filter: NodeFilter<Ctx>,
-    pub(self) link_filter: LinkFilter<Ctx>,
-    pub(self) context: &'a Ctx,
-}
-
-impl<'a, G, Ctx> FilteredGraphCtx<'a, G, Ctx> {
-    /// Create a new context.
-    pub(self) fn new(
-        graph: G,
-        node_filter: NodeFilter<Ctx>,
-        link_filter: LinkFilter<Ctx>,
-        context: &'a Ctx,
-    ) -> Self {
-        Self {
-            graph,
-            node_filter,
-            link_filter,
-            context,
-        }
-    }
-}
-
-/// Filtered iterator wrapper used by [`FilteredGraph`].
-pub type FilteredGraphIter<'a, G, Ctx, I> = FilterWithCtx<I, FilteredGraphCtx<'a, G, Ctx>>;
-/// Filtered + mapped iterator wrapper used by [`FilteredGraph`].
-pub type MapFilteredGraphIter<'a, G, Ctx, I, O> = MapWithCtx<I, FilteredGraphCtx<'a, G, Ctx>, O>;
 
 impl<G, Ctx> PortView for FilteredGraph<G, NodeFilter<Ctx>, LinkFilter<Ctx>, Ctx>
 where
@@ -193,18 +143,12 @@ where
 
     #[inline]
     fn nodes_iter(&self) -> impl Iterator<Item = NodeIndex> {
-        self.graph
-            .nodes_iter()
-            .with_context(self.as_context())
-            .filter_with_context(Self::node_filter)
+        self.graph.nodes_iter().filter(|n| self.node_filter(n))
     }
 
     #[inline]
     fn ports_iter(&self) -> impl Iterator<Item = PortIndex> {
-        self.graph
-            .ports_iter()
-            .with_context(self.as_context())
-            .filter_with_context(Self::port_filter)
+        self.graph.ports_iter().filter(|p| self.port_filter(p))
     }
 
     delegate! {
@@ -240,18 +184,14 @@ where
     ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> {
         self.graph
             .get_connections(from, to)
-            .with_context(self.as_context())
-            .filter_with_context(Self::link_filter)
+            .filter(|l| self.link_filter(l))
     }
 
     fn port_links(
         &self,
         port: PortIndex,
     ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> {
-        self.graph
-            .port_links(port)
-            .with_context(self.as_context())
-            .filter_with_context(Self::link_filter)
+        self.graph.port_links(port).filter(|l| self.link_filter(l))
     }
 
     fn links(
@@ -261,30 +201,24 @@ where
     ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> {
         self.graph
             .links(node, direction)
-            .with_context(self.as_context())
-            .filter_with_context(Self::link_filter)
+            .filter(|l| self.link_filter(l))
     }
 
     fn all_links(
         &self,
         node: NodeIndex,
     ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> {
-        self.graph
-            .all_links(node)
-            .with_context(self.as_context())
-            .filter_with_context(Self::link_filter)
+        self.graph.all_links(node).filter(|l| self.link_filter(l))
     }
 
     fn neighbours(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = NodeIndex> {
         self.links(node, direction)
-            .with_context(self.as_context())
-            .map_with_context(|(_, p), ctx| ctx.graph.port_node(p).unwrap())
+            .map(|(_, p)| self.graph.port_node(p).unwrap())
     }
 
     fn all_neighbours(&self, node: NodeIndex) -> impl Iterator<Item = NodeIndex> {
         self.all_links(node)
-            .with_context(self.as_context())
-            .map_with_context(|(_, p), ctx| ctx.graph.port_node(p).unwrap())
+            .map(|(_, p)| self.graph.port_node(p).unwrap())
     }
 
     fn link_count(&self) -> usize {
@@ -305,15 +239,13 @@ where
     ) -> impl Iterator<Item = Self::LinkEndpoint> {
         self.graph
             .subports(node, direction)
-            .with_context(self.as_context())
-            .filter_with_context(Self::port_filter)
+            .filter(|p| self.port_filter(p))
     }
 
     fn all_subports(&self, node: NodeIndex) -> impl Iterator<Item = Self::LinkEndpoint> {
         self.graph
             .all_subports(node)
-            .with_context(self.as_context())
-            .filter_with_context(Self::port_filter)
+            .filter(|p| self.port_filter(p))
     }
 
     fn subport_link(&self, subport: Self::LinkEndpoint) -> Option<Self::LinkEndpoint> {

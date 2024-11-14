@@ -111,13 +111,21 @@ where
     }
 
     /// Whether the subgraph is convex.
+    #[inline]
     pub fn is_convex(&self) -> bool {
+        if self.node_count() <= 1 {
+            return true;
+        }
         let checker = TopoConvexChecker::new(&self.graph);
         self.is_convex_with_checker(&checker)
     }
 
     /// Whether the subgraph is convex, using a pre-existing checker.
+    #[inline]
     pub fn is_convex_with_checker(&self, checker: &impl ConvexChecker) -> bool {
+        if self.node_count() <= 1 {
+            return true;
+        }
         checker.is_convex(
             self.nodes_iter(),
             self.inputs.iter().copied(),

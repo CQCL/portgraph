@@ -129,7 +129,7 @@ impl PortView for MultiPortGraph {
     }
 
     #[inline]
-    fn nodes_iter(&self) -> impl Iterator<Item = NodeIndex> {
+    fn nodes_iter(&self) -> impl Iterator<Item = NodeIndex> + Clone {
         self::iter::Nodes {
             multigraph: self,
             iter: self.graph._nodes_iter(),
@@ -138,7 +138,7 @@ impl PortView for MultiPortGraph {
     }
 
     #[inline]
-    fn ports_iter(&self) -> impl Iterator<Item = PortIndex> {
+    fn ports_iter(&self) -> impl Iterator<Item = PortIndex> + Clone {
         Ports::new(self, self.graph._ports_iter())
     }
 
@@ -159,13 +159,13 @@ impl PortView for MultiPortGraph {
             fn port_node(&self, port: impl Into<PortIndex>) -> Option<NodeIndex>;
             fn port_offset(&self, port: impl Into<PortIndex>) -> Option<PortOffset>;
             fn port_index(&self, node: NodeIndex, offset: PortOffset) -> Option<PortIndex>;
-            fn ports(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortIndex>;
-            fn all_ports(&self, node: NodeIndex) -> impl Iterator<Item = PortIndex>;
+            fn ports(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortIndex> + Clone;
+            fn all_ports(&self, node: NodeIndex) -> impl Iterator<Item = PortIndex> + Clone;
             fn input(&self, node: NodeIndex, offset: usize) -> Option<PortIndex>;
             fn output(&self, node: NodeIndex, offset: usize) -> Option<PortIndex>;
             fn num_ports(&self, node: NodeIndex, direction: Direction) -> usize;
-            fn port_offsets(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortOffset>;
-            fn all_port_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset>;
+            fn port_offsets(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortOffset> + Clone;
+            fn all_port_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset> + Clone;
             fn node_port_capacity(&self, node: NodeIndex) -> usize;
         }
     }
@@ -264,7 +264,7 @@ impl LinkView for MultiPortGraph {
         &self,
         from: NodeIndex,
         to: NodeIndex,
-    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> {
+    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone {
         self._get_connections(from, to)
     }
 
@@ -272,7 +272,7 @@ impl LinkView for MultiPortGraph {
     fn port_links(
         &self,
         port: PortIndex,
-    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> {
+    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone {
         self._port_links(port)
     }
 
@@ -281,7 +281,7 @@ impl LinkView for MultiPortGraph {
         &self,
         node: NodeIndex,
         direction: Direction,
-    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> {
+    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone {
         self._links(node, direction)
     }
 
@@ -289,17 +289,21 @@ impl LinkView for MultiPortGraph {
     fn all_links(
         &self,
         node: NodeIndex,
-    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> {
+    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone {
         self._all_links(node)
     }
 
     #[inline]
-    fn neighbours(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = NodeIndex> {
+    fn neighbours(
+        &self,
+        node: NodeIndex,
+        direction: Direction,
+    ) -> impl Iterator<Item = NodeIndex> + Clone {
         self._neighbours(node, direction)
     }
 
     #[inline]
-    fn all_neighbours(&self, node: NodeIndex) -> impl Iterator<Item = NodeIndex> {
+    fn all_neighbours(&self, node: NodeIndex) -> impl Iterator<Item = NodeIndex> + Clone {
         self._all_neighbours(node)
     }
 
@@ -347,12 +351,12 @@ impl MultiView for MultiPortGraph {
         &self,
         node: NodeIndex,
         direction: Direction,
-    ) -> impl Iterator<Item = SubportIndex> {
+    ) -> impl Iterator<Item = SubportIndex> + Clone {
         self._subports(node, direction)
     }
 
     #[inline]
-    fn all_subports(&self, node: NodeIndex) -> impl Iterator<Item = SubportIndex> {
+    fn all_subports(&self, node: NodeIndex) -> impl Iterator<Item = SubportIndex> + Clone {
         self._all_subports(node)
     }
 }

@@ -142,12 +142,12 @@ where
     }
 
     #[inline]
-    fn nodes_iter(&self) -> impl Iterator<Item = NodeIndex> {
+    fn nodes_iter(&self) -> impl Iterator<Item = NodeIndex> + Clone {
         self.graph.nodes_iter().filter(|n| self.node_filter(n))
     }
 
     #[inline]
-    fn ports_iter(&self) -> impl Iterator<Item = PortIndex> {
+    fn ports_iter(&self) -> impl Iterator<Item = PortIndex> + Clone {
         self.graph.ports_iter().filter(|p| self.port_filter(p))
     }
 
@@ -157,13 +157,13 @@ where
             fn port_node(&self, port: impl Into<PortIndex>) -> Option<NodeIndex>;
             fn port_offset(&self, port: impl Into<PortIndex>) -> Option<crate::PortOffset>;
             fn port_index(&self, node: NodeIndex, offset: crate::PortOffset) -> Option<PortIndex>;
-            fn ports(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortIndex>;
-            fn all_ports(&self, node: NodeIndex) -> impl Iterator<Item = PortIndex>;
+            fn ports(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortIndex> + Clone;
+            fn all_ports(&self, node: NodeIndex) -> impl Iterator<Item = PortIndex> + Clone;
             fn input(&self, node: NodeIndex, offset: usize) -> Option<PortIndex>;
             fn output(&self, node: NodeIndex, offset: usize) -> Option<PortIndex>;
             fn num_ports(&self, node: NodeIndex, direction: Direction) -> usize;
-            fn port_offsets(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortOffset>;
-            fn all_port_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset>;
+            fn port_offsets(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortOffset> + Clone;
+            fn all_port_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset> + Clone;
             fn node_capacity(&self) -> usize;
             fn port_capacity(&self) -> usize;
             fn node_port_capacity(&self, node: NodeIndex) -> usize;
@@ -181,7 +181,7 @@ where
         &self,
         from: NodeIndex,
         to: NodeIndex,
-    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> {
+    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone {
         self.graph
             .get_connections(from, to)
             .filter(|l| self.link_filter(l))
@@ -190,7 +190,7 @@ where
     fn port_links(
         &self,
         port: PortIndex,
-    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> {
+    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone {
         self.graph.port_links(port).filter(|l| self.link_filter(l))
     }
 
@@ -198,7 +198,7 @@ where
         &self,
         node: NodeIndex,
         direction: Direction,
-    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> {
+    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone {
         self.graph
             .links(node, direction)
             .filter(|l| self.link_filter(l))
@@ -207,16 +207,20 @@ where
     fn all_links(
         &self,
         node: NodeIndex,
-    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> {
+    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone {
         self.graph.all_links(node).filter(|l| self.link_filter(l))
     }
 
-    fn neighbours(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = NodeIndex> {
+    fn neighbours(
+        &self,
+        node: NodeIndex,
+        direction: Direction,
+    ) -> impl Iterator<Item = NodeIndex> + Clone {
         self.links(node, direction)
             .map(|(_, p)| self.graph.port_node(p).unwrap())
     }
 
-    fn all_neighbours(&self, node: NodeIndex) -> impl Iterator<Item = NodeIndex> {
+    fn all_neighbours(&self, node: NodeIndex) -> impl Iterator<Item = NodeIndex> + Clone {
         self.all_links(node)
             .map(|(_, p)| self.graph.port_node(p).unwrap())
     }
@@ -236,13 +240,13 @@ where
         &self,
         node: NodeIndex,
         direction: Direction,
-    ) -> impl Iterator<Item = Self::LinkEndpoint> {
+    ) -> impl Iterator<Item = Self::LinkEndpoint> + Clone {
         self.graph
             .subports(node, direction)
             .filter(|p| self.port_filter(p))
     }
 
-    fn all_subports(&self, node: NodeIndex) -> impl Iterator<Item = Self::LinkEndpoint> {
+    fn all_subports(&self, node: NodeIndex) -> impl Iterator<Item = Self::LinkEndpoint> + Clone {
         self.graph
             .all_subports(node)
             .filter(|p| self.port_filter(p))

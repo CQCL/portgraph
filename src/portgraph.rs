@@ -352,11 +352,15 @@ impl PortView for PortGraph {
         node_meta.ports(direction).nth(offset).map(PortIndex::new)
     }
 
-    fn ports(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortIndex> {
+    fn ports(
+        &self,
+        node: NodeIndex,
+        direction: Direction,
+    ) -> impl Iterator<Item = PortIndex> + Clone {
         self._ports(node, direction)
     }
 
-    fn all_ports(&self, node: NodeIndex) -> impl Iterator<Item = PortIndex> {
+    fn all_ports(&self, node: NodeIndex) -> impl Iterator<Item = PortIndex> + Clone {
         self._all_ports(node)
     }
 
@@ -385,12 +389,12 @@ impl PortView for PortGraph {
         &self,
         node: NodeIndex,
         direction: Direction,
-    ) -> impl Iterator<Item = PortOffset> {
+    ) -> impl Iterator<Item = PortOffset> + Clone {
         self._port_offsets(node, direction)
     }
 
     #[inline]
-    fn all_port_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset> {
+    fn all_port_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset> + Clone {
         self._all_port_offsets(node)
     }
 
@@ -420,12 +424,12 @@ impl PortView for PortGraph {
     }
 
     #[inline]
-    fn nodes_iter(&self) -> impl Iterator<Item = NodeIndex> {
+    fn nodes_iter(&self) -> impl Iterator<Item = NodeIndex> + Clone {
         self._nodes_iter()
     }
 
     #[inline]
-    fn ports_iter(&self) -> impl Iterator<Item = PortIndex> {
+    fn ports_iter(&self) -> impl Iterator<Item = PortIndex> + Clone {
         self._ports_iter()
     }
 
@@ -729,11 +733,11 @@ impl LinkView for PortGraph {
         &self,
         from: NodeIndex,
         to: NodeIndex,
-    ) -> impl Iterator<Item = (PortIndex, PortIndex)> {
+    ) -> impl Iterator<Item = (PortIndex, PortIndex)> + Clone {
         self._get_connections(from, to)
     }
 
-    fn port_links(&self, port: PortIndex) -> impl Iterator<Item = (PortIndex, PortIndex)> {
+    fn port_links(&self, port: PortIndex) -> impl Iterator<Item = (PortIndex, PortIndex)> + Clone {
         self.port_meta_valid(port).unwrap();
         match self.port_link[port.index()] {
             Some(link) => std::iter::once((port, link)),
@@ -749,24 +753,28 @@ impl LinkView for PortGraph {
         &self,
         node: NodeIndex,
         direction: Direction,
-    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> {
+    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone {
         self._links(node, direction)
     }
 
     fn all_links(
         &self,
         node: NodeIndex,
-    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> {
+    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone {
         self._all_links(node)
     }
 
     #[inline]
-    fn neighbours(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = NodeIndex> {
+    fn neighbours(
+        &self,
+        node: NodeIndex,
+        direction: Direction,
+    ) -> impl Iterator<Item = NodeIndex> + Clone {
         self._neighbours(node, direction)
     }
 
     #[inline]
-    fn all_neighbours(&self, node: NodeIndex) -> impl Iterator<Item = NodeIndex> {
+    fn all_neighbours(&self, node: NodeIndex) -> impl Iterator<Item = NodeIndex> + Clone {
         self._all_neighbours(node)
     }
 

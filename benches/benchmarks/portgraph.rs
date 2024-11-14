@@ -27,7 +27,8 @@ fn remove_all_unordered(graph: &mut PortGraph) {
     }
     // Remove all remaining nodes
     while graph.node_count() > 0 {
-        graph.remove_node(graph.nodes_iter().next().unwrap());
+        let next = graph.nodes_iter().next().unwrap();
+        graph.remove_node(next);
     }
 }
 

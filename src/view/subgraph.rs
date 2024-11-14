@@ -268,6 +268,16 @@ where
         self.nodes.iter().flat_map(|&n| self.graph.all_ports(n))
     }
 
+    #[inline]
+    fn node_capacity(&self) -> usize {
+        self.graph.node_capacity() - self.graph.node_count() + self.node_count()
+    }
+
+    #[inline]
+    fn port_capacity(&self) -> usize {
+        self.graph.port_capacity() - self.graph.port_count() + self.port_count()
+    }
+
     delegate! {
         to self.graph {
             fn port_direction(&self, port: impl Into<PortIndex>) -> Option<Direction>;
@@ -281,8 +291,6 @@ where
             fn num_ports(&self, node: NodeIndex, direction: Direction) -> usize;
             fn port_offsets(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortOffset> + Clone;
             fn all_port_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset> + Clone;
-            fn node_capacity(&self) -> usize;
-            fn port_capacity(&self) -> usize;
             fn node_port_capacity(&self, node: NodeIndex) -> usize;
         }
     }
@@ -352,7 +360,7 @@ where
 
     fn link_count(&self) -> usize {
         self.nodes_iter()
-            .flat_map(|node| self.all_links(node))
+            .flat_map(|node| self.links(node, Direction::Outgoing))
             .count()
     }
 }
@@ -524,6 +532,69 @@ mod tests {
         let from_nodes = Subgraph::with_nodes(&graph, [n1, n2, n4]);
 
         assert_eq!(from_boundary, from_nodes);
+    }
+
+    #[test]
+    fn test_properties() {
+        let graph = graph();
+        let (n0, n1, n2, _n3, n4, _n5) = (0..6).map(NodeIndex::new).collect_tuple().unwrap();
+        let subgraph = Subgraph::with_nodes(&graph, [n1, n2, n4]);
+
+        assert_eq!(subgraph.node_count(), 3);
+        assert_eq!(subgraph.node_capacity(), graph.node_capacity() - 3);
+        assert_eq!(subgraph.port_count(), 9);
+        assert_eq!(subgraph.port_capacity(), graph.port_capacity() - 5);
+
+        assert!(!subgraph.contains_node(n0));
+        assert!(subgraph.contains_node(n1));
+
+        assert_eq!(subgraph.inputs(n1).count(), 1);
+        assert_eq!(subgraph.outputs(n1).count(), 2);
+        assert_eq!(subgraph.num_ports(n1, Direction::Incoming), 1);
+        assert_eq!(subgraph.num_ports(n1, Direction::Outgoing), 2);
+        assert_eq!(subgraph.all_ports(n1).count(), 3);
+        assert_eq!(subgraph.all_port_offsets(n1).count(), 3);
+
+        let inputs = subgraph
+            .inputs(n1)
+            .enumerate()
+            .map(|(i, port)| (i, port, Direction::Incoming));
+        let outputs = subgraph
+            .outputs(n1)
+            .enumerate()
+            .map(|(i, port)| (i, port, Direction::Outgoing));
+        for (i, port, dir) in inputs.chain(outputs) {
+            let offset = PortOffset::new(dir, i);
+            assert_eq!(subgraph.port_direction(port), Some(dir));
+            assert_eq!(subgraph.port_offset(port), Some(offset));
+            assert_eq!(subgraph.port_node(port), Some(n1));
+            assert_eq!(subgraph.port_index(n1, offset), Some(port));
+        }
+
+        // Global iterators
+        let nodes = subgraph.nodes_iter().collect_vec();
+        assert_eq!(nodes.as_slice(), [n1, n2, n4]);
+
+        let ports = subgraph.ports_iter().collect_vec();
+        assert_eq!(ports.len(), subgraph.port_count());
+
+        // Links
+        assert!(subgraph.connected(n1, n4));
+        assert_eq!(subgraph.link_count(), 2);
+        let n1_o0 = graph.output(n1, 0).unwrap();
+        let n4_i1 = graph.input(n4, 1).unwrap();
+        assert_eq!(
+            subgraph.output_neighbours(n1).collect_vec().as_slice(),
+            [n4]
+        );
+        assert_eq!(
+            subgraph.output_links(n1).collect_vec().as_slice(),
+            [(n1_o0, n4_i1)]
+        );
+        assert_eq!(
+            subgraph.get_connections(n1, n4).collect_vec().as_slice(),
+            [(n1_o0, n4_i1)]
+        );
     }
 
     #[test]

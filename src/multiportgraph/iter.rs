@@ -15,26 +15,26 @@ impl MultiPortGraph {
     #[inline]
     /// Returns an iterator over every pair of matching ports connecting `from`
     /// with `to`.
-    pub fn _get_connections(&self, from: NodeIndex, to: NodeIndex) -> NodeConnections {
+    pub(crate) fn _get_connections(&self, from: NodeIndex, to: NodeIndex) -> NodeConnections {
         NodeConnections::new(self, to, self._output_links(from))
     }
 
     /// Returns the port that the given `port` is linked to.
     #[inline]
-    pub fn _port_links(&self, port: PortIndex) -> PortLinks {
+    pub(crate) fn _port_links(&self, port: PortIndex) -> PortLinks {
         PortLinks::new(self, port)
     }
 
     /// Iterates over the connected links of the `node` in the given
     /// `direction`.
     #[inline]
-    pub fn _links(&self, node: NodeIndex, direction: Direction) -> NodeLinks {
+    pub(crate) fn _links(&self, node: NodeIndex, direction: Direction) -> NodeLinks {
         NodeLinks::new(self, self.graph._ports(node, direction), 0..0)
     }
 
     /// Iterates over the connected input and output links of the `node` in sequence.
     #[inline]
-    pub fn _all_links(&self, node: NodeIndex) -> NodeLinks {
+    pub(crate) fn _all_links(&self, node: NodeIndex) -> NodeLinks {
         let output_ports = self.graph.node_outgoing_ports(node);
         NodeLinks::new(self, self.graph._all_ports(node), output_ports)
     }
@@ -43,32 +43,32 @@ impl MultiPortGraph {
     /// [`LinkView::links`].
     #[must_use]
     #[inline]
-    pub fn _output_links(&self, node: NodeIndex) -> NodeLinks {
+    pub(crate) fn _output_links(&self, node: NodeIndex) -> NodeLinks {
         self._links(node, Direction::Outgoing)
     }
 
     /// Iterates over neighbour nodes in the given `direction`.
     /// May contain duplicates if the graph has multiple links between nodes.
     #[inline]
-    pub fn _neighbours(&self, node: NodeIndex, direction: Direction) -> Neighbours {
+    pub(crate) fn _neighbours(&self, node: NodeIndex, direction: Direction) -> Neighbours {
         Neighbours::new(self, self._subports(node, direction), node, false)
     }
 
     /// Iterates over the input and output neighbours of the `node` in sequence.
     #[inline]
-    pub fn _all_neighbours(&self, node: NodeIndex) -> Neighbours {
+    pub(crate) fn _all_neighbours(&self, node: NodeIndex) -> Neighbours {
         Neighbours::new(self, self._all_subports(node), node, true)
     }
 
     /// Iterates over all the subports of the `node` in the given `direction`.
     #[inline]
-    pub fn _subports(&self, node: NodeIndex, direction: Direction) -> NodeSubports {
+    pub(crate) fn _subports(&self, node: NodeIndex, direction: Direction) -> NodeSubports {
         NodeSubports::new(self, self.graph._ports(node, direction))
     }
 
     /// Iterates over the input and output subports of the `node` in sequence.
     #[inline]
-    pub fn _all_subports(&self, node: NodeIndex) -> NodeSubports {
+    pub(crate) fn _all_subports(&self, node: NodeIndex) -> NodeSubports {
         NodeSubports::new(self, self.graph._all_ports(node))
     }
 }

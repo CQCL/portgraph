@@ -52,10 +52,6 @@ where
     pub fn context(&self) -> &Ctx {
         &self.context
     }
-
-    pub(super) fn graph(&self) -> G {
-        self.graph.clone()
-    }
 }
 
 impl<G, F, Ctx> NodeFiltered<G, F, Ctx>

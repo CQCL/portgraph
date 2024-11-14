@@ -12,6 +12,7 @@
 
 mod iter;
 
+use delegate::delegate;
 use std::mem::{replace, take};
 use std::num::{NonZeroU16, NonZeroU32};
 use std::ops::Range;
@@ -352,18 +353,6 @@ impl PortView for PortGraph {
         node_meta.ports(direction).nth(offset).map(PortIndex::new)
     }
 
-    fn ports(
-        &self,
-        node: NodeIndex,
-        direction: Direction,
-    ) -> impl Iterator<Item = PortIndex> + Clone {
-        self._ports(node, direction)
-    }
-
-    fn all_ports(&self, node: NodeIndex) -> impl Iterator<Item = PortIndex> + Clone {
-        self._all_ports(node)
-    }
-
     #[inline]
     fn input(&self, node: NodeIndex, offset: usize) -> Option<PortIndex> {
         self.port_index(node, PortOffset::new_incoming(offset))
@@ -383,19 +372,6 @@ impl PortView for PortGraph {
         } else {
             node_meta.outgoing() as usize
         }
-    }
-
-    fn port_offsets(
-        &self,
-        node: NodeIndex,
-        direction: Direction,
-    ) -> impl Iterator<Item = PortOffset> + Clone {
-        self._port_offsets(node, direction)
-    }
-
-    #[inline]
-    fn all_port_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset> + Clone {
-        self._all_port_offsets(node)
     }
 
     #[inline]
@@ -424,16 +400,6 @@ impl PortView for PortGraph {
     }
 
     #[inline]
-    fn nodes_iter(&self) -> impl Iterator<Item = NodeIndex> + Clone {
-        self._nodes_iter()
-    }
-
-    #[inline]
-    fn ports_iter(&self) -> impl Iterator<Item = PortIndex> + Clone {
-        self._ports_iter()
-    }
-
-    #[inline]
     fn node_capacity(&self) -> usize {
         self.node_meta.capacity()
     }
@@ -447,6 +413,22 @@ impl PortView for PortGraph {
     fn node_port_capacity(&self, node: NodeIndex) -> usize {
         self.node_meta_valid(node)
             .map_or(0, |node_meta| node_meta.capacity())
+    }
+    delegate! {
+        to self {
+            #[call(_ports)]
+            fn ports(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortIndex> + Clone;
+            #[call(_all_ports)]
+            fn all_ports(&self, node: NodeIndex) -> impl Iterator<Item = PortIndex> + Clone;
+            #[call(_port_offsets)]
+            fn port_offsets(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortOffset> + Clone;
+            #[call(_all_port_offsets)]
+            fn all_port_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset> + Clone;
+            #[call(_nodes_iter)]
+            fn nodes_iter(&self) -> impl Iterator<Item = NodeIndex> + Clone;
+            #[call(_ports_iter)]
+            fn ports_iter(&self) -> impl Iterator<Item = PortIndex> + Clone;
+        }
     }
 }
 
@@ -728,15 +710,6 @@ impl PortMut for PortGraph {
 impl LinkView for PortGraph {
     type LinkEndpoint = PortIndex;
 
-    #[inline]
-    fn get_connections(
-        &self,
-        from: NodeIndex,
-        to: NodeIndex,
-    ) -> impl Iterator<Item = (PortIndex, PortIndex)> + Clone {
-        self._get_connections(from, to)
-    }
-
     fn port_links(&self, port: PortIndex) -> impl Iterator<Item = (PortIndex, PortIndex)> + Clone {
         self.port_meta_valid(port).unwrap();
         match self.port_link[port.index()] {
@@ -749,38 +722,24 @@ impl LinkView for PortGraph {
         }
     }
 
-    fn links(
-        &self,
-        node: NodeIndex,
-        direction: Direction,
-    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone {
-        self._links(node, direction)
-    }
-
-    fn all_links(
-        &self,
-        node: NodeIndex,
-    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone {
-        self._all_links(node)
-    }
-
-    #[inline]
-    fn neighbours(
-        &self,
-        node: NodeIndex,
-        direction: Direction,
-    ) -> impl Iterator<Item = NodeIndex> + Clone {
-        self._neighbours(node, direction)
-    }
-
-    #[inline]
-    fn all_neighbours(&self, node: NodeIndex) -> impl Iterator<Item = NodeIndex> + Clone {
-        self._all_neighbours(node)
-    }
-
     #[inline]
     fn link_count(&self) -> usize {
         self.link_count
+    }
+
+    delegate! {
+        to self {
+            #[call(_get_connections)]
+            fn get_connections(&self, from: NodeIndex, to: NodeIndex) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone;
+            #[call(_links)]
+            fn links(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone;
+            #[call(_all_links)]
+            fn all_links(&self, node: NodeIndex) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone;
+            #[call(_neighbours)]
+            fn neighbours(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = NodeIndex> + Clone;
+            #[call(_all_neighbours)]
+            fn all_neighbours(&self, node: NodeIndex) -> impl Iterator<Item = NodeIndex> + Clone;
+        }
     }
 }
 

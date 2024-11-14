@@ -260,57 +260,26 @@ impl LinkView for MultiPortGraph {
     type LinkEndpoint = SubportIndex;
 
     #[inline]
-    fn get_connections(
-        &self,
-        from: NodeIndex,
-        to: NodeIndex,
-    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone {
-        self._get_connections(from, to)
-    }
-
-    #[inline]
-    fn port_links(
-        &self,
-        port: PortIndex,
-    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone {
-        self._port_links(port)
-    }
-
-    #[inline]
-    fn links(
-        &self,
-        node: NodeIndex,
-        direction: Direction,
-    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone {
-        self._links(node, direction)
-    }
-
-    #[inline]
-    fn all_links(
-        &self,
-        node: NodeIndex,
-    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone {
-        self._all_links(node)
-    }
-
-    #[inline]
-    fn neighbours(
-        &self,
-        node: NodeIndex,
-        direction: Direction,
-    ) -> impl Iterator<Item = NodeIndex> + Clone {
-        self._neighbours(node, direction)
-    }
-
-    #[inline]
-    fn all_neighbours(&self, node: NodeIndex) -> impl Iterator<Item = NodeIndex> + Clone {
-        self._all_neighbours(node)
-    }
-
-    #[inline]
     fn link_count(&self) -> usize {
         // Do not count the links between copy nodes and their main nodes.
         self.graph.link_count() - self.copy_node_count
+    }
+
+    delegate! {
+        to self {
+            #[call(_get_connections)]
+            fn get_connections(&self, from: NodeIndex, to: NodeIndex) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone;
+            #[call(_port_links)]
+            fn port_links(&self, port: PortIndex) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone;
+            #[call(_links)]
+            fn links(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone;
+            #[call(_all_links)]
+            fn all_links(&self, node: NodeIndex) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone;
+            #[call(_neighbours)]
+            fn neighbours(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = NodeIndex> + Clone;
+            #[call(_all_neighbours)]
+            fn all_neighbours(&self, node: NodeIndex) -> impl Iterator<Item = NodeIndex> + Clone;
+        }
     }
 }
 
@@ -346,18 +315,13 @@ impl MultiView for MultiPortGraph {
         self.get_subport_from_index(link)
     }
 
-    #[inline]
-    fn subports(
-        &self,
-        node: NodeIndex,
-        direction: Direction,
-    ) -> impl Iterator<Item = SubportIndex> + Clone {
-        self._subports(node, direction)
-    }
-
-    #[inline]
-    fn all_subports(&self, node: NodeIndex) -> impl Iterator<Item = SubportIndex> + Clone {
-        self._all_subports(node)
+    delegate! {
+        to self {
+            #[call(_subports)]
+            fn subports(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = SubportIndex> + Clone;
+            #[call(_all_subports)]
+            fn all_subports(&self, node: NodeIndex) -> impl Iterator<Item = SubportIndex> + Clone;
+        }
     }
 }
 

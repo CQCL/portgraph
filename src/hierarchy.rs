@@ -48,6 +48,7 @@
 //! hierarchy.shrink_to(graph.node_count());
 //! ```
 
+use std::collections::VecDeque;
 use std::iter::FusedIterator;
 use std::mem::{replace, take};
 use thiserror::Error;
@@ -390,6 +391,18 @@ impl Hierarchy {
         }
     }
 
+    /// Iterates over the node's descendants.
+    ///
+    /// Traverses the hierarchy in breadth-first order.
+    ///
+    /// The iterator will yield the node itself first, followed by its children.
+    pub fn descendants(&self, node: NodeIndex) -> Descendants<'_> {
+        Descendants {
+            layout: self,
+            child_queue: VecDeque::from(vec![node]),
+        }
+    }
+
     /// Returns the number of the node's children.
     #[inline]
     pub fn child_count(&self, node: NodeIndex) -> usize {
@@ -610,6 +623,58 @@ impl<'a> ExactSizeIterator for Children<'a> {
 
 impl<'a> FusedIterator for Children<'a> {}
 
+/// Iterator created by [`Hierarchy::descendants`].
+///
+/// Traverses the descendants of a node in breadth-first order.
+#[derive(Clone, Debug)]
+pub struct Descendants<'a> {
+    /// The hierarchy this iterator is iterating over.
+    layout: &'a Hierarchy,
+    /// A queue of regions to visit.
+    ///
+    /// For each region, we point to a child node that has not been visited yet.
+    /// When a region is visited, we move to the next child node and queue its children region at the end of the queue.
+    child_queue: VecDeque<NodeIndex>,
+}
+
+impl Default for Descendants<'static> {
+    fn default() -> Self {
+        static HIERARCHY: Hierarchy = Hierarchy::new();
+        Self {
+            layout: &HIERARCHY,
+            child_queue: VecDeque::new(),
+        }
+    }
+}
+
+impl<'a> Iterator for Descendants<'a> {
+    type Item = NodeIndex;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // The next element is always the first node in the queue.
+        let next = self.child_queue.pop_front()?;
+
+        // Check if the node had a next sibling, and add it to the front of queue.
+        if let Some(next_sibling) = self.layout.next(next) {
+            self.child_queue.push_front(next_sibling);
+        }
+
+        // Now add the children region of `next` to the end of the queue.
+        if let Some(child) = self.layout.first(next) {
+            self.child_queue.push_back(child);
+        }
+
+        Some(next)
+    }
+
+    #[inline(always)]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.child_queue.len(), None)
+    }
+}
+
+impl<'a> FusedIterator for Descendants<'a> {}
+
 /// Error produced when trying to attach nodes in the Hierarchy.
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 #[allow(missing_docs)]
@@ -667,6 +732,10 @@ mod test {
         assert_eq!(
             hierarchy.children(root).collect::<Vec<_>>(),
             vec![child0, child1, child2]
+        );
+        assert_eq!(
+            hierarchy.descendants(root).collect::<Vec<_>>(),
+            vec![root, child0, child1, child2]
         );
         assert_eq!(hierarchy.parent(root), None);
         assert_eq!(hierarchy.first(root), Some(child0));

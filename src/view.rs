@@ -2,8 +2,10 @@
 
 pub mod filter;
 pub mod refs;
-pub mod region;
-pub mod subgraph;
+
+mod flat_region;
+mod region;
+mod subgraph;
 
 #[cfg(feature = "petgraph")]
 pub mod petgraph;
@@ -13,7 +15,8 @@ use std::collections::HashMap;
 use crate::{portgraph::PortOperation, Direction, LinkError, NodeIndex, PortIndex, PortOffset};
 
 pub use filter::{FilteredGraph, LinkFilter, NodeFilter, NodeFiltered};
-pub use region::{FlatRegion, Region};
+pub use flat_region::FlatRegion;
+pub use region::Region;
 pub use subgraph::Subgraph;
 
 /// Core capabilities for querying a graph containing nodes and ports.

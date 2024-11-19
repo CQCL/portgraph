@@ -1,4 +1,4 @@
-//! Views of a portgraph containing only the descendants of a node in a [`Hierarchy`].
+//! View of a portgraph containing only the children of a node in a [`Hierarchy`].
 
 use super::{LinkView, MultiView, PortView};
 use crate::{Direction, Hierarchy, NodeIndex, PortIndex, PortOffset};
@@ -23,7 +23,8 @@ impl<'a, G> FlatRegion<'a, G>
 where
     G: Clone,
 {
-    /// Create a new region view including all the descendants of the root node.
+    /// Create a new region view including only a root node and its direct
+    /// children in a [`Hierarchy`].
     pub fn new(graph: G, hierarchy: &'a Hierarchy, root: NodeIndex) -> Self {
         Self {
             graph,
@@ -69,6 +70,7 @@ where
 
     #[inline]
     fn is_empty(&self) -> bool {
+        // The region root is always present
         false
     }
 

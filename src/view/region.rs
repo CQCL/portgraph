@@ -1,4 +1,4 @@
-//! Views of a portgraph containing only the descendants of a node in a [`Hierarchy`].
+//! View of a portgraph containing only the descendants of a node in a [`Hierarchy`].
 
 use delegate::delegate;
 use itertools::Either;
@@ -30,7 +30,8 @@ impl<'g, G> Region<'g, G>
 where
     G: Clone,
 {
-    /// Create a new [`Region`] looking at a `root` node and its descendants in a [`Hierarchy`].
+    /// Create a new [`Region`] looking at a `root` node and its descendants in
+    /// a [`Hierarchy`].
     pub fn new(graph: G, hierarchy: &'g Hierarchy, root: NodeIndex) -> Self {
         let mut is_descendant = HashMap::new();
         is_descendant.insert(root, false);
@@ -75,6 +76,9 @@ where
             let is_descendant = first_visited_ancestor == Some(self.region_root)
                 || first_visited_ancestor
                     .map_or(false, |ancestor| cache.get(&ancestor).copied().unwrap());
+
+            // The read lock is dropped here, before we reacquire it for writing
+            // the computed values.
             drop(cache);
             (ancestors, is_descendant)
         };
@@ -157,6 +161,7 @@ where
 
     #[inline]
     fn is_empty(&self) -> bool {
+        // The region root is always present
         false
     }
 

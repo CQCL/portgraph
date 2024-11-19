@@ -1132,6 +1132,13 @@ pub enum LinkError {
     },
 }
 
+#[cfg(feature = "pyo3")]
+impl From<LinkError> for PyErr {
+    fn from(s: LinkError) -> Self {
+        pyo3::exceptions::PyRuntimeError::new_err(s.to_string())
+    }
+}
+
 /// Operations applied to a port, used by the callback in [`PortGraph::set_num_ports`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PortOperation {

@@ -72,9 +72,6 @@ pub mod unmanaged;
 pub mod view;
 pub mod weights;
 
-#[cfg(feature = "pyo3")]
-pub mod py_graph;
-
 #[cfg(feature = "proptest")]
 pub mod proptest;
 
@@ -145,6 +142,7 @@ impl TryFrom<usize> for Direction {
 /// as a `NodeIndex` by itself.
 #[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "pyo3", derive(IntoPyObject))]
 pub struct NodeIndex(NonZeroU32);
 
 #[cfg(feature = "serde")]
@@ -225,6 +223,7 @@ impl std::fmt::Debug for NodeIndex {
 /// as a `PortIndex` by itself.
 #[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "pyo3", derive(IntoPyObject))]
 pub struct PortIndex(NonZeroU32);
 
 #[cfg(feature = "serde")]

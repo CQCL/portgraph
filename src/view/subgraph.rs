@@ -37,7 +37,7 @@ use super::{MultiView, PortView};
 /// An intuitive way of looking at this definition is to imagine that the
 /// boundary edges form a wall around the subgraph, and the subgraph is given
 /// by all nodes and edges that can be reached from within without crossing the
-/// wall. The directness of edges (incoming/outgoing) defines which side of
+/// wall. The [Direction] of edges (incoming/outgoing) defines which side of
 /// the wall is inside, and which is outside.
 ///
 /// If both incoming and outgoing boundary edges are empty, the subgraph is
@@ -46,7 +46,7 @@ use super::{MultiView, PortView};
 /// If an invalid subgraph is defined, then behaviour is undefined.
 ///
 /// If any graph method is called with a node or port that is not in the subgraph,
-/// the behaviour is undefined.
+/// the behaviour is unspecified.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Subgraph<G> {
     /// The base graph.

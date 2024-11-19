@@ -369,26 +369,17 @@ impl<G> MultiView for Subgraph<G>
 where
     G: MultiView + Clone,
 {
-    fn subports(
-        &self,
-        node: NodeIndex,
-        direction: Direction,
-    ) -> impl Iterator<Item = Self::LinkEndpoint> + Clone {
-        self.graph
-            .subports(node, direction)
-            .filter(|&p| self.contains_endpoint(p))
-    }
-
-    fn all_subports(&self, node: NodeIndex) -> impl Iterator<Item = Self::LinkEndpoint> + Clone {
-        self.graph
-            .all_subports(node)
-            .filter(|&p| self.contains_endpoint(p))
-    }
-
     fn subport_link(&self, subport: Self::LinkEndpoint) -> Option<Self::LinkEndpoint> {
         self.graph
             .subport_link(subport)
             .filter(|&p| self.contains_endpoint(p))
+    }
+
+    delegate! {
+        to self.graph {
+            fn subports(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = Self::LinkEndpoint> + Clone;
+            fn all_subports(&self, node: NodeIndex) -> impl Iterator<Item = Self::LinkEndpoint> + Clone;
+        }
     }
 }
 
@@ -396,7 +387,8 @@ where
 mod tests {
     use itertools::Itertools;
 
-    use crate::{LinkMut, PortGraph, PortMut, PortView};
+    use crate::multiportgraph::SubportIndex;
+    use crate::{LinkMut, MultiPortGraph, PortGraph, PortMut, PortView};
 
     use super::*;
 
@@ -540,13 +532,29 @@ mod tests {
         let (n0, n1, n2, _n3, n4, _n5) = (0..6).map(NodeIndex::new).collect_tuple().unwrap();
         let subgraph = Subgraph::with_nodes(&graph, [n1, n2, n4]);
 
+        let n1_o0 = subgraph.output(n1, 0).unwrap();
+        let n2_o1 = subgraph.output(n2, 1).unwrap();
+        let n4_i1 = subgraph.input(n4, 1).unwrap();
+        let n4_i2 = subgraph.input(n4, 2).unwrap();
+
+        assert!(!subgraph.is_empty());
         assert_eq!(subgraph.node_count(), 3);
         assert_eq!(subgraph.node_capacity(), graph.node_capacity() - 3);
         assert_eq!(subgraph.port_count(), 9);
         assert_eq!(subgraph.port_capacity(), graph.port_capacity() - 5);
+        assert_eq!(
+            subgraph.node_port_capacity(n1),
+            graph.node_port_capacity(n1)
+        );
+        assert_eq!(
+            subgraph.port_offsets(n1, Direction::Outgoing).collect_vec(),
+            graph.port_offsets(n1, Direction::Outgoing).collect_vec()
+        );
 
         assert!(!subgraph.contains_node(n0));
         assert!(subgraph.contains_node(n1));
+        assert!(!subgraph.contains_port(graph.output(n0, 0).unwrap()));
+        assert!(subgraph.contains_port(n1_o0));
 
         assert_eq!(subgraph.inputs(n1).count(), 1);
         assert_eq!(subgraph.outputs(n1).count(), 2);
@@ -581,8 +589,6 @@ mod tests {
         // Links
         assert!(subgraph.connected(n1, n4));
         assert_eq!(subgraph.link_count(), 2);
-        let n1_o0 = graph.output(n1, 0).unwrap();
-        let n4_i1 = graph.input(n4, 1).unwrap();
         assert_eq!(
             subgraph.output_neighbours(n1).collect_vec().as_slice(),
             [n4]
@@ -592,9 +598,36 @@ mod tests {
             [(n1_o0, n4_i1)]
         );
         assert_eq!(
+            subgraph.port_links(n1_o0).collect_vec().as_slice(),
+            [(n1_o0, n4_i1)]
+        );
+        assert_eq!(
+            subgraph.all_links(n4).collect_vec().as_slice(),
+            [(n4_i1, n1_o0), (n4_i2, n2_o1),]
+        );
+        assert_eq!(
             subgraph.get_connections(n1, n4).collect_vec().as_slice(),
             [(n1_o0, n4_i1)]
         );
+        assert_eq!(subgraph.get_connections(n0, n1).count(), 0);
+        assert_eq!(
+            subgraph.all_neighbours(n4).collect_vec().as_slice(),
+            [n1, n2]
+        );
+
+        // Multiports
+        let multigraph = MultiPortGraph::from(graph);
+        let subgraph = Subgraph::with_nodes(&multigraph, [n1, n2, n4]);
+        let n1_o0 = SubportIndex::new_unique(n1_o0);
+        assert_eq!(
+            subgraph.all_subports(n1).collect_vec(),
+            multigraph.all_subports(n1).collect_vec()
+        );
+        assert_eq!(
+            subgraph.subports(n4, Direction::Incoming).collect_vec(),
+            multigraph.subports(n4, Direction::Incoming).collect_vec()
+        );
+        assert_eq!(subgraph.subport_link(n1_o0), multigraph.subport_link(n1_o0));
     }
 
     #[test]
@@ -609,6 +642,11 @@ mod tests {
         let boundary = [graph.output(n1, 0).unwrap(), graph.input(n4, 1).unwrap()];
         let subg = Subgraph::new_subgraph(&graph, boundary);
         assert!(!subg.is_convex());
+
+        // Check the short-circuited case
+        let subg = Subgraph::with_nodes(&graph, [n0]);
+        assert!(subg.is_convex());
+        assert!(subg.is_convex_with_checker(&TopoConvexChecker::new(&graph)));
 
         // Define the incoming and outgoing boundary edges
         let incoming = [

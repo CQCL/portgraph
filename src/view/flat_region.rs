@@ -1,97 +1,36 @@
-//! View of a portgraph containing only the descendants of a node in a [`Hierarchy`].
-
-use delegate::delegate;
-use itertools::Either;
-use std::sync::RwLock;
-use std::{collections::HashMap, iter};
+//! View of a portgraph containing only the children of a node in a [`Hierarchy`].
 
 use super::{LinkView, MultiView, PortView};
 use crate::{Direction, Hierarchy, NodeIndex, PortIndex, PortOffset};
 
-/// View of a portgraph containing only a root node and its descendants in a
-/// [`Hierarchy`].
+use delegate::delegate;
+use itertools::Either;
+
+/// View of a portgraph containing only a root node and its direct children in a [`Hierarchy`].
 ///
-/// For a view of a portgraph containing only the root and its direct children,
-/// see [`crate::view::FlatRegion`]. Prefer using the flat variant when possible, as it is
-/// more efficient.
-#[derive(Debug)]
-pub struct Region<'g, G> {
+/// For a view of all descendants, see [`crate::view::Region`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct FlatRegion<'g, G> {
     /// The base graph
     graph: G,
     /// The root node of the region
     region_root: NodeIndex,
     /// The graph's hierarchy
     hierarchy: &'g Hierarchy,
-    /// Cache of the result of the [`is_descendant`] check.
-    is_descendant: RwLock<HashMap<NodeIndex, bool>>,
 }
 
-impl<'g, G> Region<'g, G>
+impl<'a, G> FlatRegion<'a, G>
 where
     G: Clone,
 {
-    /// Create a new [`Region`] looking at a `root` node and its descendants in
-    /// a [`Hierarchy`].
-    pub fn new(graph: G, hierarchy: &'g Hierarchy, root: NodeIndex) -> Self {
-        let mut is_descendant = HashMap::new();
-        is_descendant.insert(root, false);
+    /// Create a new region view including only a root node and its direct
+    /// children in a [`Hierarchy`].
+    pub fn new(graph: G, hierarchy: &'a Hierarchy, root: NodeIndex) -> Self {
         Self {
             graph,
             region_root: root,
             hierarchy,
-            is_descendant: RwLock::new(is_descendant),
         }
-    }
-
-    /// Check if a node is a descendant of the root node.
-    ///
-    /// Caches the result of the check.
-    pub fn is_descendant(&self, node: NodeIndex) -> bool {
-        if node == self.region_root {
-            return true;
-        }
-
-        // First, access the cache read-only to check if the node has already been visited.
-        // And compute whether the node is a descendant otherwise.
-        let (ancestors, is_descendant) = {
-            let cache = self
-                .is_descendant
-                .read()
-                .expect("The Region cache is poisoned.");
-
-            if let Some(is_descendant) = cache.get(&node) {
-                // We have already checked this node.
-                return *is_descendant;
-            }
-            // Traverse the ancestors until we see a node we have already checked, or the root.
-            let ancestors: Vec<_> = iter::successors(Some(node), |node| {
-                let parent = self.hierarchy.parent(*node)?;
-                match cache.contains_key(&parent) {
-                    true => None,
-                    false => Some(parent),
-                }
-            })
-            .collect();
-            let first_visited_ancestor = self.hierarchy.parent(*ancestors.last().unwrap());
-            let is_descendant = first_visited_ancestor == Some(self.region_root)
-                || first_visited_ancestor
-                    .map_or(false, |ancestor| cache.get(&ancestor).copied().unwrap());
-
-            // The read lock is dropped here, before we reacquire it for writing
-            // the computed values.
-            drop(cache);
-            (ancestors, is_descendant)
-        };
-
-        // Now lock the cache for writing and update it with the new information.
-        let mut cache_mut = self
-            .is_descendant
-            .write()
-            .expect("The Region cache is poisoned.");
-        for node in ancestors {
-            cache_mut.insert(node, is_descendant);
-        }
-        is_descendant
     }
 
     /// Get the root node of the region.
@@ -100,55 +39,30 @@ where
     }
 }
 
-impl<'g, G> Region<'g, G>
+impl<'g, G> FlatRegion<'g, G>
 where
     G: LinkView + Clone,
 {
-    /// Utility function to filter out links that are not in the subgraph.
+    /// Utility function to filter out links that are not in the region.
     #[inline(always)]
     fn contains_link(&self, (from, to): (G::LinkEndpoint, G::LinkEndpoint)) -> bool {
         self.contains_endpoint(from) && self.contains_endpoint(to)
     }
 
-    /// Utility function to filter out link endpoints that are not in the subgraph.
+    /// Utility function to filter out link endpoints that are not in the region.
     #[inline(always)]
     fn contains_endpoint(&self, e: G::LinkEndpoint) -> bool {
         self.contains_port(e.into())
     }
 }
 
-impl<'g, G: PartialEq> PartialEq for Region<'g, G> {
-    fn eq(&self, other: &Self) -> bool {
-        self.region_root == other.region_root
-            && self.graph == other.graph
-            && self.hierarchy == other.hierarchy
-    }
-}
-
-impl<'g, G: Clone> Clone for Region<'g, G> {
-    fn clone(&self) -> Self {
-        // Clone the cache if it is not currently locked.
-        // Otherwise, create a new empty cache.
-        let is_descendant = match self.is_descendant.try_read() {
-            Ok(cache) => cache.clone(),
-            Err(_) => HashMap::new(),
-        };
-        Self {
-            graph: self.graph.clone(),
-            region_root: self.region_root,
-            hierarchy: self.hierarchy,
-            is_descendant: RwLock::new(is_descendant),
-        }
-    }
-}
-
-impl<'g, G> PortView for Region<'g, G>
+impl<'g, G> PortView for FlatRegion<'g, G>
 where
     G: PortView + Clone,
 {
     #[inline(always)]
     fn contains_node(&'_ self, node: NodeIndex) -> bool {
-        self.is_descendant(node)
+        node == self.region_root || self.hierarchy.parent(node) == Some(self.region_root)
     }
 
     #[inline(always)]
@@ -167,7 +81,7 @@ where
 
     #[inline]
     fn node_count(&self) -> usize {
-        self.nodes_iter().count()
+        self.hierarchy.child_count(self.region_root) + 1
     }
 
     #[inline]
@@ -177,7 +91,7 @@ where
 
     #[inline]
     fn nodes_iter(&self) -> impl Iterator<Item = NodeIndex> + Clone {
-        self.hierarchy.descendants(self.region_root)
+        std::iter::once(self.region_root).chain(self.hierarchy.children(self.region_root))
     }
 
     #[inline]
@@ -189,6 +103,7 @@ where
     fn node_capacity(&self) -> usize {
         self.graph.node_capacity() - self.graph.node_count() + self.node_count()
     }
+
     #[inline]
     fn port_capacity(&self) -> usize {
         self.graph.port_capacity() - self.graph.port_count() + self.port_count()
@@ -212,7 +127,7 @@ where
     }
 }
 
-impl<'g, G> LinkView for Region<'g, G>
+impl<'g, G> LinkView for FlatRegion<'g, G>
 where
     G: LinkView + Clone,
 {
@@ -223,7 +138,7 @@ where
         from: NodeIndex,
         to: NodeIndex,
     ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone {
-        if self.is_descendant(from) && self.is_descendant(to) {
+        if self.contains_node(from) && self.contains_node(to) {
             Either::Left(self.graph.get_connections(from, to))
         } else {
             Either::Right(std::iter::empty())
@@ -281,7 +196,7 @@ where
     }
 }
 
-impl<'g, G> MultiView for Region<'g, G>
+impl<'g, G> MultiView for FlatRegion<'g, G>
 where
     G: MultiView + Clone,
 {
@@ -326,13 +241,13 @@ mod test {
 
         let hierarchy = Hierarchy::new();
 
-        let region = Region::new(&graph, &hierarchy, root);
+        let region = FlatRegion::new(&graph, &hierarchy, root);
         assert_eq!(region.node_count(), 1);
         assert_eq!(region.port_count(), 0);
     }
 
     #[test]
-    fn simple_region() -> Result<(), Box<dyn Error>> {
+    fn simple_flat_region() -> Result<(), Box<dyn Error>> {
         let mut graph = PortGraph::new();
         let other = graph.add_node(42, 0);
         let root = graph.add_node(1, 0);
@@ -348,13 +263,13 @@ mod test {
         hierarchy.push_child(b, root)?;
         hierarchy.push_child(c, b)?;
 
-        let region = Region::new(&graph, &hierarchy, root);
+        let region = FlatRegion::new(&graph, &hierarchy, root);
 
         assert!(!region.is_empty());
         assert_eq!(region.region_root(), root);
-        assert_eq!(region.node_count(), 4);
+        assert_eq!(region.node_count(), 3);
         assert_eq!(region.port_count(), 4);
-        assert_eq!(region.node_capacity(), graph.node_capacity() - 1);
+        assert_eq!(region.node_capacity(), graph.node_capacity() - 2);
         assert_eq!(region.port_capacity(), graph.port_capacity() - 42);
         assert_eq!(region.node_port_capacity(a), graph.node_port_capacity(a));
         assert_eq!(
@@ -363,7 +278,7 @@ mod test {
         );
 
         assert!(!region.contains_node(other));
-        assert!(region.contains_node(c));
+        assert!(!region.contains_node(c));
         assert!(region.contains_node(root));
         assert!(!region.contains_port(graph.input(other, 10).unwrap()));
         assert!(region.contains_port(graph.output(a, 0).unwrap()));
@@ -393,7 +308,7 @@ mod test {
 
         // Global iterators
         let nodes = region.nodes_iter().collect_vec();
-        assert_eq!(nodes.as_slice(), [root, a, b, c]);
+        assert_eq!(nodes.as_slice(), [root, a, b]);
 
         let ports = region.ports_iter().collect_vec();
         assert_eq!(ports.len(), region.port_count());
@@ -427,7 +342,7 @@ mod test {
 
         // Multiports
         let multigraph = MultiPortGraph::from(graph);
-        let region = Region::new(&multigraph, &hierarchy, root);
+        let region = FlatRegion::new(&multigraph, &hierarchy, root);
         let a_o1 = SubportIndex::new_unique(a_o1);
         assert_eq!(
             region.all_subports(a).collect_vec(),

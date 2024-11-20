@@ -32,19 +32,24 @@ where
             hierarchy,
         }
     }
+
+    /// Get the root node of the region.
+    pub fn region_root(&self) -> NodeIndex {
+        self.region_root
+    }
 }
 
 impl<'g, G> FlatRegion<'g, G>
 where
     G: LinkView + Clone,
 {
-    /// Utility function to filter out links that are not in the subgraph.
+    /// Utility function to filter out links that are not in the region.
     #[inline(always)]
     fn contains_link(&self, (from, to): (G::LinkEndpoint, G::LinkEndpoint)) -> bool {
         self.contains_endpoint(from) && self.contains_endpoint(to)
     }
 
-    /// Utility function to filter out link endpoints that are not in the subgraph.
+    /// Utility function to filter out link endpoints that are not in the region.
     #[inline(always)]
     fn contains_endpoint(&self, e: G::LinkEndpoint) -> bool {
         self.contains_port(e.into())
@@ -222,7 +227,10 @@ where
 mod test {
     use std::error::Error;
 
-    use crate::{Hierarchy, LinkMut, PortGraph, PortMut};
+    use itertools::Itertools;
+
+    use crate::multiportgraph::SubportIndex;
+    use crate::{Hierarchy, LinkMut, MultiPortGraph, PortGraph, PortMut};
 
     use super::*;
 
@@ -247,21 +255,104 @@ mod test {
         let b = graph.add_node(0, 0);
         let c = graph.add_node(0, 0);
         graph.link_nodes(a, 0, other, 0)?;
+        graph.link_nodes(a, 1, root, 0)?;
 
         let mut hierarchy = Hierarchy::new();
+        hierarchy.push_child(root, other)?;
         hierarchy.push_child(a, root)?;
         hierarchy.push_child(b, root)?;
         hierarchy.push_child(c, b)?;
 
         let region = FlatRegion::new(&graph, &hierarchy, root);
 
-        assert!(region.nodes_iter().eq([root, a, b]));
+        assert!(!region.is_empty());
+        assert_eq!(region.region_root(), root);
         assert_eq!(region.node_count(), 3);
         assert_eq!(region.port_count(), 4);
-        assert_eq!(region.link_count(), 0);
+        assert_eq!(region.node_capacity(), graph.node_capacity() - 2);
+        assert_eq!(region.port_capacity(), graph.port_capacity() - 42);
+        assert_eq!(region.node_port_capacity(a), graph.node_port_capacity(a));
+        assert_eq!(
+            region.port_offsets(a, Direction::Outgoing).collect_vec(),
+            graph.port_offsets(a, Direction::Outgoing).collect_vec()
+        );
 
-        assert!(region.all_links(a).eq([]));
-        assert!(region.all_neighbours(a).eq([]));
+        assert!(!region.contains_node(other));
+        assert!(!region.contains_node(c));
+        assert!(region.contains_node(root));
+        assert!(!region.contains_port(graph.input(other, 10).unwrap()));
+        assert!(region.contains_port(graph.output(a, 0).unwrap()));
+
+        assert_eq!(region.inputs(a).count(), 1);
+        assert_eq!(region.outputs(a).count(), 2);
+        assert_eq!(region.num_ports(a, Direction::Incoming), 1);
+        assert_eq!(region.num_ports(a, Direction::Outgoing), 2);
+        assert_eq!(region.all_ports(a).count(), 3);
+        assert_eq!(region.all_port_offsets(a).count(), 3);
+
+        let inputs = region
+            .inputs(a)
+            .enumerate()
+            .map(|(i, port)| (i, port, Direction::Incoming));
+        let outputs = region
+            .outputs(a)
+            .enumerate()
+            .map(|(i, port)| (i, port, Direction::Outgoing));
+        for (i, port, dir) in inputs.chain(outputs) {
+            let offset = PortOffset::new(dir, i);
+            assert_eq!(region.port_direction(port), Some(dir));
+            assert_eq!(region.port_offset(port), Some(offset));
+            assert_eq!(region.port_node(port), Some(a));
+            assert_eq!(region.port_index(a, offset), Some(port));
+        }
+
+        // Global iterators
+        let nodes = region.nodes_iter().collect_vec();
+        assert_eq!(nodes.as_slice(), [root, a, b]);
+
+        let ports = region.ports_iter().collect_vec();
+        assert_eq!(ports.len(), region.port_count());
+
+        assert_eq!(region, region.clone());
+
+        // Links
+        let a_o1 = region.output(a, 1).unwrap();
+        let root_i0 = region.input(root, 0).unwrap();
+        assert!(region.connected(a, root));
+        assert_eq!(region.link_count(), 1);
+        assert_eq!(region.output_neighbours(a).collect_vec().as_slice(), [root]);
+        assert_eq!(
+            region.output_links(a).collect_vec().as_slice(),
+            [(a_o1, root_i0)]
+        );
+        assert_eq!(
+            region.port_links(a_o1).collect_vec().as_slice(),
+            [(a_o1, root_i0)]
+        );
+        assert_eq!(
+            region.all_links(root).collect_vec().as_slice(),
+            [(root_i0, a_o1)]
+        );
+        assert_eq!(
+            region.get_connections(a, root).collect_vec().as_slice(),
+            [(a_o1, root_i0)]
+        );
+        assert_eq!(region.get_connections(b, a).count(), 0);
+        assert_eq!(region.all_neighbours(root).collect_vec().as_slice(), [a]);
+
+        // Multiports
+        let multigraph = MultiPortGraph::from(graph);
+        let region = FlatRegion::new(&multigraph, &hierarchy, root);
+        let a_o1 = SubportIndex::new_unique(a_o1);
+        assert_eq!(
+            region.all_subports(a).collect_vec(),
+            multigraph.all_subports(a).collect_vec()
+        );
+        assert_eq!(
+            region.subports(a, Direction::Incoming).collect_vec(),
+            multigraph.subports(a, Direction::Incoming).collect_vec()
+        );
+        assert_eq!(region.subport_link(a_o1), multigraph.subport_link(a_o1));
 
         Ok(())
     }

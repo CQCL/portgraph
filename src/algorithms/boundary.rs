@@ -50,14 +50,12 @@ impl Boundary {
         inputs: impl IntoIterator<Item = PortIndex>,
         outputs: impl IntoIterator<Item = PortIndex>,
     ) -> Self {
-        let inputs = inputs.into_iter().map(|input| {
-            assert_eq!(graph.port_direction(input), Some(Direction::Incoming));
-            input
-        });
-        let outputs = outputs.into_iter().map(|output| {
-            assert_eq!(graph.port_direction(output), Some(Direction::Outgoing));
-            output
-        });
+        let inputs = inputs
+            .into_iter()
+            .inspect(|input| assert_eq!(graph.port_direction(*input), Some(Direction::Incoming)));
+        let outputs = outputs
+            .into_iter()
+            .inspect(|output| assert_eq!(graph.port_direction(*output), Some(Direction::Outgoing)));
         Self::new_unchecked(inputs, outputs)
     }
 
@@ -133,7 +131,7 @@ impl Boundary {
     ///
     /// The `graph` parameter must be a valid graph for this boundary. When
     /// multiple nodes not reachable from the boundary are present, consider
-    /// using a [`Subgraph`] to restrict the traversal.
+    /// using a [`crate::view::Subgraph`] to restrict the traversal.
     ///
     /// # Complexity
     ///
@@ -179,7 +177,7 @@ impl Boundary {
                     .get_mut(&input_neigh)
                     .expect("Incoming neighbour not visited");
                 reaching_ports.extend(input_reaching.iter().copied());
-                *output_neighs = *output_neighs - 1;
+                *output_neighs -= 1;
                 // Not reeded anymore, remove from the map.
                 if *output_neighs == 0 {
                     reaching.remove(&input_neigh);
@@ -293,7 +291,7 @@ impl PortOrdering {
             .iter()
             .zip(other.reachable.iter())
             .enumerate()
-            .map(|(i, (self_reachable, other_reachable))| {
+            .flat_map(|(i, (self_reachable, other_reachable))| {
                 let input = BoundaryPort {
                     index: i,
                     direction: Direction::Incoming,
@@ -303,7 +301,6 @@ impl PortOrdering {
                     .filter(|port| !self_reachable.contains(port))
                     .map(move |port| (input, *port))
             })
-            .flatten()
     }
 
     /// Returns a new empty ordering.

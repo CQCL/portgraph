@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 use delegate::delegate;
 use itertools::{Either, Itertools};
 
+use crate::algorithms::boundary::{Boundary, HasBoundary};
 use crate::PortOffset;
 use crate::{
     algorithms::{ConvexChecker, TopoConvexChecker},
@@ -380,6 +381,12 @@ where
             fn subports(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = Self::LinkEndpoint> + Clone;
             fn all_subports(&self, node: NodeIndex) -> impl Iterator<Item = Self::LinkEndpoint> + Clone;
         }
+    }
+}
+
+impl<G> HasBoundary for Subgraph<G> {
+    fn port_boundary(&self) -> crate::algorithms::boundary::Boundary {
+        Boundary::new_unchecked(self.inputs.clone(), self.outputs.clone())
     }
 }
 

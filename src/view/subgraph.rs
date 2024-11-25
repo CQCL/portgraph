@@ -283,8 +283,8 @@ where
         to self.graph {
             fn port_direction(&self, port: impl Into<PortIndex>) -> Option<Direction>;
             fn port_node(&self, port: impl Into<PortIndex>) -> Option<NodeIndex>;
-            fn port_offset(&self, port: impl Into<PortIndex>) -> Option<crate::PortOffset>;
-            fn port_index(&self, node: NodeIndex, offset: crate::PortOffset) -> Option<PortIndex>;
+            fn port_offset(&self, port: impl Into<PortIndex>) -> Option<PortOffset>;
+            fn port_index(&self, node: NodeIndex, offset: PortOffset) -> Option<PortIndex>;
             fn ports(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortIndex> + Clone;
             fn all_ports(&self, node: NodeIndex) -> impl Iterator<Item = PortIndex> + Clone;
             fn input(&self, node: NodeIndex, offset: usize) -> Option<PortIndex>;

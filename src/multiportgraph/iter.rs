@@ -82,7 +82,7 @@ pub struct Nodes<'a> {
     pub(super) len: usize,
 }
 
-impl<'a> Iterator for Nodes<'a> {
+impl Iterator for Nodes<'_> {
     type Item = NodeIndex;
 
     #[inline]
@@ -105,13 +105,13 @@ impl<'a> Iterator for Nodes<'a> {
     }
 }
 
-impl<'a> ExactSizeIterator for Nodes<'a> {
+impl ExactSizeIterator for Nodes<'_> {
     fn len(&self) -> usize {
         self.len
     }
 }
 
-impl<'a> DoubleEndedIterator for Nodes<'a> {
+impl DoubleEndedIterator for Nodes<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
         loop {
             let node = self.iter.next_back()?;
@@ -123,7 +123,7 @@ impl<'a> DoubleEndedIterator for Nodes<'a> {
     }
 }
 
-impl<'a> FusedIterator for Nodes<'a> {}
+impl FusedIterator for Nodes<'_> {}
 
 /// Iterator over the ports of a node.
 #[derive(Debug, Clone)]
@@ -145,7 +145,7 @@ impl<'a> NodeSubports<'a> {
     }
 }
 
-impl<'a> Iterator for NodeSubports<'a> {
+impl Iterator for NodeSubports<'_> {
     type Item = SubportIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -184,7 +184,7 @@ impl<'a> Iterator for NodeSubports<'a> {
     }
 }
 
-impl<'a> FusedIterator for NodeSubports<'a> {}
+impl FusedIterator for NodeSubports<'_> {}
 
 /// Iterator over the ports of a node.
 #[derive(Debug, Clone)]
@@ -217,7 +217,7 @@ impl<'a> Neighbours<'a> {
     }
 }
 
-impl<'a> Iterator for Neighbours<'a> {
+impl Iterator for Neighbours<'_> {
     type Item = NodeIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -260,7 +260,7 @@ impl<'a> Iterator for Neighbours<'a> {
     }
 }
 
-impl<'a> FusedIterator for Neighbours<'a> {}
+impl FusedIterator for Neighbours<'_> {}
 
 /// Iterator over the links from a node, created by
 /// [`MultiPortGraph::links`].
@@ -292,7 +292,7 @@ impl<'a> NodeLinks<'a> {
     }
 }
 
-impl<'a> Iterator for NodeLinks<'a> {
+impl Iterator for NodeLinks<'_> {
     /// A link from one of the node's subports to another subport.
     type Item = (SubportIndex, SubportIndex);
 
@@ -316,7 +316,7 @@ impl<'a> Iterator for NodeLinks<'a> {
     }
 }
 
-impl<'a> FusedIterator for NodeLinks<'a> {}
+impl FusedIterator for NodeLinks<'_> {}
 
 /// Iterator over the links between two nodes, created by
 /// [`MultiPortGraph::get_connections`].
@@ -341,7 +341,7 @@ impl<'a> NodeConnections<'a> {
     }
 }
 
-impl<'a> Iterator for NodeConnections<'a> {
+impl Iterator for NodeConnections<'_> {
     /// A link from one of the node's subports to another subport.
     type Item = (SubportIndex, SubportIndex);
 
@@ -356,7 +356,7 @@ impl<'a> Iterator for NodeConnections<'a> {
     }
 }
 
-impl<'a> FusedIterator for NodeConnections<'a> {}
+impl FusedIterator for NodeConnections<'_> {}
 
 /// Iterator over the links of a port
 #[derive(Debug, Clone)]
@@ -421,7 +421,7 @@ fn port_links_multiport(
     Some((SubportIndex::new_multi(port, subport_offset), link))
 }
 
-impl<'a> Iterator for PortLinks<'a> {
+impl Iterator for PortLinks<'_> {
     type Item = (SubportIndex, SubportIndex);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -459,7 +459,7 @@ impl<'a> Iterator for PortLinks<'a> {
     }
 }
 
-impl<'a> DoubleEndedIterator for PortLinks<'a> {
+impl DoubleEndedIterator for PortLinks<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
         match self {
             PortLinks::SinglePort {
@@ -486,7 +486,7 @@ impl<'a> DoubleEndedIterator for PortLinks<'a> {
     }
 }
 
-impl<'a> FusedIterator for PortLinks<'a> {}
+impl FusedIterator for PortLinks<'_> {}
 
 /// Iterator over all the ports of the multiport graph.
 #[derive(Clone)]
@@ -505,7 +505,7 @@ impl<'a> Ports<'a> {
     }
 }
 
-impl<'a> Iterator for Ports<'a> {
+impl Iterator for Ports<'_> {
     type Item = PortIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -520,7 +520,7 @@ impl<'a> Iterator for Ports<'a> {
     }
 }
 
-impl<'a> DoubleEndedIterator for Ports<'a> {
+impl DoubleEndedIterator for Ports<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
         loop {
             let port = self.ports.next_back()?;
@@ -532,4 +532,4 @@ impl<'a> DoubleEndedIterator for Ports<'a> {
     }
 }
 
-impl<'a> FusedIterator for Ports<'a> {}
+impl FusedIterator for Ports<'_> {}

@@ -346,7 +346,7 @@ where
     }
 }
 
-impl<'g, G> Iterator for EdgeRefs<'g, G>
+impl<G> Iterator for EdgeRefs<'_, G>
 where
     G: LinkView,
 {
@@ -419,7 +419,7 @@ where
     }
 }
 
-impl<'g, G> Iterator for NodeEdgeRefs<'g, G>
+impl<G> Iterator for NodeEdgeRefs<'_, G>
 where
     G: LinkView,
 {

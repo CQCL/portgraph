@@ -92,7 +92,11 @@ impl<K> SecondaryMap<K, bool> for BitVec
 where
     K: Into<usize> + TryFrom<usize>,
 {
-    type Iter<'a> = BitVecIter<'a, K> where Self: 'a, K: 'a;
+    type Iter<'a>
+        = BitVecIter<'a, K>
+    where
+        Self: 'a,
+        K: 'a;
 
     #[inline]
     fn new() -> Self {
@@ -223,7 +227,7 @@ where
     }
 }
 
-impl<'a, K> DoubleEndedIterator for BitVecIter<'a, K>
+impl<K> DoubleEndedIterator for BitVecIter<'_, K>
 where
     K: TryFrom<usize>,
 {
@@ -235,13 +239,17 @@ where
     }
 }
 
-impl<'a, K> FusedIterator for BitVecIter<'a, K> where K: TryFrom<usize> {}
+impl<K> FusedIterator for BitVecIter<'_, K> where K: TryFrom<usize> {}
 
 impl<K> SecondaryMap<K, bool> for HashSet<K>
 where
     K: Hash + Eq + Clone,
 {
-    type Iter<'a> = HashSetIter<'a, K> where Self: 'a, K: 'a;
+    type Iter<'a>
+        = HashSetIter<'a, K>
+    where
+        Self: 'a,
+        K: 'a;
 
     #[inline]
     fn new() -> Self {

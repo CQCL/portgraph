@@ -231,7 +231,7 @@ where
     }
 }
 
-impl<'f, Map, G> Iterator for TopoSort<'f, G, Map>
+impl<Map, G> Iterator for TopoSort<'_, G, Map>
 where
     Map: SecondaryMap<PortIndex, bool>,
     G: LinkView,
@@ -272,14 +272,14 @@ where
     }
 }
 
-impl<'f, Map, G> FusedIterator for TopoSort<'f, G, Map>
+impl<Map, G> FusedIterator for TopoSort<'_, G, Map>
 where
     Map: SecondaryMap<PortIndex, bool>,
     G: LinkView,
 {
 }
 
-impl<'f, Map, G> Debug for TopoSort<'f, G, Map>
+impl<Map, G> Debug for TopoSort<'_, G, Map>
 where
     Map: Debug,
     G: Debug,

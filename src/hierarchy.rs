@@ -581,7 +581,7 @@ impl Default for Children<'static> {
     }
 }
 
-impl<'a> Iterator for Children<'a> {
+impl Iterator for Children<'_> {
     type Item = NodeIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -601,7 +601,7 @@ impl<'a> Iterator for Children<'a> {
     }
 }
 
-impl<'a> DoubleEndedIterator for Children<'a> {
+impl DoubleEndedIterator for Children<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
         if self.len == 0 {
             return None;
@@ -614,14 +614,14 @@ impl<'a> DoubleEndedIterator for Children<'a> {
     }
 }
 
-impl<'a> ExactSizeIterator for Children<'a> {
+impl ExactSizeIterator for Children<'_> {
     #[inline(always)]
     fn len(&self) -> usize {
         self.len
     }
 }
 
-impl<'a> FusedIterator for Children<'a> {}
+impl FusedIterator for Children<'_> {}
 
 /// Iterator created by [`Hierarchy::descendants`].
 ///
@@ -647,7 +647,7 @@ impl Default for Descendants<'static> {
     }
 }
 
-impl<'a> Iterator for Descendants<'a> {
+impl Iterator for Descendants<'_> {
     type Item = NodeIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -673,7 +673,7 @@ impl<'a> Iterator for Descendants<'a> {
     }
 }
 
-impl<'a> FusedIterator for Descendants<'a> {}
+impl FusedIterator for Descendants<'_> {}
 
 /// Error produced when trying to attach nodes in the Hierarchy.
 #[derive(Debug, Clone, Error, PartialEq, Eq)]

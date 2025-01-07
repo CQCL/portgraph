@@ -1165,7 +1165,7 @@ impl PortOperation {
 }
 
 #[cfg(test)]
-pub mod test {
+pub(crate) mod test {
     #[cfg(feature = "serde")]
     #[cfg(feature = "proptest")]
     use crate::proptest::gen_portgraph;
@@ -1597,7 +1597,7 @@ pub mod test {
     }
 
     #[cfg(feature = "serde")]
-    pub fn ser_roundtrip<T: Serialize + serde::de::DeserializeOwned>(g: &T) -> T {
+    pub(crate) fn ser_roundtrip<T: Serialize + serde::de::DeserializeOwned>(g: &T) -> T {
         let v = rmp_serde::to_vec_named(g).unwrap();
         rmp_serde::from_slice(&v[..]).unwrap()
     }

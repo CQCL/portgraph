@@ -651,7 +651,7 @@ impl std::fmt::Debug for SubportIndex {
 }
 
 #[cfg(test)]
-pub mod test {
+pub(crate) mod test {
     use super::*;
     use itertools::Itertools;
 

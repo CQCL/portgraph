@@ -124,7 +124,7 @@ pub fn postorder_filtered<'graph>(
     direction: Direction,
     node_filter: impl FnMut(NodeIndex) -> bool + 'graph,
     port_filter: impl FnMut(NodeIndex, PortIndex) -> bool + 'graph,
-) -> PostOrder {
+) -> PostOrder<'graph> {
     PostOrder::new(
         graph,
         source,

@@ -39,7 +39,7 @@ where
     }
 }
 
-impl<'g, G> FlatRegion<'g, G>
+impl<G> FlatRegion<'_, G>
 where
     G: LinkView + Clone,
 {

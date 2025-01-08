@@ -983,7 +983,7 @@ mod debug {
     use super::*;
     pub struct NodesDebug<'a>(pub &'a PortGraph);
 
-    impl<'a> std::fmt::Debug for NodesDebug<'a> {
+    impl std::fmt::Debug for NodesDebug<'_> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             f.debug_map()
                 .entries(
@@ -997,7 +997,7 @@ mod debug {
 
     pub struct NodeDebug<'a>(pub &'a PortGraph, pub NodeIndex);
 
-    impl<'a> std::fmt::Debug for NodeDebug<'a> {
+    impl std::fmt::Debug for NodeDebug<'_> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let inputs = PortRangeDebug(self.0._inputs(self.1).as_range());
             let outputs = PortRangeDebug(self.0._outputs(self.1).as_range());
@@ -1030,7 +1030,7 @@ mod debug {
 
     pub struct PortsDebug<'a>(pub &'a PortGraph);
 
-    impl<'a> std::fmt::Debug for PortsDebug<'a> {
+    impl std::fmt::Debug for PortsDebug<'_> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             f.debug_map()
                 .entries(
@@ -1044,7 +1044,7 @@ mod debug {
 
     pub struct PortDebug<'a>(pub &'a PortGraph, pub PortIndex);
 
-    impl<'a> std::fmt::Debug for PortDebug<'a> {
+    impl std::fmt::Debug for PortDebug<'_> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let direction = self.0.port_direction(self.1).unwrap();
             let link = self.0.port_link(self.1);
@@ -1165,7 +1165,7 @@ impl PortOperation {
 }
 
 #[cfg(test)]
-pub mod test {
+pub(crate) mod test {
     #[cfg(feature = "serde")]
     #[cfg(feature = "proptest")]
     use crate::proptest::gen_portgraph;
@@ -1597,7 +1597,7 @@ pub mod test {
     }
 
     #[cfg(feature = "serde")]
-    pub fn ser_roundtrip<T: Serialize + serde::de::DeserializeOwned>(g: &T) -> T {
+    pub(crate) fn ser_roundtrip<T: Serialize + serde::de::DeserializeOwned>(g: &T) -> T {
         let v = rmp_serde::to_vec_named(g).unwrap();
         rmp_serde::from_slice(&v[..]).unwrap()
     }

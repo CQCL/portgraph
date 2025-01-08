@@ -100,7 +100,7 @@ where
     }
 }
 
-impl<'g, G> Region<'g, G>
+impl<G> Region<'_, G>
 where
     G: LinkView + Clone,
 {
@@ -117,7 +117,7 @@ where
     }
 }
 
-impl<'g, G: PartialEq> PartialEq for Region<'g, G> {
+impl<G: PartialEq> PartialEq for Region<'_, G> {
     fn eq(&self, other: &Self) -> bool {
         self.region_root == other.region_root
             && self.graph == other.graph
@@ -125,7 +125,7 @@ impl<'g, G: PartialEq> PartialEq for Region<'g, G> {
     }
 }
 
-impl<'g, G: Clone> Clone for Region<'g, G> {
+impl<G: Clone> Clone for Region<'_, G> {
     fn clone(&self) -> Self {
         // Clone the cache if it is not currently locked.
         // Otherwise, create a new empty cache.

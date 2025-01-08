@@ -313,7 +313,12 @@ where
     K: Into<usize> + TryFrom<usize> + Copy,
     V: Clone + Default,
 {
-    type Iter<'a> = UnmanagedIter<'a, K, V> where Self: 'a, K: 'a, V: 'a;
+    type Iter<'a>
+        = UnmanagedIter<'a, K, V>
+    where
+        Self: 'a,
+        K: 'a,
+        V: 'a;
 
     /// Creates a new secondary map.
     ///
@@ -431,7 +436,7 @@ where
     }
 }
 
-impl<'a, K, V> DoubleEndedIterator for UnmanagedIter<'a, K, V>
+impl<K, V> DoubleEndedIterator for UnmanagedIter<'_, K, V>
 where
     K: TryFrom<usize>,
 {
@@ -443,7 +448,7 @@ where
     }
 }
 
-impl<'a, K, V> FusedIterator for UnmanagedIter<'a, K, V> where K: TryFrom<usize> {}
+impl<K, V> FusedIterator for UnmanagedIter<'_, K, V> where K: TryFrom<usize> {}
 
 #[cfg(test)]
 mod test {

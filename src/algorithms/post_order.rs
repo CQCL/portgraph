@@ -124,7 +124,7 @@ pub fn postorder_filtered<'graph>(
     direction: Direction,
     node_filter: impl FnMut(NodeIndex) -> bool + 'graph,
     port_filter: impl FnMut(NodeIndex, PortIndex) -> bool + 'graph,
-) -> PostOrder {
+) -> PostOrder<'graph> {
     PostOrder::new(
         graph,
         source,
@@ -205,7 +205,7 @@ impl<'graph> PostOrder<'graph> {
     }
 }
 
-impl<'graph> Iterator for PostOrder<'graph> {
+impl Iterator for PostOrder<'_> {
     type Item = NodeIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -252,9 +252,9 @@ impl<'graph> Iterator for PostOrder<'graph> {
     }
 }
 
-impl<'graph> FusedIterator for PostOrder<'graph> {}
+impl FusedIterator for PostOrder<'_> {}
 
-impl<'graph> std::fmt::Debug for PostOrder<'graph> {
+impl std::fmt::Debug for PostOrder<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PostOrder")
             .field("graph", &self.graph)

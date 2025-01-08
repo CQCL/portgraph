@@ -201,7 +201,7 @@ pub struct Nodes<'a> {
     pub(super) len: usize,
 }
 
-impl<'a> Iterator for Nodes<'a> {
+impl Iterator for Nodes<'_> {
     type Item = NodeIndex;
 
     #[inline]
@@ -226,13 +226,13 @@ impl<'a> Iterator for Nodes<'a> {
     }
 }
 
-impl<'a> ExactSizeIterator for Nodes<'a> {
+impl ExactSizeIterator for Nodes<'_> {
     fn len(&self) -> usize {
         self.len
     }
 }
 
-impl<'a> DoubleEndedIterator for Nodes<'a> {
+impl DoubleEndedIterator for Nodes<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
         if self.len == 0 {
             return None;
@@ -249,7 +249,7 @@ impl<'a> DoubleEndedIterator for Nodes<'a> {
     }
 }
 
-impl<'a> FusedIterator for Nodes<'a> {}
+impl FusedIterator for Nodes<'_> {}
 
 /// Iterator over the ports of a graph, created by [`PortGraph::ports_iter`].
 #[derive(Clone, Debug, Default)]
@@ -258,7 +258,7 @@ pub struct Ports<'a> {
     pub(super) len: usize,
 }
 
-impl<'a> Iterator for Ports<'a> {
+impl Iterator for Ports<'_> {
     type Item = PortIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -280,13 +280,13 @@ impl<'a> Iterator for Ports<'a> {
     }
 }
 
-impl<'a> ExactSizeIterator for Ports<'a> {
+impl ExactSizeIterator for Ports<'_> {
     fn len(&self) -> usize {
         self.len
     }
 }
 
-impl<'a> DoubleEndedIterator for Ports<'a> {
+impl DoubleEndedIterator for Ports<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
         while let Some((index, port_entry)) = self.iter.next_back() {
             if let PortEntry::Port(_) = port_entry {
@@ -298,7 +298,7 @@ impl<'a> DoubleEndedIterator for Ports<'a> {
     }
 }
 
-impl<'a> FusedIterator for Ports<'a> {}
+impl FusedIterator for Ports<'_> {}
 
 /// Iterator over the port offsets of a node. See [`PortGraph::input_offsets`],
 /// [`PortGraph::output_offsets`], and [`PortGraph::all_port_offsets`].
@@ -388,7 +388,7 @@ impl<'a> NodeLinks<'a> {
     }
 }
 
-impl<'a> Iterator for NodeLinks<'a> {
+impl Iterator for NodeLinks<'_> {
     type Item = (PortIndex, PortIndex);
 
     #[inline]
@@ -411,7 +411,7 @@ impl<'a> Iterator for NodeLinks<'a> {
     }
 }
 
-impl<'a> DoubleEndedIterator for NodeLinks<'a> {
+impl DoubleEndedIterator for NodeLinks<'_> {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
         loop {
@@ -423,7 +423,7 @@ impl<'a> DoubleEndedIterator for NodeLinks<'a> {
     }
 }
 
-impl<'a> FusedIterator for NodeLinks<'a> {}
+impl FusedIterator for NodeLinks<'_> {}
 
 /// Iterator over the neighbours of a node, created by
 /// [`LinkView::neighbours`]. May return duplicate entries if the graph has
@@ -447,7 +447,7 @@ impl<'a> Neighbours<'a> {
     }
 }
 
-impl<'a> Iterator for Neighbours<'a> {
+impl Iterator for Neighbours<'_> {
     type Item = NodeIndex;
 
     #[inline]
@@ -463,7 +463,7 @@ impl<'a> Iterator for Neighbours<'a> {
     }
 }
 
-impl<'a> DoubleEndedIterator for Neighbours<'a> {
+impl DoubleEndedIterator for Neighbours<'_> {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
         self.linked_ports
@@ -472,7 +472,7 @@ impl<'a> DoubleEndedIterator for Neighbours<'a> {
     }
 }
 
-impl<'a> FusedIterator for Neighbours<'a> {}
+impl FusedIterator for Neighbours<'_> {}
 
 /// Iterator over the links connecting two nodes, created by
 /// [`LinkView::get_connections`].
@@ -497,7 +497,7 @@ impl<'a> NodeConnections<'a> {
     }
 }
 
-impl<'a> Iterator for NodeConnections<'a> {
+impl Iterator for NodeConnections<'_> {
     type Item = (PortIndex, PortIndex);
 
     #[inline]
@@ -516,7 +516,7 @@ impl<'a> Iterator for NodeConnections<'a> {
     }
 }
 
-impl<'a> DoubleEndedIterator for NodeConnections<'a> {
+impl DoubleEndedIterator for NodeConnections<'_> {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
         loop {
@@ -528,4 +528,4 @@ impl<'a> DoubleEndedIterator for NodeConnections<'a> {
     }
 }
 
-impl<'a> FusedIterator for NodeConnections<'a> {}
+impl FusedIterator for NodeConnections<'_> {}

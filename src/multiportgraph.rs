@@ -107,7 +107,7 @@ impl PortView for MultiPortGraph {
     fn contains_port(&self, port: PortIndex) -> bool {
         self.graph
             .port_node(port)
-            .map_or(false, |node| !self.copy_node.get(node))
+            .is_some_and(|node| !self.copy_node.get(node))
     }
 
     #[inline]

@@ -127,7 +127,7 @@ where
     fn get(&self, key: K) -> &bool {
         // We can't return a reference to the internal bitflags, so we have to
         // create static bools.
-        if BitSlice::get(self, key.into()).map_or(false, |f| *f) {
+        if BitSlice::get(self, key.into()).is_some_and(|f| *f) {
             &true
         } else {
             &false

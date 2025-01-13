@@ -56,7 +56,7 @@ where
     }
 }
 
-impl<'g, G> PortView for FlatRegion<'g, G>
+impl<G> PortView for FlatRegion<'_, G>
 where
     G: PortView + Clone,
 {
@@ -127,7 +127,7 @@ where
     }
 }
 
-impl<'g, G> LinkView for FlatRegion<'g, G>
+impl<G> LinkView for FlatRegion<'_, G>
 where
     G: LinkView + Clone,
 {
@@ -196,7 +196,7 @@ where
     }
 }
 
-impl<'g, G> MultiView for FlatRegion<'g, G>
+impl<G> MultiView for FlatRegion<'_, G>
 where
     G: MultiView + Clone,
 {

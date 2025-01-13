@@ -9,7 +9,7 @@ use delegate::delegate;
 
 use super::{LinkView, MultiView, PortView};
 
-impl<'g, G: PortView> PortView for &'g G {
+impl<G: PortView> PortView for &G {
     delegate! {
         to (*self) {
             fn port_direction(&self, port: impl Into<PortIndex>) -> Option<Direction>;
@@ -37,7 +37,7 @@ impl<'g, G: PortView> PortView for &'g G {
     }
 }
 
-impl<'g, G: LinkView> LinkView for &'g G {
+impl<G: LinkView> LinkView for &G {
     type LinkEndpoint = G::LinkEndpoint;
 
     delegate! {
@@ -53,7 +53,7 @@ impl<'g, G: LinkView> LinkView for &'g G {
     }
 }
 
-impl<'g, G: MultiView> MultiView for &'g G {
+impl<G: MultiView> MultiView for &G {
     delegate! {
         to (*self) {
             fn subports(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = Self::LinkEndpoint> + Clone;

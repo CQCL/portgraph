@@ -75,7 +75,7 @@ where
             let first_visited_ancestor = self.hierarchy.parent(*ancestors.last().unwrap());
             let is_descendant = first_visited_ancestor == Some(self.region_root)
                 || first_visited_ancestor
-                    .map_or(false, |ancestor| cache.get(&ancestor).copied().unwrap());
+                    .is_some_and(|ancestor| cache.get(&ancestor).copied().unwrap());
 
             // The read lock is dropped here, before we reacquire it for writing
             // the computed values.
@@ -142,7 +142,7 @@ impl<G: Clone> Clone for Region<'_, G> {
     }
 }
 
-impl<'g, G> PortView for Region<'g, G>
+impl<G> PortView for Region<'_, G>
 where
     G: PortView + Clone,
 {
@@ -212,7 +212,7 @@ where
     }
 }
 
-impl<'g, G> LinkView for Region<'g, G>
+impl<G> LinkView for Region<'_, G>
 where
     G: LinkView + Clone,
 {
@@ -281,7 +281,7 @@ where
     }
 }
 
-impl<'g, G> MultiView for Region<'g, G>
+impl<G> MultiView for Region<'_, G>
 where
     G: MultiView + Clone,
 {

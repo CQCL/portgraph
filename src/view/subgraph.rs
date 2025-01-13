@@ -385,7 +385,7 @@ where
 }
 
 impl<G> HasBoundary for Subgraph<G> {
-    fn port_boundary(&self) -> crate::algorithms::boundary::Boundary {
+    fn port_boundary(&self) -> Boundary {
         Boundary::new_unchecked(self.inputs.clone(), self.outputs.clone())
     }
 }

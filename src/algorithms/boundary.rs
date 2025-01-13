@@ -91,7 +91,7 @@ impl Boundary {
         let index = ports
             .iter()
             .position(|&input| input == port)
-            .expect("port not found in inputs");
+            .expect("port not found in boundary");
         BoundaryPort { index, direction }
     }
 

@@ -63,6 +63,7 @@ use pyo3::prelude::*;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 pub mod algorithms;
+pub mod boundary;
 pub mod hierarchy;
 pub mod multiportgraph;
 pub mod portgraph;

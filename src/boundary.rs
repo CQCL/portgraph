@@ -1,8 +1,11 @@
 //! Algorithms for handling port boundaries in a graph.
 
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
-use super::toposort::toposort;
+use itertools::Itertools;
+
+use crate::algorithms::toposort;
 use crate::{Direction, LinkView, NodeIndex, PortIndex, PortView};
 
 /// A port boundary in a graph.
@@ -33,30 +36,22 @@ pub struct BoundaryPort {
 /// Trait for graph structures that define a boundary of input and output ports.
 pub trait HasBoundary {
     /// Returns the boundary of the node.
-    fn port_boundary(&self) -> Boundary;
+    fn port_boundary(&self) -> Cow<'_, Boundary>;
 }
 
 impl Boundary {
     /// Creates a new boundary from the given input and output ports.
     ///
-    /// # Panics
-    ///
-    /// If the direction of the ports does not match the input/output
-    /// requirement.
-    ///
-    /// For an unchecked version, use [`Boundary::new_unchecked`].
-    pub fn new(
-        graph: &impl PortView,
-        inputs: impl IntoIterator<Item = PortIndex>,
-        outputs: impl IntoIterator<Item = PortIndex>,
-    ) -> Self {
-        let inputs = inputs
-            .into_iter()
-            .inspect(|input| assert_eq!(graph.port_direction(*input), Some(Direction::Incoming)));
-        let outputs = outputs
-            .into_iter()
-            .inspect(|output| assert_eq!(graph.port_direction(*output), Some(Direction::Outgoing)));
-        Self::new_unchecked(inputs, outputs)
+    /// Queries the direction of each port to split them into inputs and outputs.
+    /// For a version that doesn't borrow the graph, use [`Boundary::new`].
+    pub fn from_ports(graph: &impl PortView, ports: impl IntoIterator<Item = PortIndex>) -> Self {
+        let (inputs, outputs): (Vec<_>, Vec<_>) = ports.into_iter().partition_map(|p| match graph
+            .port_direction(p)
+        {
+            Some(Direction::Incoming) => itertools::Either::Left(p),
+            _ => itertools::Either::Right(p),
+        });
+        Self::new(inputs, outputs)
     }
 
     /// Creates a new boundary from the given input and output ports.
@@ -67,8 +62,8 @@ impl Boundary {
     /// `inputs` must contain only incoming ports, and `outputs` must contain
     /// only outgoing ports.
     ///
-    /// For a checked version, use [`Boundary::new`].
-    pub fn new_unchecked(
+    /// For a safe version, use [`Boundary::from_ports`].
+    pub fn new(
         inputs: impl IntoIterator<Item = PortIndex>,
         outputs: impl IntoIterator<Item = PortIndex>,
     ) -> Self {
@@ -193,7 +188,7 @@ impl Boundary {
                     .expect("Incoming neighbour not visited");
                 reaching_ports.extend(input_reaching.iter().copied());
                 *output_neighs -= 1;
-                // Not reeded anymore, remove from the map.
+                // Not needed any more, remove from the map.
                 if *output_neighs == 0 {
                     reaching.remove(&input_neigh);
                 }
@@ -233,6 +228,27 @@ impl Boundary {
         let self_ordering = self.port_ordering(self_graph);
         let other_ordering = other.port_ordering(other_graph);
         self_ordering.is_stronger_than(&other_ordering)
+    }
+
+    /// Returns the input port indices in the boundary.
+    #[inline]
+    pub fn input_indices(&self) -> &[PortIndex] {
+        &self.inputs
+    }
+
+    /// Returns the output port indices in the boundary.
+    #[inline]
+    pub fn output_indices(&self) -> &[PortIndex] {
+        &self.outputs
+    }
+
+    /// Iterate over the [`PortIndex`]es in the boundary. The iterator first
+    /// yields the input ports, then the output ports.
+    pub fn port_indices(&self) -> impl Iterator<Item = PortIndex> + '_ {
+        self.inputs
+            .iter()
+            .copied()
+            .chain(self.outputs.iter().copied())
     }
 }
 
@@ -408,19 +424,17 @@ mod test {
         let nodes = graph.nodes_iter().collect_vec();
 
         // Create a boundary containing the {1,2,5,6} subgraph.
-        let boundary = Boundary::new(
+        let boundary = Boundary::from_ports(
             &graph,
             [
                 graph.input(nodes[1], 0).unwrap(),
                 graph.input(nodes[5], 0).unwrap(),
-            ],
-            [
                 graph.output(nodes[2], 0).unwrap(),
                 graph.output(nodes[6], 0).unwrap(),
             ],
         );
         let subgraph = Subgraph::with_nodes(&graph, [nodes[1], nodes[2], nodes[5], nodes[6]]);
-        assert_eq!(boundary, subgraph.port_boundary());
+        assert_eq!(&boundary, subgraph.port_boundary().as_ref());
         assert_eq!(boundary.num_ports(), 4);
         assert_eq!(
             boundary.port(graph.input(nodes[5], 0).unwrap(), Direction::Incoming),
@@ -489,13 +503,11 @@ mod test {
         let boundary = subgraph.port_boundary();
 
         let (graph_22, ins_22, outs_22) = graph_kn::<2, 2>();
-        let boundary_22 = Boundary::new(
+        let boundary_22 = Boundary::from_ports(
             &graph_22,
             [
                 graph_22.input(ins_22[0], 0).unwrap(),
                 graph_22.input(ins_22[1], 0).unwrap(),
-            ],
-            [
                 graph_22.output(outs_22[0], 0).unwrap(),
                 graph_22.output(outs_22[1], 0).unwrap(),
             ],

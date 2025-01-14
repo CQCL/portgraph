@@ -1,7 +1,5 @@
 //! Algorithm implementations for portgraphs.
 
-pub mod boundary;
-
 mod convex;
 mod dominators;
 mod lca;

@@ -1,7 +1,7 @@
 //! Algorithms for handling port boundaries in a graph.
 
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 
 use itertools::Itertools;
 
@@ -147,8 +147,8 @@ impl Boundary {
     /// the number of ports in the boundary.
     pub fn port_ordering(&self, graph: &impl LinkView) -> PortOrdering {
         // Maps between the input/output ports in the boundary and the nodes they belong to.
-        let mut input_nodes: HashMap<NodeIndex, Vec<PortIndex>> = HashMap::new();
-        let mut output_nodes: HashMap<NodeIndex, Vec<PortIndex>> = HashMap::new();
+        let mut input_nodes: BTreeMap<NodeIndex, Vec<PortIndex>> = BTreeMap::new();
+        let mut output_nodes: BTreeMap<NodeIndex, Vec<PortIndex>> = BTreeMap::new();
         for &port in self.inputs.iter() {
             let node = graph.port_node(port).unwrap();
             input_nodes.entry(node).or_default().push(port);
@@ -170,8 +170,7 @@ impl Boundary {
             .copied()
             .filter(|&node| graph.input_neighbours(node).count() == 0);
 
-        let mut reaching: HashMap<NodeIndex, (usize, HashSet<PortIndex>)> =
-            HashMap::with_capacity(self.num_ports());
+        let mut reaching: BTreeMap<NodeIndex, (usize, HashSet<PortIndex>)> = BTreeMap::new();
         for node in toposort::<_, HashSet<PortIndex>>(graph, source_nodes, Direction::Outgoing) {
             // Collect the reaching ports, plus any ports in the node itself.
             let mut reaching_ports: HashSet<PortIndex> = input_nodes

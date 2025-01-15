@@ -179,11 +179,39 @@ where
 
     /// Returns whether there are ports that have not been visited yet.
     /// If the iterator has seen all nodes this implies that there is a cycle.
-    // pub fn ports_remaining(&self) -> impl DoubleEndedIterator<Item = PortIndex> + '_ {
     pub fn ports_remaining(&self) -> impl Iterator<Item = PortIndex> + '_ {
         self.graph
             .ports_iter()
             .filter(move |&p| !self.visited_ports.get(p))
+    }
+
+    /// Add more source nodes to the iterator.
+    ///
+    /// Nodes that have already been yielded will not be returned again.
+    pub fn add_sources(&mut self, sources: impl IntoIterator<Item = NodeIndex>) {
+        for node in sources.into_iter() {
+            if self.ignore_node(node) {
+                continue;
+            };
+
+            let mut new_candidate = false;
+            for port in self.graph.ports(node, self.direction.reverse()) {
+                new_candidate |= !self.visited_ports.get(port);
+                self.visited_ports.set(port, true);
+            }
+            if self.graph.num_ports(node, self.direction.reverse()) == 0 {
+                // If the node has no incoming ports, we check if it has been visited by looking at the outgoing ports.
+                new_candidate = !self.candidate_nodes.contains(&node)
+                    && self
+                        .graph
+                        .ports(node, self.direction)
+                        .any(|p| !self.visited_ports.get(p));
+            }
+
+            if new_candidate {
+                self.candidate_nodes.push_back(node);
+            }
+        }
     }
 
     /// Checks if a node becomes ready once it is visited from `from_port`, i.e.

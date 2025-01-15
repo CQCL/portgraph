@@ -10,7 +10,7 @@ use crate::{Direction, LinkView, NodeIndex, PortIndex, PortView};
 
 /// A port boundary in a graph.
 ///
-/// Defined
+/// Defined from a set of incoming and outgoing ports.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Boundary {
     /// The ordered list of incoming ports in the boundary.
@@ -137,14 +137,14 @@ impl Boundary {
     /// output ports that can be reached from it in the graph.
     ///
     /// The `graph` parameter must be a valid graph for this boundary. When
-    /// multiple nodes not reachable from the boundary are present, consider
-    /// using a [`crate::view::Subgraph`] to restrict the traversal.
+    /// nodes not reachable from the boundary are present, consider using a
+    /// [`crate::view::Subgraph`] to restrict the traversal.
     ///
     /// # Complexity
     ///
     /// The complexity of this operation is `O(e log(n) + k*n)`, where `e` is
-    /// the number of links in the `graph`, is the number of nodes, and `k` is
-    /// the number of ports in the boundary.
+    /// the number of links in the `graph`, `n` is the number of nodes, and `k`
+    /// is the number of ports in the boundary.
     pub fn port_ordering(&self, graph: &impl LinkView) -> PortOrdering {
         // Maps between the input/output ports in the boundary and the nodes they belong to.
         let mut input_nodes: BTreeMap<NodeIndex, Vec<PortIndex>> = BTreeMap::new();
@@ -171,14 +171,41 @@ impl Boundary {
             .filter(|&node| graph.input_neighbours(node).count() == 0);
 
         let mut reaching: BTreeMap<NodeIndex, (usize, HashSet<PortIndex>)> = BTreeMap::new();
-        for node in toposort::<_, HashSet<PortIndex>>(graph, source_nodes, Direction::Outgoing) {
+        let mut topo = toposort::<_, HashSet<PortIndex>>(graph, source_nodes, Direction::Outgoing);
+        let mut added_graph_initials = false;
+        loop {
+            let Some(node) = topo.next() else {
+                if input_nodes.is_empty() && output_nodes.is_empty() {
+                    break;
+                }
+
+                // If we have unvisited nodes after the toposort, it means the
+                // `source_nodes` we used to initialize the traversal where not
+                // enough to reach all input ports in the subgraph induced by
+                // the boundary.
+                //
+                // This is the case when the induced subgraph has nodes that are
+                // not in the boundary and have no incoming links.
+                // traversal. This will cause all of the graph to be traversed,
+                // hence the recommended use of a subgraph in the documentation.
+                assert!(
+                    !added_graph_initials,
+                    "Traversing the graph from all sources should always reach boundary ports"
+                );
+                added_graph_initials = true;
+
+                let new_source_nodes = graph
+                    .nodes_iter()
+                    .filter(|&node| graph.input_neighbours(node).count() == 0);
+                topo.add_sources(new_source_nodes);
+
+                continue;
+            };
+
             // Collect the reaching ports, plus any ports in the node itself.
-            let mut reaching_ports: HashSet<PortIndex> = input_nodes
-                .get(&node)
-                .into_iter()
-                .flatten()
-                .copied()
-                .collect();
+            // Removes the node from the input_nodes map.
+            let mut reaching_ports: HashSet<PortIndex> =
+                input_nodes.remove(&node).into_iter().flatten().collect();
 
             // Add the reaching ports from the input neighbours.
             for input_neigh in graph.input_neighbours(node) {
@@ -194,7 +221,8 @@ impl Boundary {
             }
 
             // If there are output boundary ports in the node, add the order relations.
-            for &out_port in output_nodes.get(&node).into_iter().flatten() {
+            // Removes the node from the output_nodes map.
+            for out_port in output_nodes.remove(&node).into_iter().flatten() {
                 for &in_port in &reaching_ports {
                     ordering.add_order(
                         self.port(in_port, Direction::Incoming),
@@ -205,6 +233,12 @@ impl Boundary {
 
             let output_neighs = graph.output_neighbours(node).count();
             reaching.insert(node, (output_neighs, reaching_ports));
+
+            // If we have explored all the nodes for the input or output ports,
+            // we can the toposort traversal.
+            if input_nodes.is_empty() && output_nodes.is_empty() {
+                break;
+            }
         }
 
         ordering
@@ -355,6 +389,8 @@ impl PortOrdering {
 
 #[cfg(test)]
 mod test {
+    use std::collections::BTreeSet;
+
     use crate::view::Subgraph;
     use crate::{LinkMut, MultiPortGraph, PortMut};
 
@@ -522,5 +558,44 @@ mod test {
         assert!(ordering_22.is_stronger_than(&ordering));
         assert!(!boundary.is_stronger_than(&boundary_22, &subgraph, &graph_22));
         assert!(boundary_22.is_stronger_than(&boundary, &graph_22, &subgraph));
+    }
+
+    /// Test a boundary on [`graph`] defined by the input `4->5` and output `6->7`.
+    ///
+    /// The induced subgraph containing nodes `{0,1,2,3,5,6}`.
+    /// Note that `0` is not reachable from the input, and `3` does not reach the output.
+    #[rstest]
+    fn test_dangling_nodes(graph: MultiPortGraph) {
+        let nodes = graph.nodes_iter().collect_vec();
+        let in_5_0 = graph.input(nodes[5], 0).unwrap();
+        let out_6_0 = graph.output(nodes[6], 0).unwrap();
+
+        let boundary = Boundary::new([in_5_0], [out_6_0]);
+        let subgraph = Subgraph::new_subgraph(graph, boundary.clone());
+        assert_eq!(
+            subgraph.nodes_iter().collect::<BTreeSet<_>>(),
+            BTreeSet::from_iter([nodes[0], nodes[1], nodes[2], nodes[3], nodes[5], nodes[6]])
+        );
+
+        let bound_in_0 = boundary.inputs().exactly_one().ok().unwrap();
+        let bound_out_0 = boundary.outputs().exactly_one().ok().unwrap();
+
+        let ordering = boundary.port_ordering(&subgraph);
+        assert_eq!(
+            ordering
+                .reachable_ports(bound_in_0)
+                .iter()
+                .exactly_one()
+                .unwrap(),
+            &bound_out_0
+        );
+        assert_eq!(
+            ordering
+                .reaching_ports(bound_out_0)
+                .iter()
+                .exactly_one()
+                .unwrap(),
+            &bound_in_0
+        );
     }
 }

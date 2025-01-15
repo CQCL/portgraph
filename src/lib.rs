@@ -75,6 +75,8 @@ pub mod weights;
 #[cfg(feature = "proptest")]
 pub mod proptest;
 
+pub mod hash;
+
 #[doc(inline)]
 pub use crate::hierarchy::Hierarchy;
 #[doc(inline)]

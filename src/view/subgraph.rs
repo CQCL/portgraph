@@ -73,10 +73,10 @@ where
     ///
     /// This initialisation is linear in the size of the subgraph.
     pub fn new_subgraph(graph: G, boundary: Boundary) -> Self {
-        let nodes = collect_nodes(graph.clone(), &boundary);
+        let nodes = boundary.internal_nodes(&graph).collect();
         Self {
             graph,
-            nodes: nodes.into_iter().collect(),
+            nodes,
             boundary,
         }
     }
@@ -132,53 +132,6 @@ where
     fn contains_endpoint(&self, e: G::LinkEndpoint) -> bool {
         self.contains_port(e.into())
     }
-}
-
-/// Traverse the subgraph defined by the boundary edges.
-///
-/// Start just inside the boundaries and follow each edge that is not itself
-/// a boundary.
-fn collect_nodes<G: LinkView>(graph: G, boundary: &Boundary) -> BTreeSet<NodeIndex> {
-    // Nodes within subgraph
-    let mut nodes = BTreeSet::new();
-    // For every visited edge, we mark both ports as visited
-    let mut visited = BTreeSet::new();
-
-    // The set of nodes to traverse
-    let mut nodes_to_process: BTreeSet<_> = boundary
-        .port_indices()
-        .map(|p| {
-            let this_node = graph.port_node(p).unwrap();
-            if let Some(other_port) = graph.port_link(p) {
-                visited.insert(other_port.into());
-            }
-            visited.insert(p);
-            this_node
-        })
-        .collect();
-
-    if nodes_to_process.is_empty() {
-        // Edge case: no boundary edges, so the subgraph is the entire graph
-        nodes_to_process = graph.nodes_iter().collect();
-    }
-
-    while let Some(node) = nodes_to_process.pop_first() {
-        nodes.insert(node);
-        // Traverse every unvisited edge in `node`
-        for p in graph.all_ports(node) {
-            if visited.insert(p) {
-                // Visit it
-                if let Some(other_port) = graph.port_link(p) {
-                    visited.insert(other_port.into());
-                    // Possibly a new node!
-                    let other_node = graph.port_node(other_port).unwrap();
-                    nodes_to_process.insert(other_node);
-                }
-            }
-        }
-    }
-
-    nodes
 }
 
 /// Collect all the boundary input and output ports of a set of nodes.
@@ -376,6 +329,8 @@ impl<G> HasBoundary for Subgraph<G> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use itertools::Itertools;
 
     use crate::multiportgraph::SubportIndex;
@@ -425,7 +380,7 @@ mod tests {
         let boundary = Boundary::new(graph.inputs(n1), graph.outputs(n1));
 
         // Traverse the subgraph
-        let nodes = collect_nodes(&graph, &boundary);
+        let nodes: HashSet<_> = boundary.internal_nodes(&graph).collect();
 
         // Check that the correct nodes and ports were found
         assert_eq!(nodes, [n1].into_iter().collect());
@@ -444,7 +399,7 @@ mod tests {
         );
 
         // Traverse the subgraph
-        let nodes = collect_nodes(&graph, &boundary);
+        let nodes: HashSet<_> = boundary.internal_nodes(&graph).collect();
 
         // Check that the correct nodes and ports were found
         assert_eq!(nodes, graph.nodes_iter().collect());
@@ -460,7 +415,9 @@ mod tests {
         let outgoing = [graph.output(n1, 0).unwrap(), graph.output(n2, 1).unwrap()];
 
         // Traverse the subgraph
-        let nodes = collect_nodes(&graph, &Boundary::new(incoming, outgoing));
+        let nodes: HashSet<_> = Boundary::new(incoming, outgoing)
+            .internal_nodes(&graph)
+            .collect();
 
         // Check that the correct nodes and ports were found
         assert_eq!(nodes, [n1, n2, n5].into_iter().collect());
@@ -485,7 +442,7 @@ mod tests {
         let boundary = Boundary::new(incoming, outgoing);
 
         // Traverse the subgraph
-        let nodes = collect_nodes(&graph, &boundary);
+        let nodes: HashSet<_> = boundary.internal_nodes(&graph).collect();
 
         // Check that the correct nodes and ports were found
         assert_eq!(nodes, [n0, n1, n2, n3, n4, n5].into_iter().collect());
@@ -496,7 +453,7 @@ mod tests {
         let graph = graph();
 
         // Traverse the subgraph
-        let nodes = collect_nodes(&graph, &Boundary::new([], []));
+        let nodes: HashSet<_> = Boundary::new([], []).internal_nodes(&graph).collect();
 
         assert_eq!(nodes, graph.nodes_iter().collect());
     }

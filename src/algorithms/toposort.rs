@@ -136,8 +136,10 @@ where
     /// Initialises a new topological sort of a portgraph in a specified direction
     /// starting at a collection of `source` nodes.
     ///
+    /// See [`toposort`] and [`toposort_filtered`] for more information.
+    ///
     /// If the default value of `Map` is not `false`, this requires O(#ports) time.
-    fn new(
+    pub fn new(
         graph: G,
         source: impl IntoIterator<Item = NodeIndex>,
         direction: Direction,

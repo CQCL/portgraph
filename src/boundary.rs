@@ -1,11 +1,11 @@
 //! Algorithms for handling port boundaries in a graph.
 
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use itertools::Itertools;
 
-use crate::algorithms::toposort;
+use crate::algorithms::TopoSort;
 use crate::{Direction, LinkView, NodeIndex, PortIndex, PortView};
 
 /// A port boundary in a graph.
@@ -146,6 +146,9 @@ impl Boundary {
     /// the number of links in the `graph`, `n` is the number of nodes, and `k`
     /// is the number of ports in the boundary.
     pub fn port_ordering(&self, graph: &impl LinkView) -> PortOrdering {
+        let boundary_ports: HashSet<PortIndex> =
+            self.inputs.iter().chain(&self.outputs).copied().collect();
+
         // Maps between the input/output ports in the boundary and the nodes they belong to.
         let mut input_nodes: BTreeMap<NodeIndex, Vec<PortIndex>> = BTreeMap::new();
         let mut output_nodes: BTreeMap<NodeIndex, Vec<PortIndex>> = BTreeMap::new();
@@ -165,13 +168,20 @@ impl Boundary {
         // trim the `reaching` set when we reach the last one.
 
         // We have to start the toposort from the input nodes that do not have predecessors.
-        let source_nodes = input_nodes
-            .keys()
-            .copied()
-            .filter(|&node| graph.input_neighbours(node).count() == 0);
+        let source_nodes = input_nodes.keys().copied().filter(|&node| {
+            graph
+                .inputs(node)
+                .all(|p| boundary_ports.contains(&p) || graph.port_links(p).count() == 0)
+        });
 
         let mut reaching: BTreeMap<NodeIndex, (usize, HashSet<PortIndex>)> = BTreeMap::new();
-        let mut topo = toposort::<_, HashSet<PortIndex>>(graph, source_nodes, Direction::Outgoing);
+        let mut topo = TopoSort::<_, HashSet<PortIndex>>::new(
+            graph,
+            source_nodes,
+            Direction::Outgoing,
+            None,
+            Some(Box::new(|_n, p| !boundary_ports.contains(&p))),
+        );
         let mut added_graph_initials = false;
         loop {
             let Some(node) = topo.next() else {
@@ -194,8 +204,10 @@ impl Boundary {
                 );
                 added_graph_initials = true;
 
-                let new_source_nodes = graph
-                    .nodes_iter()
+                // Explore the subgraph induced by the boundary, and add any node with no input neighbours
+                // to the candidates list for the toposort traversal.
+                let new_source_nodes = self
+                    .internal_nodes(graph)
                     .filter(|&node| graph.input_neighbours(node).count() == 0);
                 topo.add_sources(new_source_nodes);
 
@@ -282,6 +294,52 @@ impl Boundary {
             .iter()
             .copied()
             .chain(self.outputs.iter().copied())
+    }
+
+    /// Returns an iterator over the nodes in the subgraph induced by this boundary.
+    ///
+    /// Starts just inside the boundaries and follow each edge that is not itself
+    /// a boundary. Note that the nodes are explored in arbitrary order.
+    pub(crate) fn internal_nodes<'g>(
+        &self,
+        graph: &'g impl LinkView,
+    ) -> impl Iterator<Item = NodeIndex> + 'g {
+        // For every visited edge, we mark both ports as visited
+        let mut visited = BTreeSet::new();
+
+        // The set of nodes to traverse
+        let mut nodes_to_process: BTreeSet<_> = self
+            .port_indices()
+            .map(|p| {
+                let this_node = graph.port_node(p).unwrap();
+                if let Some(other_port) = graph.port_link(p) {
+                    visited.insert(other_port.into());
+                }
+                visited.insert(p);
+                this_node
+            })
+            .collect();
+
+        if nodes_to_process.is_empty() {
+            // Edge case: no boundary edges, so the subgraph is the entire graph
+            nodes_to_process = graph.nodes_iter().collect();
+        }
+
+        std::iter::successors(nodes_to_process.pop_first(), move |&node| {
+            // Traverse every unvisited edge in `node`
+            for p in graph.all_ports(node) {
+                if visited.insert(p) {
+                    // Visit it
+                    if let Some(other_port) = graph.port_link(p) {
+                        visited.insert(other_port.into());
+                        // Possibly a new node!
+                        let other_node = graph.port_node(other_port).unwrap();
+                        nodes_to_process.insert(other_node);
+                    }
+                }
+            }
+            nodes_to_process.pop_first()
+        })
     }
 }
 
@@ -454,6 +512,22 @@ mod test {
         graph
     }
 
+    /// Test single-line DAG
+    ///
+    /// ```text
+    /// 0 -> 1 -> 2 -> 3 -> ..
+    /// ```
+    #[fixture]
+    fn line_graph<const N: usize>() -> (MultiPortGraph, [NodeIndex; N]) {
+        let mut graph = MultiPortGraph::new();
+        let nodes: Vec<NodeIndex> = (0..N).map(|_| graph.add_node(4, 4)).collect();
+        for (u, v) in (0..N).zip(1..N) {
+            graph.link_nodes(nodes[u], 0, nodes[v], 0).unwrap();
+        }
+        let nodes = graph.nodes_iter().collect_array().unwrap();
+        (graph, nodes)
+    }
+
     #[rstest]
     fn test_boundary_new(graph: MultiPortGraph) {
         let nodes = graph.nodes_iter().collect_vec();
@@ -596,6 +670,62 @@ mod test {
                 .exactly_one()
                 .unwrap(),
             &bound_in_0
+        );
+    }
+
+    /// Test a boundary ordering where an external edge (which shouldn't be consider)
+    /// would introduce an unwanted boundary order.
+    ///
+    /// ```text
+    ///       0 -> 1 -> 2 -> 3 -> 4
+    /// ```
+    /// where the boundary is defined by the nodes `1` and `3`.
+    #[rstest]
+    fn test_external_ordering(line_graph: (MultiPortGraph, [NodeIndex; 5])) {
+        let (graph, nodes) = line_graph;
+        let subgraph = Subgraph::with_nodes(&graph, [nodes[1], nodes[3]]);
+        let boundary = subgraph.port_boundary();
+
+        let (in_0, in_1) = boundary.inputs().collect_tuple().unwrap();
+        let (out_0, out_1) = boundary.outputs().collect_tuple().unwrap();
+
+        let ordering = boundary.port_ordering(&subgraph);
+        assert_eq!(
+            ordering
+                .reachable_ports(in_0)
+                .iter()
+                .copied()
+                .collect_vec()
+                .as_slice(),
+            [out_0]
+        );
+        assert_eq!(
+            ordering
+                .reachable_ports(in_1)
+                .iter()
+                .copied()
+                .collect_vec()
+                .as_slice(),
+            [out_1]
+        );
+        assert_eq!(
+            ordering
+                .reaching_ports(out_0)
+                .iter()
+                .copied()
+                .collect_vec()
+                .as_slice(),
+            [in_0]
+        );
+        assert_eq!(
+            ordering
+                .reaching_ports(out_1)
+                .iter()
+                .copied()
+                .sorted()
+                .collect_vec()
+                .as_slice(),
+            [in_1]
         );
     }
 }

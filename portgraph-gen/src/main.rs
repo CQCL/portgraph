@@ -1,8 +1,12 @@
 use clap::Parser;
-use portgraph::{LinkMut, NodeIndex, PortGraph, PortIndex, PortMut, PortView};
-use rand::prelude::*;
 use serde::Serialize;
-use std::{collections::HashMap, path::PathBuf};
+use std::path::PathBuf;
+
+mod exhaustive;
+mod generator;
+mod random;
+
+use generator::GraphGenerator;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -22,10 +26,14 @@ struct Args {
     /// Output directory
     #[arg(short, long, default_value = "./out/")]
     output_dir: PathBuf,
+
+    /// Generation method (random or exhaustive)
+    #[arg(long, default_value = "random")]
+    method: String,
 }
 
 #[derive(Clone, Copy, Debug, Serialize)]
-enum Operation {
+pub enum Operation {
     Input,
     Output,
     Op1,
@@ -34,7 +42,7 @@ enum Operation {
 }
 
 impl Operation {
-    fn random(rng: &mut impl Rng) -> Self {
+    fn random(rng: &mut impl rand::Rng) -> Self {
         match rng.gen_range(0..3) {
             0 => Operation::Op1,
             1 => Operation::Op2,
@@ -43,87 +51,26 @@ impl Operation {
     }
 }
 
-#[derive(Serialize)]
-struct GraphData {
-    graph: PortGraph,
-    weights: HashMap<NodeIndex, Operation>,
-}
-
-fn generate_operation(width: usize, rng: &mut impl Rng) -> (Operation, usize, usize) {
-    let i = rng.gen_range(0..width);
-    let mut j = rng.gen_range(0..width);
-    while j == i {
-        j = rng.gen_range(0..width);
-    }
-    (Operation::random(rng), i, j)
-}
-
-fn generate_graph(width: usize, depth: usize, rng: &mut impl Rng) -> GraphData {
-    let mut graph = PortGraph::new();
-    let mut weights = HashMap::new();
-
-    // Create input node with w output ports
-    let input = graph.add_node(0, width);
-    weights.insert(input, Operation::Input);
-
-    // Create output node with w input ports
-    let output = graph.add_node(width, 0);
-    weights.insert(output, Operation::Output);
-
-    // Generate operations and their indices
-    let operations: Vec<(Operation, usize, usize)> =
-        (0..depth).map(|_| generate_operation(width, rng)).collect();
-
-    // Keep track of last port that was used for each index
-    let mut last_ports: Vec<PortIndex> = (0..width)
-        .map(|i| graph.output(input, i).unwrap())
-        .collect();
-    let mut op_nodes = Vec::with_capacity(width);
-
-    // Add operation nodes and connect them
-    for (op, i, j) in operations {
-        let node = graph.add_node(2, 2);
-        weights.insert(node, op);
-        op_nodes.push(node);
-
-        // Connect to previous ports that used indices i and j
-        let to_port = graph.input(node, 0).unwrap();
-        graph.link_ports(last_ports[i], to_port).unwrap();
-
-        let to_port = graph.input(node, 1).unwrap();
-        graph.link_ports(last_ports[j], to_port).unwrap();
-
-        // Update last port for both indices with this node's output
-        last_ports[i] = graph.output(node, 0).unwrap();
-        last_ports[j] = graph.output(node, 1).unwrap();
-    }
-
-    // Connect all remaining ports to output
-    for (i, &port) in last_ports.iter().enumerate() {
-        let to_port = graph.input(output, i).unwrap();
-        graph.link_ports(port, to_port).unwrap();
-    }
-
-    GraphData { graph, weights }
-}
-
 fn main() {
     let args = Args::parse();
 
+    // Create generator based on method
+    let mut generator: Box<dyn GraphGenerator> = match args.method.as_str() {
+        "random" => Box::new(random::RandomGenerator::new(42)),
+        "exhaustive" => Box::new(exhaustive::ExhaustiveGenerator::new()),
+        _ => panic!("Unknown generation method: {}", args.method),
+    };
+
+    // Generate graphs
+    let graphs = generator.generate(args.width, args.depth, args.num_circuits);
+
     // Create output directory if it doesn't exist
-    std::fs::create_dir_all(&args.output_dir).expect("Failed to create output directory");
+    std::fs::create_dir_all(&args.output_dir).unwrap();
 
-    let mut rng = rand::thread_rng();
-
-    for i in 0..args.num_circuits {
-        let graph_data = generate_graph(args.width, args.depth, &mut rng);
-
-        // Save graph as JSON
-        let output_path = args.output_dir.join(format!("graph_{}.json", i));
-        std::fs::write(
-            output_path,
-            serde_json::to_string_pretty(&graph_data).expect("Failed to serialize graph"),
-        )
-        .expect("Failed to write graph to file");
+    // Save graphs
+    for (i, graph_data) in graphs.into_iter().enumerate() {
+        let file = args.output_dir.join(format!("graph_{}.json", i));
+        let file = std::fs::File::create(file).unwrap();
+        serde_json::to_writer_pretty(file, &graph_data).unwrap();
     }
 }

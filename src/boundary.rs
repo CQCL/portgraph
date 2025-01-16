@@ -632,6 +632,18 @@ mod test {
         assert!(ordering_22.is_stronger_than(&ordering));
         assert!(!boundary.is_stronger_than(&boundary_22, &subgraph, &graph_22));
         assert!(boundary_22.is_stronger_than(&boundary, &graph_22, &subgraph));
+
+        let missing = ordering.missing_pairs(&ordering_22).collect_vec();
+        let missing_22 = ordering_22.missing_pairs(&ordering).collect_vec();
+
+        assert_eq!(
+            missing,
+            vec![(
+                boundary.inputs().nth(1).unwrap(),
+                boundary.outputs().next().unwrap()
+            )]
+        );
+        assert!(missing_22.is_empty());
     }
 
     /// Test a boundary on [`graph`] defined by the input `4->5` and output `6->7`.

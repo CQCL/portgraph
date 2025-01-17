@@ -17,3 +17,6 @@ pub use wfl::WeisfeilerLehmanHash;
 
 mod wfl_sparse;
 pub use wfl_sparse::WeisfeilerLehmanSparseHash;
+
+mod wfl_hist;
+pub use wfl_hist::HistWFLHash;

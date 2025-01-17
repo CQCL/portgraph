@@ -1,7 +1,9 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use fxhash::FxHasher;
-use portgraph::hash::{AcyclicHash, GraphHash, WeisfeilerLehmanHash, WeisfeilerLehmanSparseHash};
+use portgraph::hash::{
+    AcyclicHash, GraphHash, HistWFLHash, WeisfeilerLehmanHash, WeisfeilerLehmanSparseHash,
+};
 use portgraph::{NodeIndex, PortGraph, SecondaryMap, UnmanagedDenseMap, Weights};
 use serde::Deserialize;
 use std::cmp;
@@ -41,6 +43,8 @@ fn main() -> Result<()> {
         Box::new(AcyclicHash::<FxHasher>::new()) as Box<dyn GraphHash<Operation, ()>>,
         Box::new(WeisfeilerLehmanHash::<FxHasher>::new(1)),
         Box::new(WeisfeilerLehmanHash::<FxHasher>::new(2)),
+        Box::new(HistWFLHash::<FxHasher>::new(1)),
+        Box::new(HistWFLHash::<FxHasher>::new(2)),
         Box::new(WeisfeilerLehmanSparseHash::<FxHasher>::new(1)),
         Box::new(WeisfeilerLehmanSparseHash::<FxHasher>::new(2)),
         Box::new(WeisfeilerLehmanSparseHash::<FxHasher>::new(3)),

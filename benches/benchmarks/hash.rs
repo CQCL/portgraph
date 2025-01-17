@@ -3,7 +3,7 @@ use std::{collections::HashMap, time::Duration};
 use criterion::{black_box, criterion_group, AxisScale, BenchmarkId, Criterion, PlotConfiguration};
 use fxhash::FxHasher;
 use portgraph::{
-    hash::{AcyclicHash, GraphHash, WeisfeilerLehmanHash, WeisfeilerLehmanSparseHash},
+    hash::{AcyclicHash, GraphHash, HistWFLHash, WeisfeilerLehmanHash, WeisfeilerLehmanSparseHash},
     NodeIndex, PortGraph, SecondaryMap, UnmanagedDenseMap, Weights,
 };
 use serde::Deserialize;
@@ -34,6 +34,8 @@ fn bench_hash(c: &mut Criterion) {
         Box::new(AcyclicHash::<FxHasher>::default()) as Box<dyn GraphHash<Operation, ()>>,
         Box::new(WeisfeilerLehmanHash::<FxHasher>::new(1)),
         Box::new(WeisfeilerLehmanHash::<FxHasher>::new(2)),
+        Box::new(HistWFLHash::<FxHasher>::new(1)),
+        Box::new(HistWFLHash::<FxHasher>::new(2)),
         Box::new(WeisfeilerLehmanSparseHash::<FxHasher>::new(1)),
         Box::new(WeisfeilerLehmanSparseHash::<FxHasher>::new(2)),
         Box::new(WeisfeilerLehmanSparseHash::<FxHasher>::new(3)),

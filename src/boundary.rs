@@ -78,7 +78,7 @@ impl Boundary {
     }
 
     /// Returns the [`BoundaryPort`] corresponding to a port index.
-    pub fn port(&self, port: PortIndex, direction: Direction) -> BoundaryPort {
+    pub fn find_port(&self, port: PortIndex, direction: Direction) -> BoundaryPort {
         let ports = match direction {
             Direction::Incoming => &self.inputs,
             Direction::Outgoing => &self.outputs,
@@ -142,9 +142,9 @@ impl Boundary {
     ///
     /// # Complexity
     ///
-    /// The complexity of this operation is `O(e log(n) + k*n)`, where `e` is
-    /// the number of links in the `graph`, `n` is the number of nodes, and `k`
-    /// is the number of ports in the boundary.
+    /// In the worse case, the complexity of this operation is `O(e log(n) +
+    /// k*n)`, where `e` is the number of links in the `graph`, `n` is the
+    /// number of nodes, and `k` is the number of ports in the boundary.
     pub fn port_ordering(&self, graph: &impl LinkView) -> PortOrdering {
         let boundary_ports: HashSet<PortIndex> =
             self.inputs.iter().chain(&self.outputs).copied().collect();
@@ -237,8 +237,8 @@ impl Boundary {
             for out_port in output_nodes.remove(&node).into_iter().flatten() {
                 for &in_port in &reaching_ports {
                     ordering.add_order(
-                        self.port(in_port, Direction::Incoming),
-                        self.port(out_port, Direction::Outgoing),
+                        self.find_port(in_port, Direction::Incoming),
+                        self.find_port(out_port, Direction::Outgoing),
                     );
                 }
             }
@@ -546,7 +546,7 @@ mod test {
         assert_eq!(&boundary, subgraph.port_boundary().as_ref());
         assert_eq!(boundary.num_ports(), 4);
         assert_eq!(
-            boundary.port(graph.input(nodes[5], 0).unwrap(), Direction::Incoming),
+            boundary.find_port(graph.input(nodes[5], 0).unwrap(), Direction::Incoming),
             BoundaryPort {
                 index: 1,
                 direction: Direction::Incoming

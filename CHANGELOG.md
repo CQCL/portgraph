@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.13.0](https://github.com/CQCL/portgraph/compare/v0.12.3...v0.13.0) - 2025-01-17
+
+### New Features
+
+- [**breaking**] Use RPITIT for graph traits (#156)
+- [**breaking**] Boundary order checking (#164)
+
+### Performance
+
+- [**breaking**] Fix Subgraph O(n) complexity (#157)
+- [**breaking**] Manual impl of `Region`/`FlatRegion` for improved perf (#162)
+
 ## [0.12.3](https://github.com/CQCL/portgraph/compare/v0.12.2...v0.12.3) - 2024-11-13
 
 ### New Features

@@ -2,6 +2,7 @@ use clap::Parser;
 use serde::Serialize;
 use std::path::PathBuf;
 
+mod builder;
 mod exhaustive;
 mod generator;
 mod random;
@@ -32,7 +33,7 @@ struct Args {
     method: String,
 }
 
-#[derive(Clone, Copy, Debug, Serialize)]
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
 pub enum Operation {
     Input,
     Output,

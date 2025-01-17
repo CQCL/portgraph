@@ -4,7 +4,7 @@ use portgraph::PortGraph;
 use serde::Serialize;
 use std::collections::HashMap;
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct GraphData {
     pub graph: PortGraph,
     pub weights: HashMap<NodeIndex, Operation>,

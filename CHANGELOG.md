@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.13.0](https://github.com/CQCL/portgraph/compare/v0.12.3...v0.13.0) - 2025-01-17
+
+This release has been focused on performance improvements.
+Subgraphs and region filters now avoid unnecessary full-graph traversals
+by using specialized implementation.
+
+We also added a `Boundary` definition used for `Subgraph`s that can compute
+the partial order between its inputs and outputs.
+
+### New Features
+
+- [**breaking**] Use RPITIT for graph traits (#156)
+- [**breaking**] Added a `Boundary` definition and port partial-order computation (#164)
+
+### Performance
+
+- [**breaking**] Fix O(n) complexity in `Subgraph` (#157)
+- [**breaking**] Manual impl of `Region`/`FlatRegion` for improved perf (#162)
+
 ## [0.12.3](https://github.com/CQCL/portgraph/compare/v0.12.2...v0.12.3) - 2024-11-13
 
 ### New Features

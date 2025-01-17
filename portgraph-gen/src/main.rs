@@ -65,6 +65,8 @@ fn main() {
     // Generate graphs
     let graphs = generator.generate(args.width, args.depth, args.num_circuits);
 
+    println!("Saving {} graphs...", graphs.len());
+
     // Create output directory if it doesn't exist
     std::fs::create_dir_all(&args.output_dir).unwrap();
 

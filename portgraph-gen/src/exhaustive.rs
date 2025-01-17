@@ -146,7 +146,7 @@ impl GraphGenerator for ExhaustiveGenerator {
         let mut last_graphs = vec![(GraphBuilder::new(width), BTreeSet::from_iter(0..width))];
         while results.len() < num_graphs {
             let mut new_last_graphs = Vec::new();
-            for (graph, last_indices) in mem::take(&mut last_graphs) {
+            'iter: for (graph, last_indices) in mem::take(&mut last_graphs) {
                 let max_ops = depth - graph.n_operations();
                 for layer in self.generate_layers(width, max_ops, &last_indices) {
                     let mut graph_clone = graph.clone();
@@ -157,6 +157,9 @@ impl GraphGenerator for ExhaustiveGenerator {
                     }
                     results.push(graph_clone.clone().finish());
                     new_last_graphs.push((graph_clone, last_indices));
+                    if results.len() >= num_graphs {
+                        break 'iter;
+                    }
                 }
             }
             if new_last_graphs.is_empty() {

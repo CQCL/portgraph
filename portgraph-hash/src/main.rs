@@ -1,9 +1,10 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use fxhash::FxHasher;
-use portgraph::hash::{AcyclicHash, GraphHash, WeisfeilerLehmanSparseHash, WeissfeilerLehmanHash};
+use portgraph::hash::{AcyclicHash, GraphHash, WeisfeilerLehmanHash, WeisfeilerLehmanSparseHash};
 use portgraph::{NodeIndex, PortGraph, SecondaryMap, UnmanagedDenseMap, Weights};
 use serde::Deserialize;
+use std::cmp;
 use std::collections::{BTreeSet, HashMap};
 use std::path::PathBuf;
 
@@ -29,13 +30,21 @@ struct Args {
     /// Directory containing graph files
     #[arg(value_name = "DIR")]
     graph_dir: PathBuf,
+
+    /// Only process the first n graphs
+    #[arg(short = 'n', long = "num-graphs")]
+    num_graphs: Option<usize>,
 }
 
 fn main() -> Result<()> {
-    let hashers: [Box<dyn GraphHash<Operation, ()>>; 3] = [
-        Box::new(AcyclicHash::<FxHasher>::new()),
-        Box::new(WeissfeilerLehmanHash::<FxHasher>::new(1)),
+    let hashers = [
+        Box::new(AcyclicHash::<FxHasher>::new()) as Box<dyn GraphHash<Operation, ()>>,
+        Box::new(WeisfeilerLehmanHash::<FxHasher>::new(1)),
+        Box::new(WeisfeilerLehmanHash::<FxHasher>::new(2)),
         Box::new(WeisfeilerLehmanSparseHash::<FxHasher>::new(1)),
+        Box::new(WeisfeilerLehmanSparseHash::<FxHasher>::new(2)),
+        Box::new(WeisfeilerLehmanSparseHash::<FxHasher>::new(3)),
+        Box::new(WeisfeilerLehmanSparseHash::<FxHasher>::new(4)),
     ];
 
     let args = Args::parse();
@@ -55,11 +64,23 @@ fn main() -> Result<()> {
         .collect();
     graph_files.sort();
 
-    println!("Found {} graph files", graph_files.len());
+    let n_graphs = cmp::min(
+        graph_files.len(),
+        args.num_graphs.unwrap_or(graph_files.len()),
+    );
+
+    println!(
+        "Found {} graph files, processing {}",
+        graph_files.len(),
+        n_graphs
+    );
+
+    graph_files.truncate(n_graphs);
 
     // Store hashes for each hasher
     let mut hash_sets: Vec<BTreeSet<u64>> = vec![BTreeSet::new(); hashers.len()];
     let mut collision_counts: Vec<usize> = vec![0; hashers.len()];
+    let mut duplicate_counts = 0;
 
     // Read all graph files and compute their hashes
     for path in graph_files {
@@ -88,34 +109,31 @@ fn main() -> Result<()> {
         if all_inserted {
             println!("File {}: OK", path.display());
         } else if none_inserted {
+            duplicate_counts += 1;
             println!("File {}: DUPLICATE", path.display());
         } else {
-            panic!("We do not tolerate collisions");
-            // for (i, &inserted) in inserted.iter().enumerate() {
-            //     if !inserted {
-            //         println!(
-            //             "COLLISION FOUND for file {} (hasher {:?})",
-            //             path.display(),
-            //             hashers[i].name()
-            //         );
-            //         collision_counts[i] += 1;
-            //     }
-            // }
-        }
-        {
-            println!("Hash set sizes:");
-            for (i, hash_set) in hash_sets.iter().enumerate() {
-                println!("  Hasher {}: {}", i, hash_set.len());
+            // panic!("We do not tolerate collisions");
+            for (i, &inserted) in inserted.iter().enumerate() {
+                if !inserted {
+                    println!(
+                        "COLLISION FOUND for file {} (hasher {:?})",
+                        path.display(),
+                        hashers[i].name()
+                    );
+                    collision_counts[i] += 1;
+                }
             }
         }
     }
 
+    let n_distinct_graphs = n_graphs - duplicate_counts;
+
     // Print collision counts for each hasher
     for (hasher, &collisions) in hashers.iter().zip(collision_counts.iter()) {
         println!(
-            "Total collisions for hasher {:?}: {}",
+            "Collision rate for hasher {:?}: {:.2}%",
             hasher.name(),
-            collisions
+            100. * (collisions as f64) / (n_distinct_graphs as f64)
         );
     }
 

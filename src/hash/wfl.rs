@@ -47,7 +47,7 @@ impl<H: Hasher + Default, N: Clone + Hash, P: Clone + Hash> super::GraphHash<N, 
     }
 
     fn name(&self) -> String {
-        format!("Weisfeiler-Lehman({} hops)", self.n_hops)
+        format!("WFL({} hops)", self.n_hops)
     }
 }
 

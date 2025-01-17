@@ -47,9 +47,10 @@ impl Boundary {
     pub fn from_ports(graph: &impl PortView, ports: impl IntoIterator<Item = PortIndex>) -> Self {
         let (inputs, outputs): (Vec<_>, Vec<_>) = ports.into_iter().partition_map(|p| match graph
             .port_direction(p)
+            .unwrap()
         {
-            Some(Direction::Incoming) => itertools::Either::Left(p),
-            _ => itertools::Either::Right(p),
+            Direction::Incoming => itertools::Either::Left(p),
+            Direction::Outgoing => itertools::Either::Right(p),
         });
         Self::new(inputs, outputs)
     }

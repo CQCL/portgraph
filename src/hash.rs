@@ -20,3 +20,6 @@ pub use wfl_sparse::WeisfeilerLehmanSparseHash;
 
 mod wfl_hist;
 pub use wfl_hist::HistWFLHash;
+
+mod wfl_pool;
+pub use wfl_pool::PoolWFLHash;

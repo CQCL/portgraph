@@ -2,7 +2,8 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use fxhash::FxHasher;
 use portgraph::hash::{
-    AcyclicHash, GraphHash, HistWFLHash, WeisfeilerLehmanHash, WeisfeilerLehmanSparseHash,
+    AcyclicHash, GraphHash, HistWFLHash, PoolWFLHash, WeisfeilerLehmanHash,
+    WeisfeilerLehmanSparseHash,
 };
 use portgraph::{NodeIndex, PortGraph, SecondaryMap, UnmanagedDenseMap, Weights};
 use serde::Deserialize;
@@ -42,6 +43,7 @@ fn main() -> Result<()> {
     let hashers = [
         Box::new(AcyclicHash::<FxHasher>::new()) as Box<dyn GraphHash<Operation, ()>>,
         Box::new(WeisfeilerLehmanHash::<FxHasher>::new(1)),
+        Box::new(PoolWFLHash::<FxHasher>::new(1)),
         Box::new(WeisfeilerLehmanHash::<FxHasher>::new(2)),
         Box::new(HistWFLHash::<FxHasher>::new(1)),
         Box::new(HistWFLHash::<FxHasher>::new(2)),

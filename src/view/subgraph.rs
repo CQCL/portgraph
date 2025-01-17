@@ -1,10 +1,12 @@
 //! Views into non-hierarchical parts of `PortView`s.
 
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 
 use delegate::delegate;
 use itertools::{Either, Itertools};
 
+use crate::boundary::{Boundary, HasBoundary};
 use crate::PortOffset;
 use crate::{
     algorithms::{ConvexChecker, TopoConvexChecker},
@@ -53,10 +55,8 @@ pub struct Subgraph<G> {
     graph: G,
     /// All the nodes included in the subgraph.
     nodes: BTreeSet<NodeIndex>,
-    /// The ordered list of incoming ports in the boundary.
-    inputs: Vec<PortIndex>,
-    /// The ordered list of outgoing ports in the boundary.
-    outputs: Vec<PortIndex>,
+    /// The ordered list of incoming and outgoing ports in the boundary.
+    boundary: Boundary,
 }
 
 impl<G: LinkView> Subgraph<G>
@@ -72,23 +72,12 @@ where
     ///   and outgoing ports are outgoing boundary edges.
     ///
     /// This initialisation is linear in the size of the subgraph.
-    pub fn new_subgraph(graph: G, boundary: impl IntoIterator<Item = PortIndex>) -> Self {
-        let mut inputs = Vec::new();
-        let mut outputs = Vec::new();
-
-        let boundary = boundary.into_iter().inspect(|&p| {
-            match graph.port_direction(p).unwrap() {
-                Direction::Incoming => inputs.push(p),
-                Direction::Outgoing => outputs.push(p),
-            };
-        });
-
-        let nodes = collect_nodes(graph.clone(), boundary);
+    pub fn new_subgraph(graph: G, boundary: Boundary) -> Self {
+        let nodes = boundary.internal_nodes(&graph).collect();
         Self {
             graph,
-            nodes: nodes.into_iter().collect(),
-            inputs,
-            outputs,
+            nodes,
+            boundary,
         }
     }
 
@@ -101,12 +90,11 @@ where
     pub fn with_nodes(graph: G, nodes: impl IntoIterator<Item = NodeIndex>) -> Self {
         let ordered_nodes = nodes.into_iter().collect_vec();
         let nodes = ordered_nodes.iter().copied().collect();
-        let (inputs, outputs) = collect_boundary_ports(&graph, ordered_nodes, &nodes);
+        let boundary = collect_boundary_ports(&graph, ordered_nodes, &nodes);
         Self {
             graph,
             nodes,
-            inputs,
-            outputs,
+            boundary,
         }
     }
 
@@ -128,8 +116,8 @@ where
         }
         checker.is_convex(
             self.nodes_iter(),
-            self.inputs.iter().copied(),
-            self.outputs.iter().copied(),
+            self.boundary.input_indices().iter().copied(),
+            self.boundary.output_indices().iter().copied(),
         )
     }
 
@@ -146,56 +134,6 @@ where
     }
 }
 
-/// Traverse the subgraph defined by the boundary edges.
-///
-/// Start just inside the boundaries and follow each edge that is not itself
-/// a boundary.
-fn collect_nodes<G: LinkView>(
-    graph: G,
-    boundary: impl IntoIterator<Item = PortIndex>,
-) -> BTreeSet<NodeIndex> {
-    // Nodes within subgraph
-    let mut nodes = BTreeSet::new();
-    // For every visited edge, we mark both ports as visited
-    let mut visited = BTreeSet::new();
-
-    // The set of nodes to traverse
-    let mut nodes_to_process: BTreeSet<_> = boundary
-        .into_iter()
-        .map(|p| {
-            let this_node = graph.port_node(p).unwrap();
-            if let Some(other_port) = graph.port_link(p) {
-                visited.insert(other_port.into());
-            }
-            visited.insert(p);
-            this_node
-        })
-        .collect();
-
-    if nodes_to_process.is_empty() {
-        // Edge case: no boundary edges, so the subgraph is the entire graph
-        nodes_to_process = graph.nodes_iter().collect();
-    }
-
-    while let Some(node) = nodes_to_process.pop_first() {
-        nodes.insert(node);
-        // Traverse every unvisited edge in `node`
-        for p in graph.all_ports(node) {
-            if visited.insert(p) {
-                // Visit it
-                if let Some(other_port) = graph.port_link(p) {
-                    visited.insert(other_port.into());
-                    // Possibly a new node!
-                    let other_node = graph.port_node(other_port).unwrap();
-                    nodes_to_process.insert(other_node);
-                }
-            }
-        }
-    }
-
-    nodes
-}
-
 /// Collect all the boundary input and output ports of a set of nodes.
 ///
 /// Ports that connect nodes in the set are not included.
@@ -203,7 +141,7 @@ fn collect_boundary_ports<G: LinkView>(
     graph: &G,
     ordered_nodes: impl IntoIterator<Item = NodeIndex>,
     node_set: &BTreeSet<NodeIndex>,
-) -> (Vec<PortIndex>, Vec<PortIndex>) {
+) -> Boundary {
     let mut inputs = Vec::new();
     let mut outputs = Vec::new();
 
@@ -223,7 +161,7 @@ fn collect_boundary_ports<G: LinkView>(
         }
     }
 
-    (inputs, outputs)
+    Boundary::new(inputs, outputs)
 }
 
 impl<G> PortView for Subgraph<G>
@@ -282,8 +220,8 @@ where
         to self.graph {
             fn port_direction(&self, port: impl Into<PortIndex>) -> Option<Direction>;
             fn port_node(&self, port: impl Into<PortIndex>) -> Option<NodeIndex>;
-            fn port_offset(&self, port: impl Into<PortIndex>) -> Option<crate::PortOffset>;
-            fn port_index(&self, node: NodeIndex, offset: crate::PortOffset) -> Option<PortIndex>;
+            fn port_offset(&self, port: impl Into<PortIndex>) -> Option<PortOffset>;
+            fn port_index(&self, node: NodeIndex, offset: PortOffset) -> Option<PortIndex>;
             fn ports(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortIndex> + Clone;
             fn all_ports(&self, node: NodeIndex) -> impl Iterator<Item = PortIndex> + Clone;
             fn input(&self, node: NodeIndex, offset: usize) -> Option<PortIndex>;
@@ -383,8 +321,16 @@ where
     }
 }
 
+impl<G> HasBoundary for Subgraph<G> {
+    fn port_boundary(&self) -> Cow<'_, Boundary> {
+        Cow::Borrowed(&self.boundary)
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use itertools::Itertools;
 
     use crate::multiportgraph::SubportIndex;
@@ -431,14 +377,14 @@ mod tests {
         let (_, n1, _, _, _, _) = (0..6).map(NodeIndex::new).collect_tuple().unwrap();
 
         // Define the incoming and outgoing boundary edges
-        let boundary = graph.all_ports(n1).collect_vec();
+        let boundary = Boundary::new(graph.inputs(n1), graph.outputs(n1));
 
         // Traverse the subgraph
-        let nodes = collect_nodes(&graph, boundary.iter().copied());
+        let nodes: HashSet<_> = boundary.internal_nodes(&graph).collect();
 
         // Check that the correct nodes and ports were found
         assert_eq!(nodes, [n1].into_iter().collect());
-        assert_eq!(boundary.len(), 3);
+        assert_eq!(boundary.num_ports(), 3);
     }
 
     #[test]
@@ -447,10 +393,13 @@ mod tests {
         let (_, n1, _, _, n4, _) = (0..6).map(NodeIndex::new).collect_tuple().unwrap();
 
         // Define both ends of the `1 -> 4` edge as boundary, effectively selecting the whole graph.
-        let boundary = [graph.output(n1, 0).unwrap(), graph.input(n4, 1).unwrap()];
+        let boundary = Boundary::new(
+            [graph.output(n1, 0).unwrap()],
+            [graph.input(n4, 1).unwrap()],
+        );
 
         // Traverse the subgraph
-        let nodes = collect_nodes(&graph, boundary.iter().copied());
+        let nodes: HashSet<_> = boundary.internal_nodes(&graph).collect();
 
         // Check that the correct nodes and ports were found
         assert_eq!(nodes, graph.nodes_iter().collect());
@@ -466,7 +415,9 @@ mod tests {
         let outgoing = [graph.output(n1, 0).unwrap(), graph.output(n2, 1).unwrap()];
 
         // Traverse the subgraph
-        let nodes = collect_nodes(&graph, incoming.chain(outgoing));
+        let nodes: HashSet<_> = Boundary::new(incoming, outgoing)
+            .internal_nodes(&graph)
+            .collect();
 
         // Check that the correct nodes and ports were found
         assert_eq!(nodes, [n1, n2, n5].into_iter().collect());
@@ -488,10 +439,10 @@ mod tests {
             graph.output(n2, 1).unwrap(),
             graph.output(n2, 0).unwrap(),
         ];
-        let boundary = incoming.into_iter().chain(outgoing);
+        let boundary = Boundary::new(incoming, outgoing);
 
         // Traverse the subgraph
-        let nodes = collect_nodes(&graph, boundary);
+        let nodes: HashSet<_> = boundary.internal_nodes(&graph).collect();
 
         // Check that the correct nodes and ports were found
         assert_eq!(nodes, [n0, n1, n2, n3, n4, n5].into_iter().collect());
@@ -502,7 +453,7 @@ mod tests {
         let graph = graph();
 
         // Traverse the subgraph
-        let nodes = collect_nodes(&graph, []);
+        let nodes: HashSet<_> = Boundary::new([], []).internal_nodes(&graph).collect();
 
         assert_eq!(nodes, graph.nodes_iter().collect());
     }
@@ -512,13 +463,14 @@ mod tests {
         let graph = graph();
         let (_, n1, n2, _, n4, _) = (0..6).map(NodeIndex::new).collect_tuple().unwrap();
 
-        let boundary = [
-            graph.input(n1, 0).unwrap(),
-            graph.output(n1, 1).unwrap(),
-            graph.input(n2, 0).unwrap(),
-            graph.output(n2, 0).unwrap(),
-            graph.input(n4, 0).unwrap(),
-        ];
+        let boundary = Boundary::new(
+            [
+                graph.input(n1, 0).unwrap(),
+                graph.input(n2, 0).unwrap(),
+                graph.input(n4, 0).unwrap(),
+            ],
+            [graph.output(n1, 1).unwrap(), graph.output(n2, 0).unwrap()],
+        );
         let from_boundary = Subgraph::new_subgraph(&graph, boundary);
 
         let from_nodes = Subgraph::with_nodes(&graph, [n1, n2, n4]);
@@ -635,11 +587,14 @@ mod tests {
         let graph = graph();
         let (n0, n1, n2, _, n4, n5) = (0..6).map(NodeIndex::new).collect_tuple().unwrap();
 
-        let boundary = graph.all_ports(n1);
+        let boundary = Boundary::new(graph.inputs(n1), graph.outputs(n1));
         let subg = Subgraph::new_subgraph(&graph, boundary);
         assert!(subg.is_convex());
 
-        let boundary = [graph.output(n1, 0).unwrap(), graph.input(n4, 1).unwrap()];
+        let boundary = Boundary::new(
+            [graph.input(n4, 1).unwrap()],
+            [graph.output(n1, 0).unwrap()],
+        );
         let subg = Subgraph::new_subgraph(&graph, boundary);
         assert!(!subg.is_convex());
 
@@ -659,7 +614,7 @@ mod tests {
             graph.output(n2, 1).unwrap(),
             graph.output(n2, 0).unwrap(),
         ];
-        let boundary = incoming.into_iter().chain(outgoing);
+        let boundary = Boundary::new(incoming, outgoing);
         let subg = Subgraph::new_subgraph(&graph, boundary);
         assert!(!subg.is_convex());
     }
@@ -673,7 +628,10 @@ mod tests {
         graph.link_nodes(n0, 0, n1, 0).unwrap();
         graph.link_nodes(n1, 0, n2, 0).unwrap();
 
-        let boundary = [graph.output(n0, 0).unwrap(), graph.input(n2, 0).unwrap()];
+        let boundary = Boundary::from_ports(
+            &graph,
+            [graph.output(n0, 0).unwrap(), graph.input(n2, 0).unwrap()],
+        );
         let subg = Subgraph::new_subgraph(&graph, boundary);
         assert_eq!(subg.nodes_iter().collect_vec(), [n0, n2]);
         assert!(!subg.is_convex());

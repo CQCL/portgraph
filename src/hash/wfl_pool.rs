@@ -1,13 +1,13 @@
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     hash::{Hash, Hasher},
     marker::PhantomData,
-    mem,
 };
 
 use itertools::Itertools;
+use petgraph::unionfind::UnionFind;
 
-use crate::{LinkView, NodeIndex, PortGraph, PortView, Weights};
+use crate::{LinkView, NodeIndex, PortGraph, PortView, SecondaryMap, UnmanagedDenseMap, Weights};
 
 use super::wfl::wfl_hash;
 
@@ -37,17 +37,124 @@ impl<H> PoolWFLHash<H> {
     }
 }
 
-fn node_is_sink(
+fn node_is_sink<H: Hasher + Default>(
     node: NodeIndex,
-    get_neighbours: &FindNeighbours<impl Hasher + Default>,
+    graph: &mut UfGraph<H>,
     hashes: &BTreeMap<NodeIndex, u64>,
 ) -> bool {
-    let mut all_neigh_vals = get_neighbours
-        .neighbours(node)
-        .into_iter()
-        .map(|(n, _)| hashes.get(&n));
-    let self_val = hashes.get(&node);
-    all_neigh_vals.all(|v| v >= self_val)
+    smallest_neighbour(node, graph, hashes) == node
+}
+
+struct UfGraph<H> {
+    nodes: UnionFind<usize>,
+    edges: UnmanagedDenseMap<NodeIndex, BTreeMap<NodeIndex, u64>>,
+    _hasher: PhantomData<H>,
+}
+
+impl<H> UfGraph<H> {
+    fn from_portgraph(graph: &PortGraph, hashes: &BTreeMap<NodeIndex, u64>) -> Self
+    where
+        H: Hasher + Default,
+    {
+        let nodes = UnionFind::new(graph.node_capacity());
+        let mut ret = Self {
+            nodes,
+            edges: Default::default(),
+            _hasher: PhantomData,
+        };
+
+        for n in graph.nodes_iter() {
+            for (this_port, other_port) in graph.output_links(n) {
+                let other_node = graph.port_node(other_port).unwrap();
+
+                let this_hash = hashes[&n];
+                let other_hash = hashes[&other_node];
+
+                let mut hasher = H::default();
+                (this_hash, this_port, other_port, other_hash).hash(&mut hasher);
+                let edge_hash = hasher.finish();
+
+                let mut opp_hasher = H::default();
+                (other_hash, other_port, this_port, this_hash).hash(&mut opp_hasher);
+                let opp_edge_hash = opp_hasher.finish();
+
+                ret.add_edge(n, other_node, edge_hash, opp_edge_hash);
+            }
+        }
+
+        ret
+    }
+
+    fn add_edge(&mut self, src: NodeIndex, tgt: NodeIndex, edge_hash: u64, opp_edge_hash: u64)
+    where
+        H: Hasher + Default,
+    {
+        let src = self.root_node(src);
+        let tgt = self.root_node(tgt);
+        assert_ne!(src, tgt);
+
+        let [src_edges, tgt_edges] = self.edges.get_disjoint_mut([src, tgt]).unwrap();
+        add_or_hash_edge::<H>(src_edges, tgt, edge_hash);
+        add_or_hash_edge::<H>(tgt_edges, src, opp_edge_hash);
+    }
+
+    fn root_node(&self, node: NodeIndex) -> NodeIndex {
+        NodeIndex::new(self.nodes.find(node.index()))
+    }
+
+    fn neighbours(&self, node: NodeIndex) -> &BTreeMap<NodeIndex, u64>
+    where
+        H: Hasher + Default,
+    {
+        let node = self.root_node(node);
+        self.edges.get(node)
+    }
+
+    /// Contract two nodes and merge all edges.
+    fn contract(&mut self, node1: NodeIndex, node2: NodeIndex)
+    where
+        H: Hasher + Default,
+    {
+        let node1 = self.root_node(node1);
+        let node2 = self.root_node(node2);
+        if !self.nodes.union(node1.index(), node2.index()) {
+            return;
+        }
+
+        let new_root = self.root_node(node1);
+        assert!([node1, node2].contains(&new_root));
+        let non_root = if new_root == node1 { node2 } else { node1 };
+
+        // Move over all edges of the now non-root node
+        let non_root_edges = self.edges.take(non_root);
+        for (tgt, edge_hash) in non_root_edges {
+            if tgt != new_root {
+                let [new_root_edges, tgt_edges] =
+                    self.edges.get_disjoint_mut([new_root, tgt]).unwrap();
+                add_or_hash_edge::<H>(new_root_edges, tgt, edge_hash);
+                let opp_edge_hash = tgt_edges.remove(&non_root).unwrap();
+                add_or_hash_edge::<H>(tgt_edges, new_root, opp_edge_hash);
+            } else {
+                let new_root_edges = self.edges.get_mut(new_root);
+                new_root_edges.remove(&non_root);
+            }
+        }
+    }
+}
+
+fn add_or_hash_edge<H: Hasher + Default>(
+    edges: &mut BTreeMap<NodeIndex, u64>,
+    tgt: NodeIndex,
+    edge_hash: u64,
+) {
+    if let Some(curr_edge_hash) = edges.get_mut(&tgt) {
+        let mut hasher = H::default();
+        curr_edge_hash.hash(&mut hasher);
+        edge_hash.hash(&mut hasher);
+        *curr_edge_hash = hasher.finish();
+    } else {
+        edges.insert(tgt, edge_hash);
+    }
 }
 
 impl<H: Hasher + Default + Clone, N: Clone + Hash, P: Clone + Hash> super::GraphHash<N, P>
@@ -66,54 +173,47 @@ impl<H: Hasher + Default + Clone, N: Clone + Hash, P: Clone + Hash> super::Graph
             );
         }
 
-        // Pool recursively
-        let mut sinks = graph.nodes_iter().collect_vec();
-        // For each sink, the neighbouring sinks
-        let mut boundaries = None;
+        let mut roots = graph.nodes_iter().collect_vec();
+        // Initialise UF data structure
+        let mut uf_graph = UfGraph::<H>::from_portgraph(graph, &hashes);
 
+        // Reset at every iteration. Hoisted out for reuse
+        let mut visited = BTreeSet::new();
         loop {
-            if sinks.len() <= 1 {
+            if roots.len() <= 1 {
                 break;
             }
-            let n_sinks_bef = sinks.len();
-            let find_neighbours = &FindNeighbours::<H>::new(graph, &boundaries, &hashes);
-            sinks.retain(|&n| node_is_sink(n, find_neighbours, &hashes));
-            let n_sinks_aft = sinks.len();
-            if n_sinks_aft == n_sinks_bef {
+            let n_roots_bef = roots.len();
+            roots.retain(|&n| node_is_sink(n, &mut uf_graph, &hashes));
+            let n_roots_aft = roots.len();
+            if n_roots_aft == n_roots_bef {
                 // No more progress will be made
                 break;
             }
 
-            let mut new_boundaries = Vec::new();
-            let mut new_hashes = BTreeMap::new();
+            let partitions = roots
+                .iter_mut()
+                .map(|root| {
+                    let partition = find_partition(*root, &mut uf_graph, &hashes);
+                    (root, partition)
+                })
+                .collect_vec();
 
-            let mut node_to_sink = BTreeMap::new();
-
-            for &sink in &sinks {
-                let mut new_boundary = Vec::new();
-                let mut sink_hasher = H::default();
-
-                let (nodes_here, nodes_beyond) = update_hash::<H>(
-                    sink,
-                    find_neighbours,
-                    &mut sink_hasher,
-                    H::default(),
-                    &hashes,
-                    &mut Default::default(),
-                );
-                let sink_hash = sink_hasher.finish();
-                new_hashes.insert(sink, sink_hash);
-
-                node_to_sink.extend(nodes_here.into_iter().map(|n| (n, sink)));
-                new_boundary.extend(nodes_beyond);
-                new_boundaries.push((sink, new_boundary));
+            for (root, partition) in partitions {
+                visited.clear();
+                // Contract partition and update the root
+                *root = dfs_contract_partition(
+                    *root,
+                    &mut uf_graph,
+                    &partition,
+                    &mut hashes,
+                    &mut visited,
+                )
+                .unwrap();
             }
-
-            boundaries = Some(apply_sink_map(new_boundaries, &node_to_sink));
-            hashes = mem::take(&mut new_hashes);
         }
 
-        sinks
+        roots
             .into_iter()
             .fold(0, |acc, n| acc ^ *hashes.get(&n).unwrap())
     }
@@ -123,121 +223,68 @@ impl<H: Hasher + Default + Clone, N: Clone + Hash, P: Clone + Hash> super::Graph
     }
 }
 
-fn apply_sink_map(
-    new_boundaries: Vec<(NodeIndex, Vec<(NodeIndex, u64)>)>,
-    node_to_sink: &BTreeMap<NodeIndex, NodeIndex>,
-) -> BTreeMap<NodeIndex, Vec<(NodeIndex, u64)>> {
-    new_boundaries
-        .into_iter()
-        .map(|(sink, nodes)| {
-            let nodes = nodes
-                .into_iter()
-                .map(|(n, u)| (node_to_sink[&n], u))
-                .collect();
-            (sink, nodes)
-        })
-        .collect()
-}
-
-enum FindNeighbours<'a, H> {
-    PortGraph {
-        hashes: &'a BTreeMap<NodeIndex, u64>,
-        graph: &'a PortGraph,
-        _hasher: PhantomData<H>,
-    },
-    BoundaryMap {
-        boundaries: &'a BTreeMap<NodeIndex, Vec<(NodeIndex, u64)>>,
-    },
-}
-
-impl<'a, H: Hasher + Default> FindNeighbours<'a, H> {
-    fn new(
-        graph: &'a PortGraph,
-        boundaries: &'a Option<BTreeMap<NodeIndex, Vec<(NodeIndex, u64)>>>,
-        hashes: &'a BTreeMap<NodeIndex, u64>,
-    ) -> Self {
-        if let Some(boundaries) = boundaries {
-            Self::BoundaryMap { boundaries }
-        } else {
-            Self::PortGraph {
-                graph,
-                hashes,
-                _hasher: PhantomData,
-            }
-        }
-    }
-
-    fn neighbours(&self, node: NodeIndex) -> Vec<(NodeIndex, u64)> {
-        match self {
-            FindNeighbours::PortGraph { graph, hashes, .. } => graph
-                .all_links(node)
-                .map(|(this_port, other_port)| {
-                    let other_node = graph.port_node(other_port).unwrap();
-                    let mut hasher = H::default();
-                    let edge_data = (
-                        hashes.get(&node).unwrap(),
-                        graph.port_offset(this_port).unwrap(),
-                        graph.port_offset(other_port).unwrap(),
-                        hashes.get(&other_node).unwrap(),
-                    );
-                    edge_data.hash(&mut hasher);
-                    (other_node, hasher.finish())
-                })
-                .collect(),
-            FindNeighbours::BoundaryMap { boundaries } => boundaries.get(&node).unwrap().clone(),
-        }
-    }
-}
-
-fn update_hash<H: Hasher + Default>(
+/// Return the new root of the contracted graph
+fn dfs_contract_partition<H: Hasher + Default>(
     node: NodeIndex,
-    get_neighbours: &FindNeighbours<impl Hasher + Default>,
-    sink_hasher: &mut impl Hasher,
-    path_hasher: impl Hasher + Clone,
-    hashes: &BTreeMap<NodeIndex, u64>,
+    uf_graph: &mut UfGraph<H>,
+    partition_nodes: &BTreeSet<NodeIndex>,
+    hashes: &mut BTreeMap<NodeIndex, u64>,
     visited: &mut BTreeSet<NodeIndex>,
-) -> (Vec<NodeIndex>, Vec<(NodeIndex, u64)>) {
-    if !visited.insert(node) {
-        return (Vec::new(), Vec::new());
+) -> Option<NodeIndex> {
+    if !partition_nodes.contains(&node) {
+        // Do not contract nodes that are not part of the partition
+        return None;
     }
-
-    // Record our visit
-    sink_hasher.write_u64(path_hasher.finish());
-    sink_hasher.write_u64(hashes[&node]);
-
-    // Go to neighbours
-    let mut nodes_here = vec![node];
-    let mut nodes_beyond = Vec::new();
-    for (n, u) in get_neighbours.neighbours(node) {
-        if smallest_neighbour(n, get_neighbours, hashes) == node {
-            // Visit neighbours as they are in the same sink partition
-            let mut path_hasher = path_hasher.clone();
-            path_hasher.write_u64(u);
-            let (new_here, new_beyond) = update_hash::<H>(
-                n,
-                &get_neighbours,
-                sink_hasher,
-                path_hasher,
-                hashes,
-                visited,
-            );
-            nodes_here.extend(new_here);
-            nodes_beyond.extend(new_beyond);
-        } else {
-            // Do not visit neighbour, mark as beyond our lands
-            nodes_beyond.push((n, u));
+    if !visited.insert(node) {
+        // Can contract, but do not proceed recursively, already visited
+        return Some(node);
+    }
+    let mut hasher = H::default();
+    let neighs = uf_graph.neighbours(node).to_owned();
+    for (neigh, edge_hash) in neighs {
+        if let Some(neigh) =
+            dfs_contract_partition::<H>(neigh, uf_graph, partition_nodes, hashes, visited)
+        {
+            hashes[&neigh].hash(&mut hasher);
+            edge_hash.hash(&mut hasher);
+            uf_graph.contract(node, neigh);
         }
     }
-    (nodes_here, nodes_beyond)
+    hashes[&node].hash(&mut hasher);
+    let node = uf_graph.root_node(node);
+    hashes.insert(node, hasher.finish());
+    Some(node)
 }
 
-fn smallest_neighbour(
+fn find_partition<H: Hasher + Default>(
     node: NodeIndex,
-    get_neighbours: &FindNeighbours<impl Hasher + Default>,
+    uf_graph: &UfGraph<H>,
+    hashes: &BTreeMap<NodeIndex, u64>,
+) -> BTreeSet<NodeIndex> {
+    let mut nodes = BTreeSet::from_iter([node]);
+    let mut node_queue = VecDeque::with_capacity(uf_graph.neighbours(node).len());
+    node_queue.push_back(node);
+    while let Some(node) = node_queue.pop_front() {
+        for &neigh in uf_graph.neighbours(node).keys() {
+            if smallest_neighbour(neigh, uf_graph, hashes) != node {
+                continue;
+            }
+            if !nodes.insert(neigh) {
+                continue;
+            }
+            node_queue.push_back(neigh);
+        }
+    }
+    nodes
+}
+
+fn smallest_neighbour<H: Hasher + Default>(
+    node: NodeIndex,
+    graph: &UfGraph<H>,
     hashes: &BTreeMap<NodeIndex, u64>,
 ) -> NodeIndex {
     let neighs = [node]
         .into_iter()
-        .chain(get_neighbours.neighbours(node).into_iter().map(|(n, _)| n));
+        .chain(graph.neighbours(node).into_iter().map(|(&n, _)| n));
     neighs.min_by_key(|&n| hashes[&n]).unwrap_or(node)
 }

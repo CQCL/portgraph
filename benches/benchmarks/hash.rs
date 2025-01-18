@@ -35,13 +35,13 @@ fn bench_hash(c: &mut Criterion) {
 
     let hashers = [
         Box::new(AcyclicHash::<FxHasher>::default()) as Box<dyn GraphHash<Operation, ()>>,
-        Box::new(WeisfeilerLehmanHash::<FxHasher>::new(1)),
-        Box::new(WeisfeilerLehmanHash::<FxHasher>::new(2)),
-        Box::new(HistWFLHash::<FxHasher>::new(1)),
-        Box::new(HistWFLHash::<FxHasher>::new(2)),
-        Box::new(WeisfeilerLehmanSparseHash::<FxHasher>::new(1)),
-        Box::new(WeisfeilerLehmanSparseHash::<FxHasher>::new(2)),
-        Box::new(WeisfeilerLehmanSparseHash::<FxHasher>::new(3)),
+        // Box::new(WeisfeilerLehmanHash::<FxHasher>::new(1)),
+        // Box::new(WeisfeilerLehmanHash::<FxHasher>::new(2)),
+        // Box::new(HistWFLHash::<FxHasher>::new(1)),
+        // Box::new(HistWFLHash::<FxHasher>::new(2)),
+        // Box::new(WeisfeilerLehmanSparseHash::<FxHasher>::new(1)),
+        // Box::new(WeisfeilerLehmanSparseHash::<FxHasher>::new(2)),
+        // Box::new(WeisfeilerLehmanSparseHash::<FxHasher>::new(3)),
         Box::new(PoolWFLHash::<FxHasher>::new(1)),
     ];
 

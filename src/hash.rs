@@ -21,5 +21,7 @@ pub use wfl_sparse::WeisfeilerLehmanSparseHash;
 mod wfl_hist;
 pub use wfl_hist::HistWFLHash;
 
+#[cfg(feature = "petgraph")]
 mod wfl_pool;
+#[cfg(feature = "petgraph")]
 pub use wfl_pool::PoolWFLHash;

@@ -399,7 +399,7 @@ impl Hierarchy {
     pub fn descendants(&self, node: NodeIndex) -> Descendants<'_> {
         Descendants {
             layout: self,
-            child_queue: VecDeque::from(vec![node]),
+            node_queue: NextStates::Root(node),
         }
     }
 
@@ -634,7 +634,27 @@ pub struct Descendants<'a> {
     ///
     /// For each region, we point to a child node that has not been visited yet.
     /// When a region is visited, we move to the next child node and queue its children region at the end of the queue.
-    child_queue: VecDeque<NodeIndex>,
+    node_queue: NextStates,
+}
+
+/// A queue of nodes to visit next in the [`Descendants`] iterator.
+#[derive(Clone, Debug)]
+enum NextStates {
+    /// The iterator hasn't been queried yet. It stores only the root node.
+    Root(NodeIndex),
+    /// We are in the process of exploring the descendants.
+    /// This queue does **not** include the root node.
+    Descendants(VecDeque<NodeIndex>),
+}
+
+impl NextStates {
+    /// Returns the number of nodes currently in the queue.
+    fn len(&self) -> usize {
+        match self {
+            Self::Root(_) => 1,
+            Self::Descendants(queue) => queue.len(),
+        }
+    }
 }
 
 impl Default for Descendants<'static> {
@@ -642,7 +662,7 @@ impl Default for Descendants<'static> {
         static HIERARCHY: Hierarchy = Hierarchy::new();
         Self {
             layout: &HIERARCHY,
-            child_queue: VecDeque::new(),
+            node_queue: NextStates::Descendants(VecDeque::new()),
         }
     }
 }
@@ -651,17 +671,27 @@ impl Iterator for Descendants<'_> {
     type Item = NodeIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // The next element is always the first node in the queue.
-        let next = self.child_queue.pop_front()?;
+        if let NextStates::Root(root) = &self.node_queue {
+            let root = *root;
+            self.node_queue = NextStates::Descendants(VecDeque::from_iter(self.layout.first(root)));
+            return Some(root);
+        };
+        let NextStates::Descendants(queue) = &mut self.node_queue else {
+            unreachable!()
+        };
 
-        // Check if the node had a next sibling, and add it to the front of queue.
+        // The next element is always the first node in the queue.
+        let next = queue.pop_front()?;
+
+        // Check if the node had a next sibling and add it to the front of
+        // queue.
         if let Some(next_sibling) = self.layout.next(next) {
-            self.child_queue.push_front(next_sibling);
+            queue.push_front(next_sibling);
         }
 
         // Now add the children region of `next` to the end of the queue.
         if let Some(child) = self.layout.first(next) {
-            self.child_queue.push_back(child);
+            queue.push_back(child);
         }
 
         Some(next)
@@ -669,7 +699,7 @@ impl Iterator for Descendants<'_> {
 
     #[inline(always)]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.child_queue.len(), None)
+        (self.node_queue.len(), None)
     }
 }
 
@@ -692,6 +722,8 @@ pub enum AttachError {
 
 #[cfg(test)]
 mod test {
+    use itertools::Itertools;
+
     use crate::{PortGraph, PortMut, PortView};
 
     use super::*;
@@ -708,6 +740,10 @@ mod test {
         assert_eq!(hierarchy.next(root), None);
         assert_eq!(hierarchy.prev(root), None);
 
+        // root
+        //  |-> child0
+        //  |-> child1
+        //   -> child2
         let child0 = NodeIndex::new(0);
         let child1 = NodeIndex::new(1);
         let child2 = NodeIndex::new(2);
@@ -746,6 +782,8 @@ mod test {
         for child in children {
             assert_eq!(hierarchy.parent(child), Some(root));
             assert_eq!(hierarchy.child_count(child), 0);
+            // https://github.com/CQCL/portgraph/issues/177
+            assert_eq!(hierarchy.descendants(child).collect_vec(), vec![child]);
         }
         assert_eq!(hierarchy.prev(child0), None);
         assert_eq!(hierarchy.next(child0), Some(child1));

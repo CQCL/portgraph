@@ -169,7 +169,13 @@ where
 
     /// Helper function to check if a node is a leaf in the hierarchy.
     fn is_root(&self, node: NodeIndex) -> bool {
-        self.forest.map_or(true, |f| f.is_root(node))
+        let Some(f) = &self.forest else {
+            return true;
+        };
+        f.is_root(node)
+            // Special case for filtered graphs.
+            || f.parent(node)
+                .map_or(true, |p| !self.graph.contains_node(p))
     }
 
     /// Helper function to check if a node is a leaf in the hierarchy.

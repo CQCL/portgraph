@@ -146,9 +146,11 @@ impl EdgeStyle {
 #[cfg(test)]
 mod test {
     use std::fmt::Display;
+    use std::sync::OnceLock;
 
     use rstest::{fixture, rstest};
 
+    use crate::view::Region;
     use crate::{Hierarchy, LinkMut, PortGraph, PortMut, PortView, Weights};
 
     use super::{DotFormat, MermaidFormat};
@@ -247,11 +249,45 @@ mod test {
         ("weighted", graph, None, Some(weights))
     }
 
+    #[allow(clippy::type_complexity)]
+    type RegionViewResult = (
+        &'static str,
+        Region<'static, PortGraph>,
+        Option<Hierarchy>,
+        Option<Weights<String, String>>,
+    );
+    #[fixture]
+    fn region_view() -> RegionViewResult {
+        let mut graph = PortGraph::new();
+        let other = graph.add_node(42, 0);
+        let root = graph.add_node(1, 0);
+        let a = graph.add_node(1, 2);
+        let b = graph.add_node(0, 0);
+        let c = graph.add_node(0, 0);
+        graph.link_nodes(a, 0, other, 0).unwrap();
+        graph.link_nodes(a, 1, root, 0).unwrap();
+
+        static HIERARCHY: OnceLock<Hierarchy> = OnceLock::new();
+        let hierarchy = HIERARCHY.get_or_init(|| {
+            let mut hierarchy = Hierarchy::new();
+            hierarchy.push_child(root, other).unwrap();
+            hierarchy.push_child(a, root).unwrap();
+            hierarchy.push_child(b, root).unwrap();
+            hierarchy.push_child(c, b).unwrap();
+            hierarchy
+        });
+
+        let region = Region::new(graph, hierarchy, root);
+
+        ("region_view", region, Some(hierarchy.clone()), None)
+    }
+
     #[rstest]
     #[case::flat(flat_graph())]
     #[case::hierarchy(hierarchy_graph())]
     #[case::interregional(hierarchy_interregional_graph())]
     #[case::weighted(weighted_graph())]
+    #[case::region_view(region_view())]
     #[cfg_attr(miri, ignore)] // Opening files is not supported in (isolated) miri
     fn mermaid_output<WN: Display + Clone, WP>(
         #[case] graph_elems: (

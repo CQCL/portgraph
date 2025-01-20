@@ -1,0 +1,14 @@
+---
+source: src/render.rs
+expression: mermaid
+---
+graph LR
+    subgraph 1 [1]
+        direction LR
+        2[2]
+        subgraph 3 [3]
+            direction LR
+            4[4]
+        end
+    end
+    2-->1

@@ -400,6 +400,7 @@ impl Hierarchy {
         Descendants {
             layout: self,
             child_queue: VecDeque::from(vec![node]),
+            root: node,
         }
     }
 
@@ -635,6 +636,8 @@ pub struct Descendants<'a> {
     /// For each region, we point to a child node that has not been visited yet.
     /// When a region is visited, we move to the next child node and queue its children region at the end of the queue.
     child_queue: VecDeque<NodeIndex>,
+    /// The root node we are iterating over.
+    root: NodeIndex,
 }
 
 impl Default for Descendants<'static> {
@@ -643,6 +646,7 @@ impl Default for Descendants<'static> {
         Self {
             layout: &HIERARCHY,
             child_queue: VecDeque::new(),
+            root: NodeIndex::new(0),
         }
     }
 }
@@ -655,8 +659,10 @@ impl Iterator for Descendants<'_> {
         let next = self.child_queue.pop_front()?;
 
         // Check if the node had a next sibling, and add it to the front of queue.
-        if let Some(next_sibling) = self.layout.next(next) {
-            self.child_queue.push_front(next_sibling);
+        if next != self.root {
+            if let Some(next_sibling) = self.layout.next(next) {
+                self.child_queue.push_front(next_sibling);
+            }
         }
 
         // Now add the children region of `next` to the end of the queue.
@@ -692,6 +698,8 @@ pub enum AttachError {
 
 #[cfg(test)]
 mod test {
+    use itertools::Itertools;
+
     use crate::{PortGraph, PortMut, PortView};
 
     use super::*;
@@ -708,6 +716,10 @@ mod test {
         assert_eq!(hierarchy.next(root), None);
         assert_eq!(hierarchy.prev(root), None);
 
+        // root
+        //  |-> child0
+        //  |-> child1
+        //   -> child2
         let child0 = NodeIndex::new(0);
         let child1 = NodeIndex::new(1);
         let child2 = NodeIndex::new(2);
@@ -746,6 +758,8 @@ mod test {
         for child in children {
             assert_eq!(hierarchy.parent(child), Some(root));
             assert_eq!(hierarchy.child_count(child), 0);
+            // https://github.com/CQCL/portgraph/issues/177
+            assert_eq!(hierarchy.descendants(child).collect_vec(), vec![child]);
         }
         assert_eq!(hierarchy.prev(child0), None);
         assert_eq!(hierarchy.next(child0), Some(child1));

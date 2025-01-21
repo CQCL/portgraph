@@ -92,8 +92,8 @@ where
 
     /// Create a new subgraph of `graph` containing only the given nodes.
     ///
-    /// The boundary of the subgraph is defined by all ports of the given nodes,
-    /// in the order they are given.
+    /// The boundary of the subgraph is defined by all ports of the given nodes
+    /// that have edges to other (i.e. external) nodes, in the order `nodes` are given.
     ///
     /// See [`Subgraph::new_subgraph`] for a method that takes an explicit port boundary.
     pub fn with_nodes(graph: G, nodes: impl IntoIterator<Item = NodeIndex>) -> Self {

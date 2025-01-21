@@ -33,7 +33,7 @@ pub trait PortView {
     #[must_use]
     fn port_offset(&self, port: impl Into<PortIndex>) -> Option<PortOffset>;
 
-    /// Returns the port index for a given node, direction, and offset.
+    /// Returns the port index for a given node and offset.
     #[must_use]
     fn port_index(&self, node: NodeIndex, offset: PortOffset) -> Option<PortIndex>;
 
@@ -283,7 +283,7 @@ pub trait LinkView: PortView {
     type LinkEndpoint: Into<PortIndex> + Copy;
 
     /// Returns an iterator over every pair of matching ports connecting `from`
-    /// with `to`.
+    /// to `to`, i.e. in that direction.
     ///
     /// # Example
     /// ```
@@ -350,7 +350,7 @@ pub trait LinkView: PortView {
         self.get_connection(from, to).is_some()
     }
 
-    /// Returns the port that the given `port` is linked to.
+    /// Returns the port (or ports if this is a [`MultiView`]) that the given `port` is linked to.
     #[must_use]
     fn port_links(
         &self,

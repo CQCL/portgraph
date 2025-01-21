@@ -47,9 +47,8 @@ use super::{MultiView, PortView};
 /// consistent with such a component being either in or outside the subgraph.
 /// If both incoming and outgoing boundary edges are empty, the subgraph is taken
 /// to be the entire graph (i.e. all such components); otherwise, the subgraph
-/// contains only the parts of those components with edges** in the boundary.
-///
-/// ** actually ports, even if disconnected
+/// contains only the parts of those components of which the boundary includes
+/// at least one edge (or disconnected port).
 ///
 /// If an invalid subgraph is defined, then behaviour is undefined.
 ///
@@ -680,7 +679,19 @@ mod tests {
             vec![n0, n3],
         );
 
-        // Disconnected port -> whole component
-        check_subg(vec![graph.output(n3, 0).unwrap()], vec![n2, n3]);
+        // Disconnected port -> includes whole component:
+        let b = Boundary::from_ports(&graph, [graph.output(n3, 0).unwrap()]);
+        assert_eq!(
+            Subgraph::new_subgraph(&graph, b).nodes_iter().collect_vec(),
+            [n2, n3]
+        );
+        // However the graph with those nodes includes the unconnected port as interior,
+        // so has an empty boundary:
+        assert_eq!(
+            Subgraph::with_nodes(&graph, [n2, n3]).boundary,
+            Boundary::from_ports(&graph, [])
+        );
+        // (The subgraph cannot be recreated from said boundary,
+        //    see https://github.com/CQCL/portgraph/issues/179.)
     }
 }

@@ -265,14 +265,6 @@ impl LinkView for MultiPortGraph {
         self.graph.link_count() - self.copy_node_count
     }
 
-    /// Returns whether the port is marked as multiport.
-    ///
-    /// That is, this port is part of the connection between a main port and a copy node.
-    #[inline]
-    fn is_multiport(&self, port: PortIndex) -> bool {
-        *self.multiport.get(port)
-    }
-
     delegate! {
         to self {
             #[call(_get_connections)]
@@ -531,6 +523,14 @@ impl MultiPortGraph {
             }
         };
         self.graph.port_link(internal_copy_port)
+    }
+
+    /// Returns whether the port is marked as multiport.
+    ///
+    /// That is, this port is part of the connection between a main port and a copy node.
+    #[inline]
+    fn is_multiport(&self, port: PortIndex) -> bool {
+        *self.multiport.get(port)
     }
 
     /// Returns whether the node is a copy node.

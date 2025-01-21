@@ -350,18 +350,12 @@ pub trait LinkView: PortView {
         self.get_connection(from, to).is_some()
     }
 
-    /// Returns the port (or perhaps ports, for a [MultiView]) that the given `port` is linked to.
+    /// Returns the port that the given `port` is linked to.
     #[must_use]
     fn port_links(
         &self,
         port: PortIndex,
     ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone;
-
-    /// Returns whether the specified `port` might ever be linked to multiple ports
-    /// (even after mutation). The default is to return `false`.
-    fn is_multiport(&self, _port: PortIndex) -> bool {
-        false
-    }
 
     /// Return the link to the provided port, if not connected return None.
     /// If this port has multiple connected subports, an arbitrary one is returned.

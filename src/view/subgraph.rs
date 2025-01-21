@@ -240,13 +240,6 @@ where
 {
     type LinkEndpoint = G::LinkEndpoint;
 
-    fn is_multiport(&self, port: PortIndex) -> bool {
-        let Some(node) = self.graph.port_node(port) else {
-            return false;
-        };
-        self.nodes.contains(&node) && self.graph.is_multiport(port) // TODO return Option<bool> ??
-    }
-
     fn get_connections(
         &self,
         from: NodeIndex,

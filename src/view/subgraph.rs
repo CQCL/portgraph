@@ -656,35 +656,32 @@ mod tests {
         let n3 = graph.add_node(1, 1);
         graph.link_nodes(n2, 0, n3, 0).unwrap();
 
-        let check_subg = |ports, nodes| {
-            let b = Boundary::from_ports(&graph, ports);
-            assert_eq!(
-                Subgraph::new_subgraph(&graph, b.clone())
-                    .nodes_iter()
-                    .collect_vec(),
-                nodes
-            );
-            assert_eq!(Subgraph::with_nodes(&graph, nodes).boundary, b);
-        };
+        let subg_nodes = |b| Subgraph::new_subgraph(&graph, b).nodes_iter().collect_vec();
 
         // No edges -> all components
-        check_subg(vec![], vec![n0, n1, n2, n3]);
+        let b = Boundary::from_ports(&graph, []);
+        let nodes = subg_nodes(b.clone());
+        assert_eq!(nodes, [n0, n1, n2, n3]);
+        assert_eq!(Subgraph::with_nodes(&graph, nodes).boundary, b);
 
         // Edge in only one component -> just (part of) that component
-        check_subg(vec![graph.output(n0, 0).unwrap()], vec![n0]);
+        let b = Boundary::from_ports(&graph, [graph.output(n0, 0).unwrap()]);
+        let nodes = subg_nodes(b.clone());
+        assert_eq!(nodes, [n0]);
+        assert_eq!(Subgraph::with_nodes(&graph, nodes).boundary, b);
 
         // Edges in two components -> relevant parts of each component
-        check_subg(
-            vec![graph.output(n0, 0).unwrap(), graph.input(n3, 0).unwrap()],
-            vec![n0, n3],
+        let b = Boundary::from_ports(
+            &graph,
+            [graph.output(n0, 0).unwrap(), graph.input(n3, 0).unwrap()],
         );
+        let nodes = subg_nodes(b.clone());
+        assert_eq!(nodes, [n0, n3]);
+        assert_eq!(Subgraph::with_nodes(&graph, nodes).boundary, b);
 
         // Disconnected port -> includes whole component:
         let b = Boundary::from_ports(&graph, [graph.output(n3, 0).unwrap()]);
-        assert_eq!(
-            Subgraph::new_subgraph(&graph, b).nodes_iter().collect_vec(),
-            [n2, n3]
-        );
+        assert_eq!(subg_nodes(b), [n2, n3]);
         // However the graph with those nodes includes the unconnected port as interior,
         // so has an empty boundary:
         assert_eq!(

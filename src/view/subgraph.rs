@@ -42,8 +42,14 @@ use super::{MultiView, PortView};
 /// wall. The [Direction] of edges (incoming/outgoing) defines which side of
 /// the wall is inside, and which is outside.
 ///
-/// If both incoming and outgoing boundary edges are empty, the subgraph is
-/// taken to be the entire graph.
+/// Note that if the graph contains multiple disconnected components, there may be
+/// components none of whose edges are in the boundary. The definition above is
+/// consistent with such a component being either in or outside the subgraph.
+/// If both incoming and outgoing boundary edges are empty, the subgraph is taken
+/// to be the entire graph (i.e. all such components); otherwise, the subgraph
+/// contains only the parts of those components with edges** in the boundary.
+///
+/// ** actually ports, even if disconnected
 ///
 /// If an invalid subgraph is defined, then behaviour is undefined.
 ///
@@ -72,6 +78,10 @@ where
     ///   and outgoing ports are outgoing boundary edges.
     ///
     /// This initialisation is linear in the size of the subgraph.
+    ///
+    /// Note that for graphs with multiple disconnected components, this method can only
+    /// create a subgraph containing the whole of a component if that component has
+    /// disconnected ports that can be used as the boundary; see [`Subgraph::with_nodes`].
     pub fn new_subgraph(graph: G, boundary: Boundary) -> Self {
         let nodes = boundary.internal_nodes(&graph).collect();
         Self {
@@ -635,5 +645,39 @@ mod tests {
         let subg = Subgraph::new_subgraph(&graph, boundary);
         assert_eq!(subg.nodes_iter().collect_vec(), [n0, n2]);
         assert!(!subg.is_convex());
+    }
+
+    #[test]
+    fn test_disconnected_components() {
+        let mut graph = PortGraph::new();
+        let n0 = graph.add_node(0, 1);
+        let n1 = graph.add_node(1, 0);
+        graph.link_nodes(n0, 0, n1, 0).unwrap();
+        let n2 = graph.add_node(0, 1);
+        let n3 = graph.add_node(1, 1);
+        graph.link_nodes(n2, 0, n3, 0).unwrap();
+
+        // No edges -> all components
+        let boundary = Boundary::from_ports(&graph, []);
+        let subg = Subgraph::new_subgraph(&graph, boundary);
+        assert_eq!(subg.nodes_iter().collect_vec(), [n0, n1, n2, n3]);
+
+        // Edge in only one component -> just (part of) that component
+        let boundary = Boundary::from_ports(&graph, [graph.output(n0, 0).unwrap()]);
+        let subg = Subgraph::new_subgraph(&graph, boundary);
+        assert_eq!(subg.nodes_iter().collect_vec(), [n0]);
+
+        // Edges in two components -> relevant parts of each component
+        let boundary = Boundary::from_ports(
+            &graph,
+            [graph.output(n0, 0).unwrap(), graph.input(n3, 0).unwrap()],
+        );
+        let subg = Subgraph::new_subgraph(&graph, boundary);
+        assert_eq!(subg.nodes_iter().collect_vec(), [n0, n3]);
+
+        // Disconnected port -> whole component
+        let boundary = Boundary::from_ports(&graph, [graph.output(n3, 0).unwrap()]);
+        let subg = Subgraph::new_subgraph(&graph, boundary);
+        assert_eq!(subg.nodes_iter().collect_vec(), [n2, n3]);
     }
 }

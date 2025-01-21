@@ -218,6 +218,12 @@ where
 {
     type LinkEndpoint = G::LinkEndpoint;
 
+    fn is_multiport(&self, port: PortIndex) -> bool {
+        self.graph
+            .port_node(port)
+            .is_some_and(|node| self.is_descendant(node) && self.graph.is_multiport(port))
+    }
+
     fn get_connections(
         &self,
         from: NodeIndex,

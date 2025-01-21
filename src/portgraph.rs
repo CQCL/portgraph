@@ -712,14 +712,9 @@ impl LinkView for PortGraph {
 
     fn port_links(&self, port: PortIndex) -> impl Iterator<Item = (PortIndex, PortIndex)> + Clone {
         self.port_meta_valid(port).unwrap();
-        match self.port_link[port.index()] {
-            Some(link) => std::iter::once((port, link)),
-            None => {
-                let mut iter = std::iter::once((port, port));
-                iter.next();
-                iter
-            }
-        }
+        self.port_link[port.index()]
+            .map(|link| (port, link))
+            .into_iter()
     }
 
     #[inline]

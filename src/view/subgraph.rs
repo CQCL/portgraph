@@ -42,11 +42,11 @@ use super::{MultiView, PortView};
 /// wall. The [Direction] of edges (incoming/outgoing) defines which side of
 /// the wall is inside, and which is outside.
 ///
-/// Note that if the graph contains multiple disconnected components, there may be
+/// Note that if the graph contains multiple connected components, there may be
 /// components none of whose edges are in the boundary. The definition above is
 /// consistent with such a component being either in or outside the subgraph.
 /// If both incoming and outgoing boundary edges are empty, the subgraph is taken
-/// to be the entire graph (i.e. all such components); otherwise, the subgraph
+/// to be the entire graph (i.e. all components); otherwise, the subgraph
 /// contains only the parts of those components of which the boundary includes
 /// at least one edge (or disconnected port).
 ///
@@ -78,7 +78,7 @@ where
     ///
     /// This initialisation is linear in the size of the subgraph.
     ///
-    /// Note that for graphs with multiple disconnected components, this method can only
+    /// Note that for graphs with multiple connected components, this method can only
     /// create a subgraph containing the whole of a component if that component has
     /// disconnected ports that can be used as the boundary; see [`Subgraph::with_nodes`].
     pub fn new_subgraph(graph: G, boundary: Boundary) -> Self {

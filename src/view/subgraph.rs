@@ -657,27 +657,30 @@ mod tests {
         let n3 = graph.add_node(1, 1);
         graph.link_nodes(n2, 0, n3, 0).unwrap();
 
+        let check_subg = |ports, nodes| {
+            let b = Boundary::from_ports(&graph, ports);
+            assert_eq!(
+                Subgraph::new_subgraph(&graph, b.clone())
+                    .nodes_iter()
+                    .collect_vec(),
+                nodes
+            );
+            assert_eq!(Subgraph::with_nodes(&graph, nodes).boundary, b);
+        };
+
         // No edges -> all components
-        let boundary = Boundary::from_ports(&graph, []);
-        let subg = Subgraph::new_subgraph(&graph, boundary);
-        assert_eq!(subg.nodes_iter().collect_vec(), [n0, n1, n2, n3]);
+        check_subg(vec![], vec![n0, n1, n2, n3]);
 
         // Edge in only one component -> just (part of) that component
-        let boundary = Boundary::from_ports(&graph, [graph.output(n0, 0).unwrap()]);
-        let subg = Subgraph::new_subgraph(&graph, boundary);
-        assert_eq!(subg.nodes_iter().collect_vec(), [n0]);
+        check_subg(vec![graph.output(n0, 0).unwrap()], vec![n0]);
 
         // Edges in two components -> relevant parts of each component
-        let boundary = Boundary::from_ports(
-            &graph,
-            [graph.output(n0, 0).unwrap(), graph.input(n3, 0).unwrap()],
+        check_subg(
+            vec![graph.output(n0, 0).unwrap(), graph.input(n3, 0).unwrap()],
+            vec![n0, n3],
         );
-        let subg = Subgraph::new_subgraph(&graph, boundary);
-        assert_eq!(subg.nodes_iter().collect_vec(), [n0, n3]);
 
         // Disconnected port -> whole component
-        let boundary = Boundary::from_ports(&graph, [graph.output(n3, 0).unwrap()]);
-        let subg = Subgraph::new_subgraph(&graph, boundary);
-        assert_eq!(subg.nodes_iter().collect_vec(), [n2, n3]);
+        check_subg(vec![graph.output(n3, 0).unwrap()], vec![n2, n3]);
     }
 }

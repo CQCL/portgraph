@@ -344,8 +344,8 @@ impl<G: LinkMut> Subgraph<G> {
                     .unwrap();
                 let new_other_p = match node_map.get(&self.graph.port_node(other_p).unwrap()) {
                     Some(new_other) => {
-                        // Internal edge. Process in one direction only to avoid repeats.
-                        if self.graph.port_direction(other_p).unwrap() == Direction::Incoming {
+                        // Internal edge. Add once only, not once per end.
+                        if new_other < new_node {
                             continue;
                         }
                         self.graph
@@ -682,4 +682,39 @@ mod tests {
         assert_eq!(subg.nodes_iter().collect_vec(), [n0, n2]);
         assert!(!subg.is_convex());
     }
+
+    #[test]
+    fn test_copy_in_parent() {
+        let mut graph = PortGraph::new();
+        // First component: n0 -> n1 + cycle
+        let n0 = graph.add_node(0, 1);
+        let n1 = graph.add_node(2, 1);
+        graph.link_nodes(n0, 0, n1, 0).unwrap();
+        graph.link_nodes(n1, 0, n1, 1).unwrap();
+        // Second component: n2 -> n3
+        let n2 = graph.add_node(0, 1);
+        let n3 = graph.add_node(1, 0);
+        graph.link_nodes(n2, 0, n3, 0).unwrap();
+
+        let mut subg = Subgraph::with_nodes(&mut graph, [n0, n1]);
+        let mut node_map = subg.copy_in_parent().unwrap();
+        assert_eq!(graph.node_count(), 6);
+        let n0_copy = node_map.remove(&n0).unwrap();
+        let n1_copy = node_map.remove(&n1).unwrap();
+        assert!(node_map.is_empty()); // No other keys
+        assert_eq!(
+            graph.input_links(n1_copy).collect_vec(),
+            vec![
+                (
+                    graph.input(n1_copy, 0).unwrap(),
+                    graph.output(n0_copy, 0).unwrap()
+                ),
+                (
+                    graph.input(n1_copy, 1).unwrap(),
+                    graph.output(n1_copy, 0).unwrap()
+                )
+            ]
+        );
+    }
+
 }

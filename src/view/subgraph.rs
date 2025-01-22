@@ -319,10 +319,6 @@ impl<G: LinkMut> Subgraph<G> {
     /// If there are any boundary edges, these will also be copied but keeping
     /// the same *external* end port (this will fail unless the underlying graph
     /// is a [MultiView]).
-    /// Note that Subgraph<Subgraph<MultiPortGraph>>`
-    /// thus adds the new nodes to the middle subgraph as well as the outer.
-    /// (TODO: test - should happen naturally with right methods, but consider
-    /// case where boundary edges of the two subgraphs overlap.)
     ///
     /// Returns a map from node indices within this subgraph, to the indices
     ///    of the newly-created nodes in the parent graph (they are not in this subgraph!);

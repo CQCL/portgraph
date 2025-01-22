@@ -742,6 +742,10 @@ mod tests {
         let backup = graph.clone();
         let mut subg = Subgraph::with_nodes(&mut graph, [n1, n2]);
         assert!(subg.copy_in_parent().is_err());
+        assert_eq!(
+            graph.nodes_iter().collect_vec(),
+            backup.nodes_iter().collect_vec()
+        );
         assert_same_for_nodes(&graph, &backup, backup.nodes_iter());
     }
 

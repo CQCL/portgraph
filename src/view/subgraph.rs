@@ -695,9 +695,11 @@ mod tests {
         let n2 = graph.add_node(0, 1);
         let n3 = graph.add_node(1, 0);
         graph.link_nodes(n2, 0, n3, 0).unwrap();
+        let backup = graph.clone();
 
         let mut subg = Subgraph::with_nodes(&mut graph, [n0, n1]);
         let mut node_map = subg.copy_in_parent().unwrap();
+        assert_eq!(subg.nodes_iter().collect_vec(), vec![n0, n1]);
         assert_eq!(graph.node_count(), 6);
         let n0_copy = node_map.remove(&n0).unwrap();
         let n1_copy = node_map.remove(&n1).unwrap();
@@ -715,6 +717,36 @@ mod tests {
                 )
             ]
         );
+        assert_same_for_nodes(&graph, &backup, backup.nodes_iter()); // Rest of graph unchanged
     }
 
+    fn assert_same_for_nodes(
+        a: &impl LinkView,
+        b: &impl LinkView,
+        nodes: impl IntoIterator<Item = NodeIndex>,
+    ) {
+        for node in nodes {
+            assert_eq!(a.num_inputs(node), b.num_inputs(node));
+            assert_eq!(a.num_outputs(node), b.num_outputs(node));
+            for (a_link, b_link) in a.all_links(node).zip_eq(b.all_links(node)) {
+                assert_eq!(a.endpoint_port(a_link.0), b.endpoint_port(b_link.0));
+                assert_eq!(a.endpoint_port(a_link.1), b.endpoint_port(b_link.1));
+            }
+        }
+    }
+
+    #[test]
+    fn test_copy_in_parent_bad_boundary() {
+        let mut graph = PortGraph::new();
+        let n0 = graph.add_node(0, 1);
+        let n1 = graph.add_node(1, 1);
+        let n2 = graph.add_node(1, 0);
+        graph.link_nodes(n0, 0, n1, 0).unwrap();
+        graph.link_nodes(n1, 0, n2, 0).unwrap();
+
+        let backup = graph.clone();
+        let mut subg = Subgraph::with_nodes(&mut graph, [n1, n2]);
+        assert!(subg.copy_in_parent().is_err());
+        assert_same_for_nodes(&graph, &backup, backup.nodes_iter());
+    }
 }

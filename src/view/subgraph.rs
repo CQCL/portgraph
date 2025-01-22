@@ -59,10 +59,7 @@ pub struct Subgraph<G> {
     boundary: Boundary,
 }
 
-impl<G: LinkView> Subgraph<G>
-where
-    G: Clone,
-{
+impl<G: LinkView> Subgraph<G> {
     /// Create a new subgraph view of `graph`.
     ///
     /// ### Arguments
@@ -164,10 +161,7 @@ fn collect_boundary_ports<G: LinkView>(
     Boundary::new(inputs, outputs)
 }
 
-impl<G> PortView for Subgraph<G>
-where
-    G: PortView + Clone,
-{
+impl<G: PortView> PortView for Subgraph<G> {
     #[inline(always)]
     fn contains_node(&'_ self, node: NodeIndex) -> bool {
         self.nodes.contains(&node)
@@ -234,10 +228,7 @@ where
     }
 }
 
-impl<G> LinkView for Subgraph<G>
-where
-    G: LinkView + Clone,
-{
+impl<G: LinkView> LinkView for Subgraph<G> {
     type LinkEndpoint = G::LinkEndpoint;
 
     fn endpoint_port(&self, end: Self::LinkEndpoint) -> PortIndex {
@@ -307,9 +298,7 @@ where
     }
 }
 
-impl<G> MultiView for Subgraph<G>
-where
-    G: MultiView + Clone,
+impl<G: MultiView> MultiView for Subgraph<G>
 {
     fn subport_link(&self, subport: Self::LinkEndpoint) -> Option<Self::LinkEndpoint> {
         self.graph
@@ -325,7 +314,7 @@ where
     }
 }
 
-impl<G: LinkMut + Clone> Subgraph<G> {
+impl<G: LinkMut> Subgraph<G> {
     /// Copies all the nodes and edges in this subgraph into the parent graph.
     /// If there are any boundary edges, these will also be copied but keeping
     /// the same *external* end port (this will fail unless the underlying graph

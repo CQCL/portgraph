@@ -282,9 +282,6 @@ pub trait LinkView: PortView {
     /// The identifier for the endpoints of a link.
     type LinkEndpoint: Into<PortIndex> + Copy;
 
-    /// Gets the [PortIndex] corresponding to a [Self::LinkEndpoint]
-    fn endpoint_port(&self, end: Self::LinkEndpoint) -> PortIndex;
-
     /// Returns an iterator over every pair of matching ports connecting `from`
     /// with `to`.
     ///

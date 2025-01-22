@@ -710,10 +710,6 @@ impl PortMut for PortGraph {
 impl LinkView for PortGraph {
     type LinkEndpoint = PortIndex;
 
-    fn endpoint_port(&self, end: Self::LinkEndpoint) -> PortIndex {
-        end
-    }
-
     fn port_links(&self, port: PortIndex) -> impl Iterator<Item = (PortIndex, PortIndex)> + Clone {
         self.port_meta_valid(port).unwrap();
         match self.port_link[port.index()] {

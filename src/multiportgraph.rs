@@ -259,10 +259,6 @@ impl PortMut for MultiPortGraph {
 impl LinkView for MultiPortGraph {
     type LinkEndpoint = SubportIndex;
 
-    fn endpoint_port(&self, end: Self::LinkEndpoint) -> PortIndex {
-        end.port
-    }
-
     #[inline]
     fn link_count(&self) -> usize {
         // Do not count the links between copy nodes and their main nodes.

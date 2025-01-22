@@ -70,7 +70,6 @@ impl<G: LinkView> LinkView for &G {
 
     delegate! {
         to (*self) {
-            fn endpoint_port(&self, end: Self::LinkEndpoint) -> PortIndex;
             fn get_connections(&self, from: NodeIndex, to: NodeIndex) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone;
             fn port_links(&self, port: PortIndex) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone;
             fn links(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone;

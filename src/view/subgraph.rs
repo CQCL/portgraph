@@ -231,10 +231,6 @@ impl<G: PortView> PortView for Subgraph<G> {
 impl<G: LinkView> LinkView for Subgraph<G> {
     type LinkEndpoint = G::LinkEndpoint;
 
-    fn endpoint_port(&self, end: Self::LinkEndpoint) -> PortIndex {
-        self.graph.endpoint_port(end)
-    }
-
     fn get_connections(
         &self,
         from: NodeIndex,

@@ -309,7 +309,10 @@ impl<G: MultiView> MultiView for Subgraph<G> {
     }
 }
 
-impl<G: LinkMut> Subgraph<G> {
+impl<G: LinkMut> Subgraph<G>
+where
+    G::LinkEndpoint: Into<PortIndex>,
+{
     /// Copies all the nodes and edges in this subgraph into the parent graph.
     /// If there are any boundary edges, these will also be copied but keeping
     /// the same *external* end port (this will fail unless the underlying graph
@@ -343,7 +346,7 @@ impl<G: LinkMut> Subgraph<G> {
                             .port_index(*new_other, self.graph.port_offset(other_p).unwrap())
                             .unwrap()
                     }
-                    None => self.graph.endpoint_port(other_p), // Boundary edge. Keep same external endpoint
+                    None => other_p.into(), // Boundary edge. Keep same external endpoint
                 };
                 if let Err(e) = self.graph.link_ports(new_node_p, new_other_p) {
                     // Must undo insertion
@@ -711,17 +714,19 @@ mod tests {
         assert_same_for_nodes(&graph, &backup, backup.nodes_iter()); // Rest of graph unchanged
     }
 
-    fn assert_same_for_nodes(
-        a: &impl LinkView,
-        b: &impl LinkView,
+    fn assert_same_for_nodes<A: LinkView, B: LinkView>(
+        a: A,
+        b: B,
         nodes: impl IntoIterator<Item = NodeIndex>,
-    ) {
+    ) where
+        PortIndex: From<A::LinkEndpoint> + From<B::LinkEndpoint>,
+    {
         for node in nodes {
             assert_eq!(a.num_inputs(node), b.num_inputs(node));
             assert_eq!(a.num_outputs(node), b.num_outputs(node));
             for (a_link, b_link) in a.all_links(node).zip_eq(b.all_links(node)) {
-                assert_eq!(a.endpoint_port(a_link.0), b.endpoint_port(b_link.0));
-                assert_eq!(a.endpoint_port(a_link.1), b.endpoint_port(b_link.1));
+                assert_eq!(PortIndex::from(a_link.0), PortIndex::from(b_link.0));
+                assert_eq!(PortIndex::from(a_link.1), PortIndex::from(b_link.1));
             }
         }
     }

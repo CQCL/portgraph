@@ -11,7 +11,7 @@ use crate::{
     algorithms::{ConvexChecker, TopoConvexChecker},
     Direction, LinkView, NodeIndex, PortIndex,
 };
-use crate::{LinkError, MultiPortGraph, PortOffset};
+use crate::{LinkError, PortOffset};
 
 use super::{LinkMut, MultiView, PortView};
 
@@ -340,26 +340,41 @@ impl<G: LinkMut + Clone> Subgraph<G> {
     /// or a LinkError in which case the underlying graph will not have had any nodes added
     ///    (however subports may have been for a [MultiView]).
     pub fn copy_in_parent(&mut self) -> Result<HashMap<NodeIndex, NodeIndex>, LinkError> {
-        let mut mp = MultiPortGraph::with_capacity(self.node_count(), self.port_count());
-        let self_to_temp = mp.insert_graph(self)?;
-        let temp_to_result = self.graph.insert_graph(&mp)?;
-        for b in self.boundary.inputs().chain(self.boundary.outputs()) {
-            let p = self.boundary.port_index(&b);
-            let ext_ports = self.graph.port_links(p).collect::<Vec<_>>();
-            for (_, ep) in ext_ports {
-                if let Err(e) = self.graph.link_ports(p, self.graph.endpoint_port(ep)) {
+        self.graph.reserve(self.node_count(), self.port_count());
+        let g = &mut self.graph;
+        let node_map = self
+            .nodes
+            .iter()
+            .map(|node| (*node, g.add_node(g.num_inputs(*node), g.num_outputs(*node))))
+            .collect::<HashMap<_, _>>();
+        for (node, new_node) in node_map.iter() {
+            for (node_p, other_p) in self.graph.all_links(*node).collect::<Vec<_>>() {
+                let new_node_p = self
+                    .graph
+                    .port_index(*new_node, self.graph.port_offset(node_p).unwrap())
+                    .unwrap();
+                let new_other_p = match node_map.get(&self.graph.port_node(other_p).unwrap()) {
+                    Some(new_other) => {
+                        // Internal edge. Process in one direction only to avoid repeats.
+                        if self.graph.port_direction(other_p).unwrap() == Direction::Incoming {
+                            continue;
+                        }
+                        self.graph
+                            .port_index(*new_other, self.graph.port_offset(other_p).unwrap())
+                            .unwrap()
+                    }
+                    None => self.graph.endpoint_port(other_p), // Boundary edge. Keep same external endpoint
+                };
+                if let Err(e) = self.graph.link_ports(new_node_p, new_other_p) {
                     // Must undo insertion
-                    for n in temp_to_result.values() {
+                    for n in node_map.values() {
                         self.graph.remove_node(*n);
                     }
                     return Err(e);
                 }
             }
         }
-        Ok(self_to_temp
-            .into_iter()
-            .map(|(s, t)| (s, *temp_to_result.get(&t).unwrap()))
-            .collect())
+        Ok(node_map)
     }
 }
 

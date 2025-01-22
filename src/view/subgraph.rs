@@ -298,8 +298,7 @@ impl<G: LinkView> LinkView for Subgraph<G> {
     }
 }
 
-impl<G: MultiView> MultiView for Subgraph<G>
-{
+impl<G: MultiView> MultiView for Subgraph<G> {
     fn subport_link(&self, subport: Self::LinkEndpoint) -> Option<Self::LinkEndpoint> {
         self.graph
             .subport_link(subport)

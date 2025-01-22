@@ -1,19 +1,19 @@
 //! Views into non-hierarchical parts of `PortView`s.
 
 use std::borrow::Cow;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 use delegate::delegate;
 use itertools::{Either, Itertools};
 
 use crate::boundary::{Boundary, HasBoundary};
-use crate::PortOffset;
 use crate::{
     algorithms::{ConvexChecker, TopoConvexChecker},
     Direction, LinkView, NodeIndex, PortIndex,
 };
+use crate::{LinkError, MultiPortGraph, PortOffset};
 
-use super::{MultiView, PortView};
+use super::{LinkMut, MultiView, PortView};
 
 /// View into a subgraph of a PortView.
 ///
@@ -322,6 +322,44 @@ where
             fn subports(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = Self::LinkEndpoint> + Clone;
             fn all_subports(&self, node: NodeIndex) -> impl Iterator<Item = Self::LinkEndpoint> + Clone;
         }
+    }
+}
+
+impl<G: LinkMut + Clone> Subgraph<G> {
+    /// Copies all the nodes and edges in this subgraph into the parent graph.
+    /// If there are any boundary edges, these will also be copied but keeping
+    /// the same *external* end port (this will fail unless the underlying graph
+    /// is a [MultiView]).
+    /// Note that Subgraph<Subgraph<MultiPortGraph>>`
+    /// thus adds the new nodes to the middle subgraph as well as the outer.
+    /// (TODO: test - should happen naturally with right methods, but consider
+    /// case where boundary edges of the two subgraphs overlap.)
+    ///
+    /// Returns a map from node indices within this subgraph, to the indices
+    ///    of the newly-created nodes in the parent graph (they are not in this subgraph!);
+    /// or a LinkError in which case the underlying graph will not have had any nodes added
+    ///    (however subports may have been for a [MultiView]).
+    pub fn copy_in_parent(&mut self) -> Result<HashMap<NodeIndex, NodeIndex>, LinkError> {
+        let mut mp = MultiPortGraph::with_capacity(self.node_count(), self.port_count());
+        let self_to_temp = mp.insert_graph(self)?;
+        let temp_to_result = self.graph.insert_graph(&mp)?;
+        for b in self.boundary.inputs().chain(self.boundary.outputs()) {
+            let p = self.boundary.port_index(&b);
+            let ext_ports = self.graph.port_links(p).collect::<Vec<_>>();
+            for (_, ep) in ext_ports {
+                if let Err(e) = self.graph.link_ports(p, self.graph.endpoint_port(ep)) {
+                    // Must undo insertion
+                    for n in temp_to_result.values() {
+                        self.graph.remove_node(*n);
+                    }
+                    return Err(e);
+                }
+            }
+        }
+        Ok(self_to_temp
+            .into_iter()
+            .map(|(s, t)| (s, *temp_to_result.get(&t).unwrap()))
+            .collect())
     }
 }
 

@@ -749,4 +749,38 @@ mod tests {
         assert!(subg.copy_in_parent().is_err());
         assert_same_for_nodes(&graph, &backup, backup.nodes_iter());
     }
+
+    #[test]
+    fn test_copy_in_parent_multi() {
+        let mut graph = MultiPortGraph::new();
+        let n0 = graph.add_node(0, 1);
+        let n1 = graph.add_node(1, 1);
+        let n2 = graph.add_node(1, 0);
+        graph.link_nodes(n0, 0, n1, 0).unwrap();
+        graph.link_nodes(n1, 0, n2, 0).unwrap();
+        let backup = graph.clone();
+
+        let mut subg = Subgraph::with_nodes(&mut graph, [n1, n2]);
+        let mut node_map = subg.copy_in_parent().unwrap();
+        assert_eq!(graph.node_count(), 5);
+        let n1_copy = node_map.remove(&n1).unwrap();
+        let n2_copy = node_map.remove(&n2).unwrap();
+        assert!(node_map.is_empty()); // No other keys
+        assert_same_for_nodes(&graph, &backup, [n1, n2]);
+        let (sp2, sp1) = graph.all_links(n2_copy).exactly_one().ok().unwrap();
+        assert_eq!(sp2.port(), graph.input(n2_copy, 0).unwrap());
+        assert_eq!(sp1.port(), graph.output(n1_copy, 0).unwrap());
+
+        let n0_out = graph.output(n0, 0).unwrap();
+        assert_eq!(
+            graph
+                .all_links(n0)
+                .map(|(sp1, sp2)| (sp1.port(), sp2.port()))
+                .collect_vec(),
+            [
+                (n0_out, graph.input(n1, 0).unwrap()),
+                (n0_out, graph.input(n1_copy, 0).unwrap())
+            ]
+        );
+    }
 }

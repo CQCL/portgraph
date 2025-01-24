@@ -1,19 +1,19 @@
 //! Views into non-hierarchical parts of `PortView`s.
 
 use std::borrow::Cow;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 use delegate::delegate;
 use itertools::{Either, Itertools};
 
 use crate::boundary::{Boundary, HasBoundary};
-use crate::PortOffset;
 use crate::{
     algorithms::{ConvexChecker, TopoConvexChecker},
     Direction, LinkView, NodeIndex, PortIndex,
 };
+use crate::{LinkError, PortOffset};
 
-use super::{MultiView, PortView};
+use super::{LinkMut, MultiView, PortView};
 
 /// View into a subgraph of a PortView.
 ///
@@ -59,10 +59,7 @@ pub struct Subgraph<G> {
     boundary: Boundary,
 }
 
-impl<G: LinkView> Subgraph<G>
-where
-    G: Clone,
-{
+impl<G: LinkView> Subgraph<G> {
     /// Create a new subgraph view of `graph`.
     ///
     /// ### Arguments
@@ -164,10 +161,7 @@ fn collect_boundary_ports<G: LinkView>(
     Boundary::new(inputs, outputs)
 }
 
-impl<G> PortView for Subgraph<G>
-where
-    G: PortView + Clone,
-{
+impl<G: PortView> PortView for Subgraph<G> {
     #[inline(always)]
     fn contains_node(&'_ self, node: NodeIndex) -> bool {
         self.nodes.contains(&node)
@@ -234,10 +228,7 @@ where
     }
 }
 
-impl<G> LinkView for Subgraph<G>
-where
-    G: LinkView + Clone,
-{
+impl<G: LinkView> LinkView for Subgraph<G> {
     type LinkEndpoint = G::LinkEndpoint;
 
     fn get_connections(
@@ -303,10 +294,7 @@ where
     }
 }
 
-impl<G> MultiView for Subgraph<G>
-where
-    G: MultiView + Clone,
-{
+impl<G: MultiView> MultiView for Subgraph<G> {
     fn subport_link(&self, subport: Self::LinkEndpoint) -> Option<Self::LinkEndpoint> {
         self.graph
             .subport_link(subport)
@@ -321,6 +309,58 @@ where
     }
 }
 
+impl<G: LinkMut> Subgraph<G>
+where
+    G::LinkEndpoint: Into<PortIndex>,
+{
+    /// Copies all the nodes and edges in this subgraph into the parent graph.
+    /// If there are any boundary edges, these will also be copied but keeping
+    /// the same *external* end port (this will fail unless the underlying graph
+    /// is a [MultiView]).
+    ///
+    /// Returns a map from node indices within this subgraph, to the indices
+    ///    of the newly-created nodes in the parent graph (they are not in this subgraph!);
+    /// or a LinkError in which case the underlying graph will not have had any nodes added
+    ///    (however subports may have been for a [MultiView]).
+    pub fn copy_in_parent(&mut self) -> Result<HashMap<NodeIndex, NodeIndex>, LinkError> {
+        self.graph.reserve(self.node_count(), self.port_count());
+        let g = &mut self.graph;
+        let node_map = self
+            .nodes
+            .iter()
+            .map(|node| (*node, g.add_node(g.num_inputs(*node), g.num_outputs(*node))))
+            .collect::<HashMap<_, _>>();
+        for (node, new_node) in node_map.iter() {
+            for (node_p, other_p) in self.graph.all_links(*node).collect::<Vec<_>>() {
+                let new_node_p = self
+                    .graph
+                    .port_index(*new_node, self.graph.port_offset(node_p).unwrap())
+                    .unwrap();
+                let new_other_p = match node_map.get(&self.graph.port_node(other_p).unwrap()) {
+                    Some(new_other) => {
+                        // Internal edge. Add once only, not once per end.
+                        if new_other < new_node {
+                            continue;
+                        }
+                        self.graph
+                            .port_index(*new_other, self.graph.port_offset(other_p).unwrap())
+                            .unwrap()
+                    }
+                    None => other_p.into(), // Boundary edge. Keep same external endpoint
+                };
+                if let Err(e) = self.graph.link_ports(new_node_p, new_other_p) {
+                    // Must undo insertion
+                    for n in node_map.values() {
+                        self.graph.remove_node(*n);
+                    }
+                    return Err(e);
+                }
+            }
+        }
+        Ok(node_map)
+    }
+}
+
 impl<G> HasBoundary for Subgraph<G> {
     fn port_boundary(&self) -> Cow<'_, Boundary> {
         Cow::Borrowed(&self.boundary)
@@ -332,6 +372,7 @@ mod tests {
     use std::collections::HashSet;
 
     use itertools::Itertools;
+    use rstest::rstest;
 
     use crate::multiportgraph::SubportIndex;
     use crate::{LinkMut, MultiPortGraph, PortGraph, PortMut, PortView};
@@ -635,5 +676,141 @@ mod tests {
         let subg = Subgraph::new_subgraph(&graph, boundary);
         assert_eq!(subg.nodes_iter().collect_vec(), [n0, n2]);
         assert!(!subg.is_convex());
+    }
+
+    #[test]
+    fn test_copy_in_parent() {
+        let mut graph = PortGraph::new();
+        // First component: n0 -> n1 + cycle
+        let n0 = graph.add_node(0, 1);
+        let n1 = graph.add_node(2, 1);
+        graph.link_nodes(n0, 0, n1, 0).unwrap();
+        graph.link_nodes(n1, 0, n1, 1).unwrap();
+        // Second component: n2 -> n3
+        let n2 = graph.add_node(0, 1);
+        let n3 = graph.add_node(1, 0);
+        graph.link_nodes(n2, 0, n3, 0).unwrap();
+        let backup = graph.clone();
+
+        let mut subg = Subgraph::with_nodes(&mut graph, [n0, n1]);
+        let mut node_map = subg.copy_in_parent().unwrap();
+        assert_eq!(subg.nodes_iter().collect_vec(), vec![n0, n1]);
+        assert_eq!(graph.node_count(), 6);
+        let n0_copy = node_map.remove(&n0).unwrap();
+        let n1_copy = node_map.remove(&n1).unwrap();
+        assert!(node_map.is_empty()); // No other keys
+        assert_eq!(
+            graph.input_links(n1_copy).collect_vec(),
+            vec![
+                (
+                    graph.input(n1_copy, 0).unwrap(),
+                    graph.output(n0_copy, 0).unwrap()
+                ),
+                (
+                    graph.input(n1_copy, 1).unwrap(),
+                    graph.output(n1_copy, 0).unwrap()
+                )
+            ]
+        );
+        assert_same_for_nodes(&graph, &backup, backup.nodes_iter()); // Rest of graph unchanged
+    }
+
+    fn assert_same_for_nodes<A: LinkView, B: LinkView>(
+        a: A,
+        b: B,
+        nodes: impl IntoIterator<Item = NodeIndex>,
+    ) where
+        PortIndex: From<A::LinkEndpoint> + From<B::LinkEndpoint>,
+    {
+        for node in nodes {
+            assert_eq!(a.num_inputs(node), b.num_inputs(node));
+            assert_eq!(a.num_outputs(node), b.num_outputs(node));
+            for (a_link, b_link) in a.all_links(node).zip_eq(b.all_links(node)) {
+                assert_eq!(PortIndex::from(a_link.0), PortIndex::from(b_link.0));
+                assert_eq!(PortIndex::from(a_link.1), PortIndex::from(b_link.1));
+            }
+        }
+    }
+
+    #[rstest]
+    #[case(Direction::Incoming)]
+    #[case(Direction::Outgoing)]
+    fn test_copy_in_parent_bad_boundary(#[case] edge: Direction) {
+        let mut graph = PortGraph::new();
+        let n0 = graph.add_node(0, 1);
+        let n1 = graph.add_node(1, 1);
+        let n2 = graph.add_node(1, 0);
+        graph.link_nodes(n0, 0, n1, 0).unwrap();
+        graph.link_nodes(n1, 0, n2, 0).unwrap();
+        let backup = graph.clone();
+
+        let subg_nodes = if edge == Direction::Incoming {
+            [n1, n2] // Edge n0 -> n1 is incoming
+        } else {
+            [n0, n1] // Edge n1 -> n2 is outgoing
+        };
+        let mut subg = Subgraph::with_nodes(&mut graph, subg_nodes);
+        assert!(subg.copy_in_parent().is_err());
+        assert_eq!(
+            graph.nodes_iter().collect_vec(),
+            backup.nodes_iter().collect_vec()
+        );
+        assert_same_for_nodes(&graph, &backup, backup.nodes_iter());
+    }
+
+    #[rstest]
+    #[case(Direction::Incoming)]
+    #[case(Direction::Outgoing)]
+
+    fn test_copy_in_parent_multi(#[case] boundary_dir: Direction) {
+        let mut graph = MultiPortGraph::new();
+        let n0 = graph.add_node(0, 1);
+        let n1 = graph.add_node(1, 1);
+        let n2 = graph.add_node(1, 0);
+        graph.link_nodes(n0, 0, n1, 0).unwrap();
+        graph.link_nodes(n1, 0, n2, 0).unwrap();
+
+        let backup = graph.clone();
+
+        let subg_nodes = if boundary_dir == Direction::Incoming {
+            [n1, n2] // Edge n0 -> n1 is incoming
+        } else {
+            [n0, n1] // Edge n1 -> n2 is outgoing
+        };
+        let mut subg = Subgraph::with_nodes(&mut graph, subg_nodes);
+        let mut node_map = subg.copy_in_parent().unwrap();
+
+        let edge = |n| graph.ports(n, boundary_dir).exactly_one().ok().unwrap();
+        let rev_edge = |n| {
+            graph
+                .ports(n, boundary_dir.reverse())
+                .exactly_one()
+                .ok()
+                .unwrap()
+        };
+
+        assert_eq!(graph.node_count(), 5);
+        assert_eq!(node_map.keys().copied().sorted().collect_vec(), subg_nodes);
+        let n1_copy = node_map.remove(&n1).unwrap();
+        let n02_copy = *node_map.values().exactly_one().unwrap();
+        assert_same_for_nodes(&graph, &backup, subg_nodes);
+        let (sp02, sp1) = graph.all_links(n02_copy).exactly_one().ok().unwrap();
+        // Check the copied graph is correct. Its internal edge is the same direction as the boundary.
+        assert_eq!(sp02.port(), edge(n02_copy));
+        assert_eq!(sp1.port(), rev_edge(n1_copy));
+
+        let multinode = if boundary_dir == Direction::Incoming {
+            n0
+        } else {
+            n2
+        };
+        let multiport = rev_edge(multinode);
+        assert_eq!(
+            graph
+                .all_links(multinode)
+                .map(|(sp1, sp2)| (sp1.port(), sp2.port()))
+                .collect_vec(),
+            [(multiport, edge(n1)), (multiport, edge(n1_copy))]
+        );
     }
 }

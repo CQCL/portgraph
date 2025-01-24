@@ -372,6 +372,7 @@ mod tests {
     use std::collections::HashSet;
 
     use itertools::Itertools;
+    use rstest::rstest;
 
     use crate::multiportgraph::SubportIndex;
     use crate::{LinkMut, MultiPortGraph, PortGraph, PortMut, PortView};
@@ -731,17 +732,24 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_copy_in_parent_bad_boundary() {
+    #[rstest]
+    #[case(Direction::Incoming)]
+    #[case(Direction::Outgoing)]
+    fn test_copy_in_parent_bad_boundary(#[case] edge: Direction) {
         let mut graph = PortGraph::new();
         let n0 = graph.add_node(0, 1);
         let n1 = graph.add_node(1, 1);
         let n2 = graph.add_node(1, 0);
         graph.link_nodes(n0, 0, n1, 0).unwrap();
         graph.link_nodes(n1, 0, n2, 0).unwrap();
-
         let backup = graph.clone();
-        let mut subg = Subgraph::with_nodes(&mut graph, [n1, n2]);
+
+        let subg_nodes = if edge == Direction::Incoming {
+            [n1, n2] // Edge n0 -> n1 is incoming
+        } else {
+            [n0, n1] // Edge n1 -> n2 is outgoing
+        };
+        let mut subg = Subgraph::with_nodes(&mut graph, subg_nodes);
         assert!(subg.copy_in_parent().is_err());
         assert_eq!(
             graph.nodes_iter().collect_vec(),
@@ -750,37 +758,59 @@ mod tests {
         assert_same_for_nodes(&graph, &backup, backup.nodes_iter());
     }
 
-    #[test]
-    fn test_copy_in_parent_multi() {
+    #[rstest]
+    #[case(Direction::Incoming)]
+    #[case(Direction::Outgoing)]
+
+    fn test_copy_in_parent_multi(#[case] boundary_dir: Direction) {
         let mut graph = MultiPortGraph::new();
         let n0 = graph.add_node(0, 1);
         let n1 = graph.add_node(1, 1);
         let n2 = graph.add_node(1, 0);
         graph.link_nodes(n0, 0, n1, 0).unwrap();
         graph.link_nodes(n1, 0, n2, 0).unwrap();
+
         let backup = graph.clone();
 
-        let mut subg = Subgraph::with_nodes(&mut graph, [n1, n2]);
+        let subg_nodes = if boundary_dir == Direction::Incoming {
+            [n1, n2] // Edge n0 -> n1 is incoming
+        } else {
+            [n0, n1] // Edge n1 -> n2 is outgoing
+        };
+        let mut subg = Subgraph::with_nodes(&mut graph, subg_nodes);
         let mut node_map = subg.copy_in_parent().unwrap();
-        assert_eq!(graph.node_count(), 5);
-        let n1_copy = node_map.remove(&n1).unwrap();
-        let n2_copy = node_map.remove(&n2).unwrap();
-        assert!(node_map.is_empty()); // No other keys
-        assert_same_for_nodes(&graph, &backup, [n1, n2]);
-        let (sp2, sp1) = graph.all_links(n2_copy).exactly_one().ok().unwrap();
-        assert_eq!(sp2.port(), graph.input(n2_copy, 0).unwrap());
-        assert_eq!(sp1.port(), graph.output(n1_copy, 0).unwrap());
 
-        let n0_out = graph.output(n0, 0).unwrap();
+        let edge = |n| graph.ports(n, boundary_dir).exactly_one().ok().unwrap();
+        let rev_edge = |n| {
+            graph
+                .ports(n, boundary_dir.reverse())
+                .exactly_one()
+                .ok()
+                .unwrap()
+        };
+
+        assert_eq!(graph.node_count(), 5);
+        assert_eq!(node_map.keys().copied().sorted().collect_vec(), subg_nodes);
+        let n1_copy = node_map.remove(&n1).unwrap();
+        let n02_copy = *node_map.values().exactly_one().unwrap();
+        assert_same_for_nodes(&graph, &backup, subg_nodes);
+        let (sp02, sp1) = graph.all_links(n02_copy).exactly_one().ok().unwrap();
+        // Check the copied graph is correct. Its internal edge is the same direction as the boundary.
+        assert_eq!(sp02.port(), edge(n02_copy));
+        assert_eq!(sp1.port(), rev_edge(n1_copy));
+
+        let multinode = if boundary_dir == Direction::Incoming {
+            n0
+        } else {
+            n2
+        };
+        let multiport = rev_edge(multinode);
         assert_eq!(
             graph
-                .all_links(n0)
+                .all_links(multinode)
                 .map(|(sp1, sp2)| (sp1.port(), sp2.port()))
                 .collect_vec(),
-            [
-                (n0_out, graph.input(n1, 0).unwrap()),
-                (n0_out, graph.input(n1_copy, 0).unwrap())
-            ]
+            [(multiport, edge(n1)), (multiport, edge(n1_copy))]
         );
     }
 }

@@ -53,7 +53,7 @@ fn bench_traverse_hierarchy(c: &mut Criterion) {
 }
 
 criterion_group! {
-    name = benches;
+    name = criterion_group;
     config = Criterion::default();
     targets =
         bench_create_hierarchy,

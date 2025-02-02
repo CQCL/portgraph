@@ -124,7 +124,7 @@ fn bench_resize_ports(c: &mut Criterion) {
 }
 
 criterion_group! {
-    name = benches;
+    name = criterion_group;
     config = Criterion::default();
     targets =
         bench_make_portgraph,

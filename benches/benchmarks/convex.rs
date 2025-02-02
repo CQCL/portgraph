@@ -59,7 +59,7 @@ fn bench_convex_sparse(c: &mut Criterion) {
 }
 
 criterion_group! {
-    name = benches;
+    name = criterion_group;
     config = Criterion::default();
     targets =
         bench_convex_full,

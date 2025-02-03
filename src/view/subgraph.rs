@@ -5,6 +5,7 @@ use std::collections::{BTreeSet, HashMap};
 
 use delegate::delegate;
 use itertools::{Either, Itertools};
+use thiserror::Error;
 
 use crate::boundary::{Boundary, HasBoundary};
 use crate::{
@@ -309,6 +310,18 @@ impl<G: MultiView> MultiView for Subgraph<G> {
     }
 }
 
+/// An error from [Subgraph::copy_in_parent]
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum CopySubgraphError {
+    /// Tried to copy an edge crossing a subgraph boundary
+    /// when the containing graph is not a [MultiMut](crate::MultiMut)
+    #[error("Cannot copy edge between external port {external:?} and (copy of) internal port {internal:?}")]
+    CantCopyBoundary {
+        internal: PortIndex,
+        external: PortIndex,
+    },
+}
+
 impl<G: LinkMut> Subgraph<G>
 where
     G::LinkEndpoint: Into<PortIndex>,
@@ -322,7 +335,7 @@ where
     ///    of the newly-created nodes in the parent graph (they are not in this subgraph!);
     /// or a LinkError in which case the underlying graph will not have had any nodes added
     ///    (however subports may have been for a [MultiView]).
-    pub fn copy_in_parent(&mut self) -> Result<HashMap<NodeIndex, NodeIndex>, LinkError> {
+    pub fn copy_in_parent(&mut self) -> Result<HashMap<NodeIndex, NodeIndex>, CopySubgraphError> {
         self.graph.reserve(self.node_count(), self.port_count());
         let g = &mut self.graph;
         let node_map = self
@@ -336,23 +349,34 @@ where
                     .graph
                     .port_index(*new_node, self.graph.port_offset(node_p).unwrap())
                     .unwrap();
-                let new_other_p = match node_map.get(&self.graph.port_node(other_p).unwrap()) {
+                match node_map.get(&self.graph.port_node(other_p).unwrap()) {
                     Some(new_other) => {
                         // Internal edge. Add once only, not once per end. (`all_links` reports self-cycles only once.)
                         if new_other < new_node {
                             continue;
                         }
                         let offset = self.graph.port_offset(other_p).unwrap();
-                        self.graph.port_index(*new_other, offset).unwrap()
+                        let new_other_p = self.graph.port_index(*new_other, offset).unwrap();
+                        // The edge is a copy of a valid edge so any failure here is a bug in portgraph.
+                        self.graph.link_ports(new_node_p, new_other_p).unwrap();
                     }
-                    None => other_p.into(), // Boundary edge. Keep same external endpoint
-                };
-                if let Err(e) = self.graph.link_ports(new_node_p, new_other_p) {
-                    // Must undo insertion
-                    for n in node_map.values() {
-                        self.graph.remove_node(*n);
+                    None => {
+                        // Boundary edge. Keep same external endpoint
+                        match self.graph.link_ports(new_node_p, other_p.into()) {
+                            Err(LinkError::AlreadyLinked { port }) => {
+                                // Must undo insertion
+                                for n in node_map.values() {
+                                    self.graph.remove_node(*n);
+                                }
+                                return Err(CopySubgraphError::CantCopyBoundary {
+                                    external: port,
+                                    internal: node_p.into(),
+                                });
+                            }
+                            Err(e) => panic!("Unexpected error adding boundary edge {}", e),
+                            Ok(_) => (),
+                        }
                     }
-                    return Err(e);
                 }
             }
         }
@@ -743,13 +767,26 @@ mod tests {
         graph.link_nodes(n1, 0, n2, 0).unwrap();
         let backup = graph.clone();
 
-        let subg_nodes = if edge == Direction::Incoming {
-            [n1, n2] // Edge n0 -> n1 is incoming
+        let (subg_nodes, internal, external) = if edge == Direction::Incoming {
+            (
+                [n1, n2],
+                graph.input(n1, 0).unwrap(),
+                graph.output(n0, 0).unwrap(),
+            )
         } else {
-            [n0, n1] // Edge n1 -> n2 is outgoing
+            (
+                [n0, n1],
+                graph.output(n1, 0).unwrap(),
+                graph.input(n2, 0).unwrap(),
+            )
         };
+
         let mut subg = Subgraph::with_nodes(&mut graph, subg_nodes);
-        assert!(subg.copy_in_parent().is_err());
+
+        assert_eq!(
+            subg.copy_in_parent(),
+            Err(CopySubgraphError::CantCopyBoundary { internal, external })
+        );
         assert_eq!(
             graph.nodes_iter().collect_vec(),
             backup.nodes_iter().collect_vec()

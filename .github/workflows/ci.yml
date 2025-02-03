@@ -84,7 +84,8 @@ jobs:
         run: sudo apt update && sudo apt install -y valgrind
 
       - name: Track base branch IAI benchmarks
-        if: github.event_name == 'push'
+        if: true
+        # github.event_name == 'push'
         run: |
           bencher run \
           --project portgraph \
@@ -102,7 +103,8 @@ jobs:
           "cargo bench --bench iai_benches"
 
       - name: Track PR IAI benchmarks
-        if: github.event_name == 'pull_request'
+        if: false
+        # github.event_name == 'pull_request'
         run: |
           bencher run \
           --project portgraph \

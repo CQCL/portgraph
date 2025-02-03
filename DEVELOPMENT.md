@@ -28,17 +28,62 @@ cargo build
 cargo test
 ```
 
-Run the benchmarks with:
-
-```bash
-cargo bench
-```
-
 Finally, if you have rust nightly installed, you can run `miri` to detect
 undefined behaviour in the code.
 
 ```bash
 cargo +nightly miri test
+```
+
+## 🏋️ Benchmarking
+
+We use two kinds of benchmarks in this project:
+
+- A wall-clock time benchmark using `criterion`. This measures the time taken to
+  run a function by running it multiple times.
+- A single-shot instruction count / memory hits benchmark using `iai-callgrind`.
+  This measures the number of instructions executed and the number of cache hits
+  and misses.
+
+Both tools run the same set of test cases.
+
+When profiling and debugging performance issues, you may also want to use
+[samply](https://github.com/mstange/samply) to visualize the see flame graphs of
+specific examples.
+
+### Wall-clock time benchmarks
+
+This is the simplest kind of benchmark. To run the, use:
+
+```bash
+cargo bench --bench criterion_benches
+```
+
+### Single-shot benchmarking
+
+These benchmarks are useful when running in noisy environments, in addition to
+being faster than criterion. We run these on CI to track historical performance
+in [bencher.dev](https://bencher.dev/perf/portgraph).
+
+To run these, you must have [`valgrind`](https://valgrind.org/) installed.
+Support for Apple Silicon (M1/M2/...) macs is
+[experimental](https://github.com/LouisBrunner/valgrind-macos/issues/56), so you
+will need to manually clone and compile the branch. See
+[`LouisBrunner/valgrind-macos`](https://github.com/LouisBrunner/valgrind-macos/blob/feature/m1/README)
+for instructions.
+
+In addition to `valgrind`, you will need to install `iai-callgrind` runner. The
+pre-build binaries are available on
+[`cargo binstall`](https://github.com/cargo-bins/cargo-binstall).
+
+```bash
+cargo binstall iai-callgrind-runner
+```
+
+The benchmarks can then be run with:
+
+```bash
+cargo bench --bench iai_benches
 ```
 
 ## 💅 Coding Style

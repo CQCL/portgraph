@@ -1,73 +1,84 @@
 #![allow(clippy::unit_arg)] // Required for black_box uses
 
-use criterion::{black_box, criterion_group, AxisScale, BenchmarkId, Criterion, PlotConfiguration};
-use portgraph::{
-    algorithms::{toposort, TopoSort},
-    Direction, NodeIndex, PortGraph,
-};
+use criterion::{criterion_group, Criterion};
+use portgraph::{algorithms, Direction, NodeIndex, PortGraph};
 
-use super::generators::*;
+use crate::helpers::*;
 
-fn run_toposort(graph: &PortGraph, roots: impl IntoIterator<Item = NodeIndex>) {
-    let topo: TopoSort<_> = toposort(graph, roots, Direction::Outgoing);
-    for n in topo {
-        black_box(n);
+// -----------------------------------------------------------------------------
+// Benchmark functions
+// -----------------------------------------------------------------------------
+
+struct Toposort {
+    graph: PortGraph,
+    roots: [NodeIndex; 2],
+}
+impl SizedBenchmark for Toposort {
+    fn name() -> &'static str {
+        "toposort"
+    }
+
+    fn setup(size: usize) -> Self {
+        let graph = make_two_track_dag(size);
+        let roots = [0, 1].map(NodeIndex::new);
+        Self { graph, roots }
+    }
+
+    fn run(&self) -> impl Sized {
+        let topo: algorithms::TopoSort<_> =
+            algorithms::toposort(&self.graph, self.roots, Direction::Outgoing);
+        // Exhaust the iterator
+        topo.fold(0, |n, node| n + node.index());
     }
 }
 
+struct PetgraphToposort {
+    graph: PortGraph,
+}
 #[cfg(feature = "petgraph")]
-fn run_petgraph_toposort(graph: &PortGraph) {
-    let topo: Vec<_> = petgraph::algo::toposort(&graph, None).unwrap();
-    for n in topo {
-        black_box(n);
+impl SizedBenchmark for PetgraphToposort {
+    fn name() -> &'static str {
+        "toposort"
+    }
+
+    fn setup(size: usize) -> Self {
+        let graph = make_two_track_dag(size);
+        Self { graph }
+    }
+
+    fn run(&self) -> impl Sized {
+        petgraph::algo::toposort(&self.graph, None).unwrap();
     }
 }
 
-fn bench_toposort(c: &mut Criterion) {
-    let mut g = c.benchmark_group("run toposort on a graph");
-    g.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
+// -----------------------------------------------------------------------------
+// iai_callgrind definitions
+// -----------------------------------------------------------------------------
 
-    for size in [100, 1_000, 10_000] {
-        g.bench_with_input(BenchmarkId::new("toposort", size), &size, |b, size| {
-            let graph = make_two_track_dag(*size);
-            let roots = [0, 1].map(NodeIndex::new);
-            b.iter(|| black_box(run_toposort(&graph, roots)))
-        });
-    }
-    g.finish();
-}
+sized_iai_benchmark!(callgrind_toposort, Toposort);
 
-#[cfg(feature = "petgraph")]
-fn bench_petgraph_toposort(c: &mut Criterion) {
-    let mut g = c.benchmark_group("run petgraph's toposort on a graph");
-    g.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
+iai_callgrind::library_benchmark_group!(
+    name = callgrind_group;
+    benchmarks = callgrind_toposort
+);
 
-    for size in [100, 1_000, 10_000] {
-        g.bench_with_input(
-            BenchmarkId::new("toposort_petgraph", size),
-            &size,
-            |b, size| {
-                let graph = make_two_track_dag(*size);
-                b.iter(|| black_box(run_petgraph_toposort(&graph)))
-            },
-        );
-    }
-    g.finish();
-}
+// -----------------------------------------------------------------------------
+// Criterion definitions
+// -----------------------------------------------------------------------------
 
 #[cfg(feature = "petgraph")]
 criterion_group! {
-    name = benches;
+    name = criterion_group;
     config = Criterion::default();
     targets =
-        bench_toposort,
-        bench_petgraph_toposort,
+        Toposort::criterion,
+        PetgraphToposort::criterion,
 }
 
 #[cfg(not(feature = "petgraph"))]
 criterion_group! {
-    name = benches;
+    name = criterion_group;
     config = Criterion::default();
     targets =
-        bench_toposort,
+        Toposort::criterion,
 }

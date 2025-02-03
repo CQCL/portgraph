@@ -758,11 +758,8 @@ mod tests {
         assert_same_for_nodes(&graph, &backup, backup.nodes_iter());
     }
 
-    #[rstest]
-    #[case(Direction::Incoming)]
-    #[case(Direction::Outgoing)]
-
-    fn test_copy_in_parent_multi(#[case] boundary_dir: Direction) {
+    #[test]
+    fn test_copy_in_parent_multi_input() {
         let mut graph = MultiPortGraph::new();
         let n0 = graph.add_node(0, 1);
         let n1 = graph.add_node(1, 1);
@@ -772,45 +769,68 @@ mod tests {
 
         let backup = graph.clone();
 
-        let subg_nodes = if boundary_dir == Direction::Incoming {
-            [n1, n2] // Edge n0 -> n1 is incoming
-        } else {
-            [n0, n1] // Edge n1 -> n2 is outgoing
-        };
+        let subg_nodes = [n1, n2]; // Edge n0 -> n1 is incoming
         let mut subg = Subgraph::with_nodes(&mut graph, subg_nodes);
         let mut node_map = subg.copy_in_parent().unwrap();
 
-        let edge = |n| graph.ports(n, boundary_dir).exactly_one().ok().unwrap();
-        let rev_edge = |n| {
-            graph
-                .ports(n, boundary_dir.reverse())
-                .exactly_one()
-                .ok()
-                .unwrap()
-        };
+        let in_edge = |n| graph.inputs(n).exactly_one().ok().unwrap();
+        let out_edge = |n| graph.outputs(n).exactly_one().ok().unwrap();
 
         assert_eq!(graph.node_count(), 5);
         assert_eq!(node_map.keys().copied().sorted().collect_vec(), subg_nodes);
         let n1_copy = node_map.remove(&n1).unwrap();
-        let n02_copy = *node_map.values().exactly_one().unwrap();
+        let n2_copy = *node_map.values().exactly_one().unwrap();
         assert_same_for_nodes(&graph, &backup, subg_nodes);
-        let (sp02, sp1) = graph.all_links(n02_copy).exactly_one().ok().unwrap();
-        // Check the copied graph is correct. Its internal edge is the same direction as the boundary.
-        assert_eq!(sp02.port(), edge(n02_copy));
-        assert_eq!(sp1.port(), rev_edge(n1_copy));
+        let (sp2, sp1) = graph.all_links(n2_copy).exactly_one().ok().unwrap();
+        // Check the copied graph is correct. Its internal edge is n1 -> n2.
+        assert_eq!(sp2.port(), in_edge(n2_copy));
+        assert_eq!(sp1.port(), out_edge(n1_copy));
 
-        let multinode = if boundary_dir == Direction::Incoming {
-            n0
-        } else {
-            n2
-        };
-        let multiport = rev_edge(multinode);
+        let multiport = out_edge(n0);
         assert_eq!(
             graph
-                .all_links(multinode)
+                .all_links(n0)
                 .map(|(sp1, sp2)| (sp1.port(), sp2.port()))
                 .collect_vec(),
-            [(multiport, edge(n1)), (multiport, edge(n1_copy))]
+            [(multiport, in_edge(n1)), (multiport, in_edge(n1_copy))]
+        );
+    }
+
+    #[test]
+    fn test_copy_in_parent_multi_output() {
+        let mut graph = MultiPortGraph::new();
+        let n0 = graph.add_node(0, 1);
+        let n1 = graph.add_node(1, 1);
+        let n2 = graph.add_node(1, 0);
+        graph.link_nodes(n0, 0, n1, 0).unwrap();
+        graph.link_nodes(n1, 0, n2, 0).unwrap();
+
+        let backup = graph.clone();
+
+        let subg_nodes = [n0, n1]; // Edge n1 -> n2 is outgoing
+        let mut subg = Subgraph::with_nodes(&mut graph, subg_nodes);
+        let mut node_map = subg.copy_in_parent().unwrap();
+
+        let out_edge = |n| graph.outputs(n).exactly_one().ok().unwrap();
+        let in_edge = |n| graph.inputs(n).exactly_one().ok().unwrap();
+
+        assert_eq!(graph.node_count(), 5);
+        assert_eq!(node_map.keys().copied().sorted().collect_vec(), subg_nodes);
+        let n1_copy = node_map.remove(&n1).unwrap();
+        let n0_copy = *node_map.values().exactly_one().unwrap();
+        assert_same_for_nodes(&graph, &backup, subg_nodes);
+        let (sp0, sp1) = graph.all_links(n0_copy).exactly_one().ok().unwrap();
+        // Check the copied graph is correct. Its internal edge is n0 -> n1.
+        assert_eq!(sp0.port(), out_edge(n0_copy));
+        assert_eq!(sp1.port(), in_edge(n1_copy));
+
+        let multiport = in_edge(n2);
+        assert_eq!(
+            graph
+                .all_links(n2)
+                .map(|(sp1, sp2)| (sp1.port(), sp2.port()))
+                .collect_vec(),
+            [(multiport, out_edge(n1)), (multiport, out_edge(n1_copy))]
         );
     }
 }

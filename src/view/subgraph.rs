@@ -338,13 +338,12 @@ where
                     .unwrap();
                 let new_other_p = match node_map.get(&self.graph.port_node(other_p).unwrap()) {
                     Some(new_other) => {
-                        // Internal edge. Add once only, not once per end.
+                        // Internal edge. Add once only, not once per end. (`all_links` reports self-cycles only once.)
                         if new_other < new_node {
                             continue;
                         }
-                        self.graph
-                            .port_index(*new_other, self.graph.port_offset(other_p).unwrap())
-                            .unwrap()
+                        let offset = self.graph.port_offset(other_p).unwrap();
+                        self.graph.port_index(*new_other, offset).unwrap()
                     }
                     None => other_p.into(), // Boundary edge. Keep same external endpoint
                 };

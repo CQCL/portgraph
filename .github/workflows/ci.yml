@@ -54,7 +54,7 @@ jobs:
         run: cargo miri test
 
   benches:
-    name: Continuous Benchmarking with Bencher
+    name: continuous Benchmarking
     # Not required, we can ignore it for the merge queue check.
     if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
@@ -91,7 +91,7 @@ jobs:
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --branch main \
           --testbed ubuntu-latest \
-          --threshold-measure latency \
+          --threshold-measure instructions \
           --threshold-test t_test \
           --threshold-max-sample-size 64 \
           --threshold-upper-boundary 0.99 \
@@ -109,14 +109,12 @@ jobs:
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --branch "${{ github.event.pull_request.head.ref }}" \
           --testbed ubuntu-latest \
+          --start-point "${{ github.event.pull_request.base.ref }}" \
+          --start-point-reset \
           --err \
           --github-actions '${{ secrets.HUGRBOT_PAT }}' \
           --adapter rust_iai_callgrind \
           "cargo bench --bench iai_benches"
-        #--start-point "${{ github.event.pull_request.base.ref }}" \
-        #--start-point-hash '${{ github.event.pull_request.base.sha }}' \
-        #--start-point-clone-thresholds \
-        #--start-point-reset \
 
   tests:
     runs-on: ubuntu-latest

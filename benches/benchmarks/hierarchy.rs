@@ -1,61 +1,81 @@
 #![allow(clippy::unit_arg)] // Required for black_box uses
 
-use criterion::{black_box, criterion_group, AxisScale, BenchmarkId, Criterion, PlotConfiguration};
-use portgraph::{Hierarchy, NodeIndex};
+use criterion::{black_box, criterion_group, Criterion};
+use portgraph::{Hierarchy, NodeIndex, PortGraph};
 
-use super::generators::*;
+use crate::helpers::*;
 
-/// DFS traversal of all the nodes in a hierarchy tree starting from the root
-fn traverse_hierarchy(hierarchy: &Hierarchy, root: NodeIndex) {
-    let mut stack = vec![root];
-    while let Some(node) = stack.pop() {
-        black_box(node);
-        for child in hierarchy.children(node) {
-            stack.push(child);
+// -----------------------------------------------------------------------------
+// Benchmark functions
+// -----------------------------------------------------------------------------
+
+struct CreateHierarchy {
+    graph: PortGraph,
+}
+impl SizedBenchmark for CreateHierarchy {
+    fn name() -> &'static str {
+        "initialize_tree_hierarchy"
+    }
+
+    fn setup(size: usize) -> Self {
+        let graph = make_two_track_dag(size);
+        Self { graph }
+    }
+
+    fn run(&self) -> impl Sized {
+        make_hierarchy(&self.graph)
+    }
+}
+
+struct TraverseHierarchy {
+    hierarchy: Hierarchy,
+    root: NodeIndex,
+}
+impl SizedBenchmark for TraverseHierarchy {
+    fn name() -> &'static str {
+        "traverse_tree_hierarchy"
+    }
+
+    fn setup(size: usize) -> Self {
+        let graph = make_two_track_dag(size);
+        let hierarchy = make_hierarchy(&graph);
+        let root = NodeIndex::new(0);
+        Self { hierarchy, root }
+    }
+
+    fn run(&self) -> impl Sized {
+        let mut stack = vec![self.root];
+        while let Some(node) = stack.pop() {
+            black_box(node);
+            for child in self.hierarchy.children(node) {
+                stack.push(child);
+            }
         }
     }
 }
 
-fn bench_create_hierarchy(c: &mut Criterion) {
-    let mut g = c.benchmark_group("initialize a tree hierarchy");
-    g.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
+// -----------------------------------------------------------------------------
+// iai_callgrind definitions
+// -----------------------------------------------------------------------------
 
-    for size in [100, 1_000, 10_000] {
-        g.bench_with_input(
-            BenchmarkId::new("initialize_tree_hierarchy", size),
-            &size,
-            |b, size| {
-                let graph = make_two_track_dag(*size);
-                b.iter(|| black_box(make_hierarchy(&graph)))
-            },
-        );
-    }
-    g.finish();
-}
+sized_iai_benchmark!(callgrind_create_hierarchy, CreateHierarchy);
+sized_iai_benchmark!(callgrind_traverse_hierarchy, TraverseHierarchy);
 
-fn bench_traverse_hierarchy(c: &mut Criterion) {
-    let mut g = c.benchmark_group("traverse a tree hierarchy");
-    g.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
+iai_callgrind::library_benchmark_group!(
+    name = callgrind_group;
+    benchmarks =
+        callgrind_create_hierarchy,
+        callgrind_traverse_hierarchy,
+);
 
-    for size in [100, 1_000, 100_000] {
-        g.bench_with_input(
-            BenchmarkId::new("traverse_tree_hierarchy", size),
-            &size,
-            |b, size| {
-                let graph = make_two_track_dag(*size);
-                let hierarchy = make_hierarchy(&graph);
-                let root = NodeIndex::new(0);
-                b.iter(|| black_box(traverse_hierarchy(&hierarchy, root)))
-            },
-        );
-    }
-    g.finish();
-}
+// -----------------------------------------------------------------------------
+// Criterion definitions
+// -----------------------------------------------------------------------------
 
 criterion_group! {
     name = criterion_group;
     config = Criterion::default();
     targets =
-        bench_create_hierarchy,
-        bench_traverse_hierarchy,
+        CreateHierarchy::criterion,
+        TraverseHierarchy::criterion,
 }

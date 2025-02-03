@@ -2,6 +2,7 @@
 
 #[allow(dead_code)]
 mod benchmarks;
+mod helpers;
 
 use criterion::criterion_main;
 

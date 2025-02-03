@@ -84,8 +84,7 @@ jobs:
         run: sudo apt update && sudo apt install -y valgrind
 
       - name: Track base branch IAI benchmarks
-        if: true
-        # github.event_name == 'push'
+        if: github.event_name == 'push'
         run: |
           bencher run \
           --project portgraph \
@@ -103,8 +102,7 @@ jobs:
           "cargo bench --bench iai_benches"
 
       - name: Track PR IAI benchmarks
-        if: false
-        # github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request'
         run: |
           bencher run \
           --project portgraph \
@@ -112,11 +110,13 @@ jobs:
           --branch "${{ github.event.pull_request.head.ref }}" \
           --testbed ubuntu-latest \
           --start-point "${{ github.event.pull_request.base.ref }}" \
+          --start-point-clone-thresholds \
           --start-point-reset \
           --err \
           --github-actions '${{ secrets.HUGRBOT_PAT }}' \
           --adapter rust_iai_callgrind \
           "cargo bench --bench iai_benches"
+        # --start-point-hash '${{ github.event.pull_request.base.sha }}' \
 
   tests:
     runs-on: ubuntu-latest

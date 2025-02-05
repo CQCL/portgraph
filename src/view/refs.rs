@@ -7,7 +7,7 @@ use crate::{Direction, LinkError, NodeIndex, PortIndex, PortOffset};
 
 use delegate::delegate;
 
-use super::{LinkMut, LinkView, MultiView, PortMut, PortView};
+use super::{LinkMut, LinkView, MultiMut, MultiView, PortMut, PortView};
 
 impl<G: PortView> PortView for &G {
     delegate! {
@@ -107,6 +107,16 @@ impl<G: MultiView> MultiView for &G {
     }
 }
 
+impl<G: MultiView> MultiView for &mut G {
+    delegate! {
+        to (&**self) {
+            fn subports(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = Self::LinkEndpoint> + Clone;
+            fn all_subports(&self, node: NodeIndex) -> impl Iterator<Item = Self::LinkEndpoint> + Clone;
+            fn subport_link(&self, subport: Self::LinkEndpoint) -> Option<Self::LinkEndpoint>;
+        }
+    }
+}
+
 impl<G: PortMut> PortMut for &mut G {
     delegate! {
         to (*self) {
@@ -126,13 +136,17 @@ impl<G: PortMut> PortMut for &mut G {
 impl<G: LinkMut> LinkMut for &mut G {
     delegate! {
         to (*self) {
-            fn link_ports(
-                &mut self,
-                port_a: PortIndex,
-                port_b: PortIndex,
-            ) -> Result<(Self::LinkEndpoint, Self::LinkEndpoint), LinkError>;
-
+            fn link_ports(&mut self, port_a: PortIndex, port_b: PortIndex) -> Result<(Self::LinkEndpoint, Self::LinkEndpoint), LinkError>;
             fn unlink_port(&mut self, port: PortIndex) -> Option<Self::LinkEndpoint>;
+        }
+    }
+}
+
+impl<G: MultiMut> MultiMut for &mut G {
+    delegate! {
+        to (*self) {
+            fn link_subports(&mut self, subport_from: Self::LinkEndpoint, subport_to: Self::LinkEndpoint) -> Result<(), LinkError>;
+            fn unlink_subport(&mut self, subport: Self::LinkEndpoint) -> Option<Self::LinkEndpoint>;
         }
     }
 }

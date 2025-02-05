@@ -7,14 +7,11 @@ use delegate::delegate;
 use itertools::{Either, Itertools};
 use thiserror::Error;
 
+use crate::algorithms::{ConvexChecker, TopoConvexChecker};
 use crate::boundary::{Boundary, HasBoundary};
 use crate::{
-    algorithms::{ConvexChecker, TopoConvexChecker},
-    Direction, LinkView, NodeIndex, PortIndex,
+    Direction, LinkError, LinkMut, LinkView, MultiView, NodeIndex, PortIndex, PortOffset, PortView,
 };
-use crate::{LinkError, PortOffset};
-
-use super::{LinkMut, MultiView, PortView};
 
 /// View into a subgraph of a PortView.
 ///

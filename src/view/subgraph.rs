@@ -315,8 +315,9 @@ impl<G: MultiView> MultiView for Subgraph<G> {
 #[non_exhaustive]
 pub enum CopySubgraphError {
     /// Tried to copy an edge crossing a subgraph boundary
-    /// when the containing graph is not a [MultiMut](crate::MultiMut)
+    /// when the containing graph is not a [`MultiMut`](crate::MultiMut)
     #[error("Cannot copy edge between external port {external:?} and (copy of) internal port {internal:?}")]
+    #[allow(missing_docs)]
     CantCopyBoundary {
         internal: PortIndex,
         external: PortIndex,
@@ -325,14 +326,23 @@ pub enum CopySubgraphError {
 
 impl<G: LinkMut> Subgraph<G> {
     /// Copies all the nodes and edges in this subgraph into the parent graph.
-    /// If there are any boundary edges, these will also be copied but keeping
-    /// the same *external* end port (this will fail unless the underlying graph
-    /// is a [MultiView]).
     ///
-    /// Returns a map from node indices within this subgraph, to the indices
-    ///    of the newly-created nodes in the parent graph (they are not in this subgraph!);
-    /// or a LinkError in which case the underlying graph will not have had any nodes added
-    ///    (however subports may have been for a [MultiView]).
+    /// If there are any boundary edges, these will also be copied but keeping
+    /// the same *external* end port - this will fail unless the underlying graph
+    /// is a [`MultiMut`]
+    ///
+    /// # Returns
+    ///
+    ///   A map from node indices within this subgraph, to the indices of the
+    ///   newly-created nodes in the parent graph (they are not in this subgraph).
+    ///
+    /// # Errors
+    ///
+    /// - [`CopySubgraphError::CantCopyBoundary`] if there is a boundary edge and
+    ///   the underlying graph is not a [`MultiMut`]. In this case the underlying
+    ///   graph's nodes and edges will be unchanged, but capacity may have changed.
+    ///
+    /// [`MultiMut`]: crate::MultiMut
     pub fn copy_in_parent(&mut self) -> Result<HashMap<NodeIndex, NodeIndex>, CopySubgraphError> {
         self.graph.reserve(self.node_count(), self.port_count());
         let g = &mut self.graph;

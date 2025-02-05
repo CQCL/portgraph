@@ -323,10 +323,7 @@ pub enum CopySubgraphError {
     },
 }
 
-impl<G: LinkMut> Subgraph<G>
-where
-    G::LinkEndpoint: Into<PortIndex>,
-{
+impl<G: LinkMut> Subgraph<G> {
     /// Copies all the nodes and edges in this subgraph into the parent graph.
     /// If there are any boundary edges, these will also be copied but keeping
     /// the same *external* end port (this will fail unless the underlying graph

@@ -362,8 +362,9 @@ impl<G: LinkMut> Subgraph<G> {
                         }
                         let offset = self.graph.port_offset(other_p).unwrap();
                         let new_other_p = self.graph.port_index(*new_other, offset).unwrap();
-                        // The edge is a copy of a valid edge so any failure here is a bug in portgraph.
-                        self.graph.link_ports(new_node_p, new_other_p).unwrap();
+                        self.graph
+                            .link_ports(new_node_p, new_other_p)
+                            .expect("Copying known-good edge");
                     }
                     None => {
                         // Boundary edge. Keep same external endpoint
@@ -378,7 +379,7 @@ impl<G: LinkMut> Subgraph<G> {
                                     internal: node_p.into(),
                                 });
                             }
-                            Err(e) => panic!("Unexpected error adding boundary edge {}", e),
+                            Err(e) => panic!("Unexpected error copying boundary edge: {}", e),
                             Ok(_) => (),
                         }
                     }

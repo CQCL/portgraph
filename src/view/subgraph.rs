@@ -312,6 +312,7 @@ impl<G: MultiView> MultiView for Subgraph<G> {
 
 /// An error from [Subgraph::copy_in_parent]
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
+#[non_exhaustive]
 pub enum CopySubgraphError {
     /// Tried to copy an edge crossing a subgraph boundary
     /// when the containing graph is not a [MultiMut](crate::MultiMut)

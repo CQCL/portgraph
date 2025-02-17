@@ -59,11 +59,13 @@ This is the simplest kind of benchmark. To run the, use:
 cargo bench --bench criterion_benches
 ```
 
+We run these on CI to track historical performance using a special single-shot test harness,
+and upload them to [codspeed.io](https://codspeed.io/CQCL/portgraph).
+
 ### Single-shot benchmarking
 
 These benchmarks are useful when running in noisy environments, in addition to
-being faster than criterion. We run these on CI to track historical performance
-in [bencher.dev](https://bencher.dev/perf/portgraph).
+being faster than criterion.
 
 To run these, you must have [`valgrind`](https://valgrind.org/) installed.
 Support for Apple Silicon (M1/M2/...) macs is

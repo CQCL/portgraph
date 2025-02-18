@@ -54,7 +54,7 @@ jobs:
         run: cargo miri test
 
   benches:
-    name: continuous Benchmarking
+    name: continuous benchmarking
     # Not required, we can ignore it for the merge queue check.
     if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
@@ -67,56 +67,18 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           prefix-key: v0
-
-      # The installed iai-callgrind-runner version must match the
-      # version of iai-callgrind in the Cargo.toml
       - uses: cargo-bins/cargo-binstall@main
-      - name: Install iai-callgrind-runner
-        run: |
-          version=$(cargo metadata --format-version=1 |\
-            jq '.packages[] | select(.name == "iai-callgrind").version' |\
-            tr -d '"'
-          )
-          cargo binstall --no-confirm iai-callgrind-runner --version $version --force
-
-      - uses: bencherdev/bencher@main
-      - name: Install valgrind
-        run: sudo apt update && sudo apt install -y valgrind
-
-      - name: Track base branch IAI benchmarks
-        if: github.event_name == 'push'
-        run: |
-          bencher run \
-          --project portgraph \
-          --token '${{ secrets.BENCHER_API_TOKEN }}' \
-          --branch main \
-          --testbed ubuntu-latest \
-          --threshold-measure instructions \
-          --threshold-test t_test \
-          --threshold-max-sample-size 64 \
-          --threshold-upper-boundary 0.99 \
-          --thresholds-reset \
-          --err \
-          --github-actions '${{ secrets.HUGRBOT_PAT }}' \
-          --adapter rust_iai_callgrind \
-          "cargo bench --bench iai_benches"
-
-      - name: Track PR IAI benchmarks
-        if: github.event_name == 'pull_request'
-        run: |
-          bencher run \
-          --project portgraph \
-          --token '${{ secrets.BENCHER_API_TOKEN }}' \
-          --branch "${{ github.event.pull_request.head.ref }}" \
-          --testbed ubuntu-latest \
-          --start-point "${{ github.event.pull_request.base.ref }}" \
-          --start-point-clone-thresholds \
-          --start-point-reset \
-          --err \
-          --github-actions '${{ secrets.HUGRBOT_PAT }}' \
-          --adapter rust_iai_callgrind \
-          "cargo bench --bench iai_benches"
-        # --start-point-hash '${{ github.event.pull_request.base.sha }}' \
+      - name: Install cargo-codspeed
+        run: cargo binstall cargo-codspeed --force
+      - name: Override criterion with the CodSpeed harness
+        run: cargo add --dev codspeed-criterion-compat --rename criterion
+      - name: Build benchmarks
+        run: cargo codspeed build criterion_benches --profile bench
+      - name: Run benchmarks
+        uses: CodSpeedHQ/action@v3
+        with:
+          token: ${{ secrets.CODSPEED_TOKEN }}
+          run: "cargo codspeed run criterion_benches"
 
   tests:
     runs-on: ubuntu-latest

@@ -64,8 +64,10 @@ and upload them to [codspeed.io](https://codspeed.io/CQCL/portgraph).
 
 ### Single-shot benchmarking
 
-These benchmarks are useful when running in noisy environments, in addition to
-being faster than criterion.
+We use [`iai-callgrind`](https://iai-callgrind.github.io/iai-callgrind) for
+single-shot benchmarking, measuring instruction counts rather than wall-clock
+time. These benchmarks are more precise when running in noisy environments, in
+addition to being faster than criterion.
 
 To run these, you must have [`valgrind`](https://valgrind.org/) installed.
 Support for Apple Silicon (M1/M2/...) macs is

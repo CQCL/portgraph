@@ -69,7 +69,7 @@ jobs:
           prefix-key: v0
       - uses: cargo-bins/cargo-binstall@main
       - name: Install cargo-codspeed
-        run: cargo binstall cargo-codspeed
+        run: cargo binstall cargo-codspeed --force
       - name: Override criterion with the CodSpeed harness
         run: cargo add --dev codspeed-criterion-compat --rename criterion
       - name: Build benchmarks

@@ -73,12 +73,12 @@ jobs:
       - name: Override criterion with the CodSpeed harness
         run: cargo add --dev codspeed-criterion-compat --rename criterion
       - name: Build benchmarks
-        run: cargo codspeed build criterion_benches --profile bench
+        run: cargo codspeed build criterion_benches
       - name: Run benchmarks
         uses: CodSpeedHQ/action@v3
         with:
           token: ${{ secrets.CODSPEED_TOKEN }}
-          run: "cargo codspeed run criterion_benches --profile bench"
+          run: "cargo codspeed run criterion_benches"
 
   tests:
     runs-on: ubuntu-latest

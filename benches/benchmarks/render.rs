@@ -1,60 +1,95 @@
 //! Benchmarks for the graph renderers.
 
-use criterion::{black_box, criterion_group, AxisScale, BenchmarkId, Criterion, PlotConfiguration};
+use criterion::{criterion_group, Criterion};
 use portgraph::render::{DotFormat, MermaidFormat};
+use portgraph::{Hierarchy, PortGraph, Weights};
 
-use super::generators::{make_hierarchy, make_two_track_dag, make_weights};
+use crate::helpers::*;
 
-fn bench_render_mermaid(c: &mut Criterion) {
-    let mut g = c.benchmark_group("Mermaid rendering. Graph with hierarchy.");
-    g.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
+// -----------------------------------------------------------------------------
+// Benchmark functions
+// -----------------------------------------------------------------------------
 
-    for size in [100, 1_000, 10_000] {
+struct RenderMermaid {
+    graph: PortGraph,
+    hierarchy: Hierarchy,
+    weights: Weights<usize, isize>,
+}
+impl SizedBenchmark for RenderMermaid {
+    fn name() -> &'static str {
+        "render_mermaid"
+    }
+
+    fn setup(size: usize) -> Self {
         let graph = make_two_track_dag(size);
         let hierarchy = make_hierarchy(&graph);
         let weights = make_weights(&graph);
-        g.bench_with_input(BenchmarkId::new("hierarchy", size), &size, |b, _size| {
-            b.iter(|| {
-                black_box(
-                    graph
-                        .mermaid_format()
-                        .with_hierarchy(&hierarchy)
-                        .with_weights(&weights)
-                        .finish(),
-                )
-            })
-        });
+        Self {
+            graph,
+            hierarchy,
+            weights,
+        }
     }
-    g.finish();
+
+    fn run(&self) -> impl Sized {
+        self.graph
+            .mermaid_format()
+            .with_hierarchy(&self.hierarchy)
+            .with_weights(&self.weights)
+            .finish()
+    }
 }
 
-fn bench_render_dot(c: &mut Criterion) {
-    let mut g = c.benchmark_group("Dot rendering. Graph with tree hierarchy.");
-    g.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
+struct RenderDot {
+    graph: PortGraph,
+    hierarchy: Hierarchy,
+    weights: Weights<usize, isize>,
+}
+impl SizedBenchmark for RenderDot {
+    fn name() -> &'static str {
+        "render_dot"
+    }
 
-    for size in [100, 1_000, 10_000] {
+    fn setup(size: usize) -> Self {
         let graph = make_two_track_dag(size);
         let hierarchy = make_hierarchy(&graph);
         let weights = make_weights(&graph);
-        g.bench_with_input(BenchmarkId::new("hierarchy", size), &size, |b, _size| {
-            b.iter(|| {
-                black_box(
-                    graph
-                        .dot_format()
-                        .with_hierarchy(&hierarchy)
-                        .with_weights(&weights)
-                        .finish(),
-                )
-            })
-        });
+        Self {
+            graph,
+            hierarchy,
+            weights,
+        }
     }
-    g.finish();
+
+    fn run(&self) -> impl Sized {
+        self.graph
+            .dot_format()
+            .with_hierarchy(&self.hierarchy)
+            .with_weights(&self.weights)
+            .finish()
+    }
 }
+
+// -----------------------------------------------------------------------------
+// iai_callgrind definitions
+// -----------------------------------------------------------------------------
+
+sized_iai_benchmark!(callgrind_render_mermaid, RenderMermaid);
+sized_iai_benchmark!(callgrind_render_dot, RenderDot);
+
+iai_callgrind::library_benchmark_group!(
+    name = callgrind_group;
+    benchmarks = callgrind_render_dot, callgrind_render_mermaid
+);
+
+// -----------------------------------------------------------------------------
+// Criterion definitions
+// -----------------------------------------------------------------------------
 
 criterion_group! {
-    name = benches;
+    name = criterion_group;
     config = Criterion::default();
     targets =
-        bench_render_mermaid,
-        bench_render_dot,
+        RenderMermaid::criterion,
+        RenderDot::criterion,
 }

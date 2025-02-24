@@ -17,7 +17,7 @@ use crate::{portgraph::PortOperation, Direction, LinkError, NodeIndex, PortIndex
 pub use filter::{FilteredGraph, LinkFilter, NodeFilter, NodeFiltered};
 pub use flat_region::FlatRegion;
 pub use region::Region;
-pub use subgraph::Subgraph;
+pub use subgraph::{CopySubgraphError, Subgraph};
 
 /// Core capabilities for querying a graph containing nodes and ports.
 pub trait PortView {

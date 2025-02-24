@@ -462,7 +462,7 @@ pub trait LinkView: PortView {
     }
 
     /// Iterates over the output neighbours of the `node`.
-    /// 
+    ///
     /// Shorthand for [`LinkView::neighbours`]`(`[`Direction::Outgoing`]`)`.
     #[must_use]
     #[inline]

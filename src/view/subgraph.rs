@@ -40,8 +40,11 @@ use crate::{
 /// wall. The [Direction] of edges (incoming/outgoing) defines which side of
 /// the wall is inside, and which is outside.
 ///
-/// If both incoming and outgoing boundary edges are empty, the subgraph is
-/// taken to be the entire graph.
+/// Note that if the graph contains multiple connected components, there may be
+/// components none of whose edges are in the boundary. The definition above is
+/// consistent with such a component being either in or outside the subgraph.
+/// The [Self::new_subgraph] constructor offers only limited flexibility in
+/// defining such subgraphs and [Self::with_nodes] may need to be used instead.
 ///
 /// If an invalid subgraph is defined, then behaviour is undefined.
 ///
@@ -67,6 +70,13 @@ impl<G: LinkView> Subgraph<G> {
     ///   and outgoing ports are outgoing boundary edges.
     ///
     /// This initialisation is linear in the size of the subgraph.
+    ///
+    /// If both incoming and outgoing boundary edges are empty, the subgraph is taken
+    /// to be the entire graph (i.e. all components); otherwise, the subgraph
+    /// contains only (parts of) those components mentioned in the boundary.
+    /// (Specifically, where the boundary includes at least one edge, or disconnected
+    /// port. To create a subgraph containing the whole of a component without any
+    /// disconnected ports, use [`Self::with_nodes`].)
     pub fn new_subgraph(graph: G, boundary: Boundary) -> Self {
         let nodes = boundary.internal_nodes(&graph).collect();
         Self {
@@ -78,8 +88,8 @@ impl<G: LinkView> Subgraph<G> {
 
     /// Create a new subgraph of `graph` containing only the given nodes.
     ///
-    /// The boundary of the subgraph is defined by all ports of the given nodes,
-    /// in the order they are given.
+    /// The boundary of the subgraph is defined by all ports of the given nodes
+    /// that have edges to other (i.e. external) nodes, in the order `nodes` are given.
     ///
     /// See [`Subgraph::new_subgraph`] for a method that takes an explicit port boundary.
     pub fn with_nodes(graph: G, nodes: impl IntoIterator<Item = NodeIndex>) -> Self {
@@ -705,6 +715,52 @@ mod tests {
         let subg = Subgraph::new_subgraph(&graph, boundary);
         assert_eq!(subg.nodes_iter().collect_vec(), [n0, n2]);
         assert!(!subg.is_convex());
+    }
+
+    #[test]
+    fn test_disconnected_components() {
+        let mut graph = PortGraph::new();
+        let n0 = graph.add_node(0, 1);
+        let n1 = graph.add_node(1, 0);
+        graph.link_nodes(n0, 0, n1, 0).unwrap();
+        let n2 = graph.add_node(0, 1);
+        let n3 = graph.add_node(1, 1);
+        graph.link_nodes(n2, 0, n3, 0).unwrap();
+
+        let subg_nodes = |b| Subgraph::new_subgraph(&graph, b).nodes_iter().collect_vec();
+
+        // No edges -> all components
+        let b = Boundary::from_ports(&graph, []);
+        let nodes = subg_nodes(b.clone());
+        assert_eq!(nodes, [n0, n1, n2, n3]);
+        assert_eq!(Subgraph::with_nodes(&graph, nodes).boundary, b);
+
+        // Edge in only one component -> just (part of) that component
+        let b = Boundary::from_ports(&graph, [graph.output(n0, 0).unwrap()]);
+        let nodes = subg_nodes(b.clone());
+        assert_eq!(nodes, [n0]);
+        assert_eq!(Subgraph::with_nodes(&graph, nodes).boundary, b);
+
+        // Edges in two components -> relevant parts of each component
+        let b = Boundary::from_ports(
+            &graph,
+            [graph.output(n0, 0).unwrap(), graph.input(n3, 0).unwrap()],
+        );
+        let nodes = subg_nodes(b.clone());
+        assert_eq!(nodes, [n0, n3]);
+        assert_eq!(Subgraph::with_nodes(&graph, nodes).boundary, b);
+
+        // Disconnected port -> includes whole component:
+        let b = Boundary::from_ports(&graph, [graph.output(n3, 0).unwrap()]);
+        assert_eq!(subg_nodes(b), [n2, n3]);
+        // However the graph with those nodes includes the unconnected port as interior,
+        // so has an empty boundary:
+        assert_eq!(
+            Subgraph::with_nodes(&graph, [n2, n3]).boundary,
+            Boundary::from_ports(&graph, [])
+        );
+        // (The subgraph cannot be recreated from said boundary,
+        //    see https://github.com/CQCL/portgraph/issues/179.)
     }
 
     #[test]

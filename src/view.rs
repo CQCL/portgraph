@@ -33,7 +33,7 @@ pub trait PortView {
     #[must_use]
     fn port_offset(&self, port: impl Into<PortIndex>) -> Option<PortOffset>;
 
-    /// Returns the port index for a given node, direction, and offset.
+    /// Returns the port index for a given node and offset.
     #[must_use]
     fn port_index(&self, node: NodeIndex, offset: PortOffset) -> Option<PortIndex>;
 
@@ -51,7 +51,7 @@ pub trait PortView {
 
     /// Iterates over all the input ports of the `node`.
     ///
-    /// Shorthand for [`PortView::ports`].
+    /// Shorthand for [`PortView::ports`]`(`[`Direction::Incoming`]`)`.
     #[must_use]
     #[inline]
     fn inputs(&self, node: NodeIndex) -> impl Iterator<Item = PortIndex> + Clone {
@@ -60,7 +60,7 @@ pub trait PortView {
 
     /// Iterates over all the output ports of the `node`.
     ///
-    /// Shorthand for [`PortView::ports`].
+    /// Shorthand for [`PortView::ports`]`(`[`Direction::Outgoing`]`)`.
     #[must_use]
     #[inline]
     fn outputs(&self, node: NodeIndex) -> impl Iterator<Item = PortIndex> + Clone {
@@ -81,7 +81,7 @@ pub trait PortView {
 
     /// Returns the number of input ports of the `node`.
     ///
-    /// Shorthand for [`PortView::num_ports`].
+    /// Shorthand for [`PortView::num_ports`]`(`[`Direction::Incoming`]`)`..
     #[must_use]
     #[inline]
     fn num_inputs(&self, node: NodeIndex) -> usize {
@@ -90,7 +90,7 @@ pub trait PortView {
 
     /// Returns the number of output ports of the `node`.
     ///
-    /// Shorthand for [`PortView::num_ports`].
+    /// Shorthand for [`PortView::num_ports`]`(`[`Direction::Outgoing`]`)`..
     #[must_use]
     #[inline]
     fn num_outputs(&self, node: NodeIndex) -> usize {
@@ -126,7 +126,7 @@ pub trait PortView {
 
     /// Iterates over all the input port offsets of the `node`.
     ///
-    /// Shorthand for [`PortView::port_offsets`].
+    /// Shorthand for [`PortView::port_offsets`]`(`[`Direction::Incoming`]`)`.
     #[must_use]
     #[inline]
     fn input_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset> + Clone {
@@ -135,7 +135,7 @@ pub trait PortView {
 
     /// Iterates over all the output port offsets of the `node`.
     ///
-    /// Shorthand for [`PortView::port_offsets`].
+    /// Shorthand for [`PortView::port_offsets`]`(`[`Direction::Outgoing`]`)`.
     #[must_use]
     #[inline]
     fn output_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset> + Clone {
@@ -283,7 +283,7 @@ pub trait LinkView: PortView {
     type LinkEndpoint: Into<PortIndex> + Copy;
 
     /// Returns an iterator over every pair of matching ports connecting `from`
-    /// with `to`.
+    /// to `to`, i.e. in that direction.
     ///
     /// # Example
     /// ```
@@ -350,7 +350,7 @@ pub trait LinkView: PortView {
         self.get_connection(from, to).is_some()
     }
 
-    /// Returns the port that the given `port` is linked to.
+    /// Returns the port (or ports if this is a [`MultiView`]) that the given `port` is linked to.
     #[must_use]
     fn port_links(
         &self,
@@ -401,7 +401,7 @@ pub trait LinkView: PortView {
     ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone;
 
     /// Iterates over the connected input links of the `node`. Shorthand for
-    /// [`LinkView::links`].
+    /// [`LinkView::links`]`(`[`Direction::Incoming`]`)`.
     #[must_use]
     #[inline]
     fn input_links(
@@ -412,7 +412,7 @@ pub trait LinkView: PortView {
     }
 
     /// Iterates over the connected output links of the `node`. Shorthand for
-    /// [`LinkView::links`].
+    /// [`LinkView::links`]`(`[`Direction::Outgoing`]`)`..
     #[must_use]
     #[inline]
     fn output_links(
@@ -452,14 +452,18 @@ pub trait LinkView: PortView {
     #[must_use]
     fn all_neighbours(&self, node: NodeIndex) -> impl Iterator<Item = NodeIndex> + Clone;
 
-    /// Iterates over the input neighbours of the `node`. Shorthand for [`LinkView::neighbours`].
+    /// Iterates over the input neighbours of the `node`.
+    ///
+    /// Shorthand for [`LinkView::neighbours`]`(`[`Direction::Incoming`]`)`.
     #[must_use]
     #[inline]
     fn input_neighbours(&self, node: NodeIndex) -> impl Iterator<Item = NodeIndex> + Clone {
         self.neighbours(node, Direction::Incoming)
     }
 
-    /// Iterates over the output neighbours of the `node`. Shorthand for [`LinkView::neighbours`].
+    /// Iterates over the output neighbours of the `node`.
+    ///
+    /// Shorthand for [`LinkView::neighbours`]`(`[`Direction::Outgoing`]`)`.
     #[must_use]
     #[inline]
     fn output_neighbours(&self, node: NodeIndex) -> impl Iterator<Item = NodeIndex> + Clone {

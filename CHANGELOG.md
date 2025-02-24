@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.13.2](https://github.com/CQCL/portgraph/compare/v0.13.1...v0.13.2) - 2025-02-24
+
+### Documentation
+
+- cleanups, clarify (+test) connected components (#180)
+
+### New Features
+
+- add Subgraph::copy_in_parent (#182)
+
+### Refactor
+
+- Simplify PortGraph::port_links (#188)
+
 ## [0.13.1](https://github.com/CQCL/portgraph/compare/v0.13.0...v0.13.1) - 2025-01-20
 
 ### Bug Fixes

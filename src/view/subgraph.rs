@@ -43,10 +43,8 @@ use crate::{
 /// Note that if the graph contains multiple connected components, there may be
 /// components none of whose edges are in the boundary. The definition above is
 /// consistent with such a component being either in or outside the subgraph.
-/// If both incoming and outgoing boundary edges are empty, the subgraph is taken
-/// to be the entire graph (i.e. all components); otherwise, the subgraph
-/// contains only the parts of those components of which the boundary includes
-/// at least one edge (or disconnected port).
+/// The [Self::new_subgraph] constructor offers only limited flexibility in
+/// defining such subgraphs and [Self::with_nodes] may need to be used instead.
 ///
 /// If an invalid subgraph is defined, then behaviour is undefined.
 ///
@@ -73,9 +71,12 @@ impl<G: LinkView> Subgraph<G> {
     ///
     /// This initialisation is linear in the size of the subgraph.
     ///
-    /// Note that for graphs with multiple connected components, this method can only
-    /// create a subgraph containing the whole of a component if that component has
-    /// disconnected ports that can be used as the boundary; see [`Subgraph::with_nodes`].
+    /// If both incoming and outgoing boundary edges are empty, the subgraph is taken
+    /// to be the entire graph (i.e. all components); otherwise, the subgraph
+    /// contains only (parts of) those components mentioned in the boundary.
+    /// (Specifically, where the boundary includes at least one edge, or disconnected
+    /// port. To create a subgraph containing the whole of a component without any
+    /// disconnected ports, use [`Self::with_nodes`].)
     pub fn new_subgraph(graph: G, boundary: Boundary) -> Self {
         let nodes = boundary.internal_nodes(&graph).collect();
         Self {

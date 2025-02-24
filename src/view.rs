@@ -453,6 +453,7 @@ pub trait LinkView: PortView {
     fn all_neighbours(&self, node: NodeIndex) -> impl Iterator<Item = NodeIndex> + Clone;
 
     /// Iterates over the input neighbours of the `node`.
+    ///
     /// Shorthand for [`LinkView::neighbours`]`(`[`Direction::Incoming`]`)`.
     #[must_use]
     #[inline]
@@ -461,6 +462,7 @@ pub trait LinkView: PortView {
     }
 
     /// Iterates over the output neighbours of the `node`.
+    /// 
     /// Shorthand for [`LinkView::neighbours`]`(`[`Direction::Outgoing`]`)`.
     #[must_use]
     #[inline]

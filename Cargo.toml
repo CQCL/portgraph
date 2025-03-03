@@ -40,7 +40,7 @@ petgraph = ["dep:petgraph"]
 criterion = { version = "0.5.1", features = ["html_reports"] }
 iai-callgrind = "0.14.0"
 rmp-serde = "1.1.1"
-rstest = "0.24.0"
+rstest = "0.25.0"
 itertools = "0.14.0"
 insta = "1.39.0"
 

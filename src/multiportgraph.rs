@@ -872,4 +872,20 @@ pub(crate) mod test {
 
         Ok(())
     }
+
+    #[test]
+    fn remove_ports() {
+        let mut g = MultiPortGraph::new();
+        let n = g.add_node(2, 2);
+        let i1 = g.add_node(0, 1);
+        g.link_nodes(i1, 0, n, 0).unwrap();
+
+        let [o0, o1] = [0, 1].map(|_| g.add_node(1, 0));
+        // First Out-Port of n is a multiport
+        g.link_nodes(n, 0, o0, 0).unwrap();
+        g.link_nodes(n, 0, o1, 0).unwrap();
+        g.link_nodes(n, 1, o0, 0).unwrap();
+        // This line panics: the second InPort gets deleted, but reads the multiport-status of what is now the first outport.
+        g.set_num_ports(n, 1, 2, |_, _| {});
+    }
 }

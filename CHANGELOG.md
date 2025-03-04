@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.13.3](https://github.com/CQCL/portgraph/compare/v0.13.2...v0.13.3) - 2025-03-04
+
+### Bug Fixes
+
+- Fix panic when removing InPorts in MultiPortGraph::set_num_ports ([#191](https://github.com/CQCL/portgraph/pull/191))
+
 ## [0.13.2](https://github.com/CQCL/portgraph/compare/v0.13.1...v0.13.2) - 2025-02-24
 
 ### Documentation

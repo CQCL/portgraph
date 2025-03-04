@@ -209,12 +209,11 @@ impl PortMut for MultiPortGraph {
         let mut dropped_ports = Vec::new();
         let rekey_wrapper = |port, op| {
             match op {
-                PortOperation::Removed { old_link } => dropped_ports.push((
-                    port,
-                    self.multiport
-                        .get(port)
-                        .then(|| old_link.expect("Multiport node has no link")),
-                )),
+                PortOperation::Removed { old_link } => {
+                    if *self.multiport.get(port) {
+                        dropped_ports.push((port, old_link.expect("Multiport node has no link")));
+                    }
+                }
                 PortOperation::Moved { new_index } => self.multiport.swap(port, new_index),
             }
             rekey(port, op);
@@ -222,9 +221,7 @@ impl PortMut for MultiPortGraph {
         self.graph
             .set_num_ports(node, incoming, outgoing, rekey_wrapper);
         for (port, old_link) in dropped_ports {
-            if let Some(link) = old_link {
-                self.remove_copy_node(port, link);
-            }
+            self.remove_copy_node(port, old_link);
         }
     }
 

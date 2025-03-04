@@ -209,7 +209,12 @@ impl PortMut for MultiPortGraph {
         let mut dropped_ports = Vec::new();
         let rekey_wrapper = |port, op| {
             match op {
-                PortOperation::Removed { old_link } => dropped_ports.push((port, old_link)),
+                PortOperation::Removed { old_link } => dropped_ports.push((
+                    port,
+                    self.multiport
+                        .get(port)
+                        .then(|| old_link.expect("Multiport node has no link")),
+                )),
                 PortOperation::Moved { new_index } => self.multiport.swap(port, new_index),
             }
             rekey(port, op);
@@ -217,8 +222,7 @@ impl PortMut for MultiPortGraph {
         self.graph
             .set_num_ports(node, incoming, outgoing, rekey_wrapper);
         for (port, old_link) in dropped_ports {
-            if self.is_multiport(port) {
-                let link = old_link.expect("Multiport node has no link");
+            if let Some(link) = old_link {
                 self.remove_copy_node(port, link);
             }
         }
@@ -885,7 +889,7 @@ pub(crate) mod test {
         g.link_nodes(n, 0, o0, 0).unwrap();
         g.link_nodes(n, 0, o1, 0).unwrap();
         g.link_nodes(n, 1, o0, 0).unwrap();
-        // This line panics: the second InPort gets deleted, but reads the multiport-status of what is now the first outport.
+        // This line was panicking: the second InPort gets deleted, but reads the multiport-status of what is now the first outport.
         g.set_num_ports(n, 1, 2, |_, _| {});
     }
 }

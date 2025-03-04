@@ -875,6 +875,7 @@ pub(crate) mod test {
     }
 
     #[test]
+    /// <https://github.com/CQCL/portgraph/pull/191>
     fn remove_ports() {
         let mut g = MultiPortGraph::new();
         let n = g.add_node(2, 2);
@@ -886,7 +887,8 @@ pub(crate) mod test {
         g.link_nodes(n, 0, o0, 0).unwrap();
         g.link_nodes(n, 0, o1, 0).unwrap();
         g.link_nodes(n, 1, o0, 0).unwrap();
-        // This line was panicking: the second InPort gets deleted, but reads the multiport-status of what is now the first outport.
+        // This line was panicking: the second InPort gets deleted, but used to read the multiport-status
+        // of what was the second InPort but had become the first OutPort.
         g.set_num_ports(n, 1, 2, |_, _| {});
     }
 }

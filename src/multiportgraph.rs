@@ -209,7 +209,11 @@ impl PortMut for MultiPortGraph {
         let mut dropped_ports = Vec::new();
         let rekey_wrapper = |port, op| {
             match op {
-                PortOperation::Removed { old_link } => dropped_ports.push((port, old_link)),
+                PortOperation::Removed { old_link } => {
+                    if *self.multiport.get(port) {
+                        dropped_ports.push((port, old_link.expect("Multiport node has no link")));
+                    }
+                }
                 PortOperation::Moved { new_index } => self.multiport.swap(port, new_index),
             }
             rekey(port, op);
@@ -217,10 +221,7 @@ impl PortMut for MultiPortGraph {
         self.graph
             .set_num_ports(node, incoming, outgoing, rekey_wrapper);
         for (port, old_link) in dropped_ports {
-            if self.is_multiport(port) {
-                let link = old_link.expect("Multiport node has no link");
-                self.remove_copy_node(port, link);
-            }
+            self.remove_copy_node(port, old_link);
         }
     }
 
@@ -871,5 +872,23 @@ pub(crate) mod test {
         );
 
         Ok(())
+    }
+
+    #[test]
+    /// <https://github.com/CQCL/portgraph/pull/191>
+    fn remove_ports() {
+        let mut g = MultiPortGraph::new();
+        let n = g.add_node(2, 2);
+        let i1 = g.add_node(0, 1);
+        g.link_nodes(i1, 0, n, 0).unwrap();
+
+        let [o0, o1] = [0, 1].map(|_| g.add_node(1, 0));
+        // First Out-Port of n is a multiport
+        g.link_nodes(n, 0, o0, 0).unwrap();
+        g.link_nodes(n, 0, o1, 0).unwrap();
+        g.link_nodes(n, 1, o0, 0).unwrap();
+        // This line was panicking: the second InPort gets deleted, but used to read the multiport-status
+        // of what was the second InPort but had become the first OutPort.
+        g.set_num_ports(n, 1, 2, |_, _| {});
     }
 }

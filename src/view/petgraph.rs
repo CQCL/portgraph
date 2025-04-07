@@ -282,6 +282,12 @@ impl petgraph::visit::VisitMap<NodeIndex> for BitVec {
     fn is_visited(&self, a: &NodeIndex) -> bool {
         *<Self as SecondaryMap<NodeIndex, bool>>::get(self, *a)
     }
+
+    fn unvisit(&mut self, a: NodeIndex) -> bool {
+        let is_visited = self.is_visited(&a);
+        <Self as SecondaryMap<NodeIndex, bool>>::set(self, a, false);
+        is_visited
+    }
 }
 
 /// A reference to an edge in a portgraph, with information about the nodes it

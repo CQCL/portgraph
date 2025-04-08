@@ -3,6 +3,7 @@ pr_draft = true
 
 [changelog]
 sort_commits = "oldest"
+protect_breaking_commits = true
 
 commit_parsers = [
     { message = "^feat", group = "New Features" },

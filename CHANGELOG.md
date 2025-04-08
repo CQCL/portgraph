@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.14.0](https://github.com/CQCL/portgraph/compare/v0.13.3...v0.14.0) - 2025-04-08
+
+### Others
+
+- [**breaking**] Bumped the public `petgraph` dependency to `0.8.1` ([#193](https://github.com/CQCL/portgraph/pull/193))
+
 ## [0.13.3](https://github.com/CQCL/portgraph/compare/v0.13.2...v0.13.3) - 2025-03-04
 
 ### Bug Fixes

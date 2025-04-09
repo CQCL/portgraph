@@ -5,8 +5,13 @@ use std::iter::FusedIterator;
 use bitvec::vec::BitVec;
 
 use crate::multiportgraph::MultiPortGraph;
-use crate::view::filter::{NodeFilter, NodeFiltered};
+use crate::view::filter::{LinkFilter, NodeFilter};
+use crate::view::flat_region::FlatRegion;
+use crate::view::region::Region;
+use crate::view::subgraph::Subgraph;
 use crate::{LinkView, NodeIndex, PortGraph, PortIndex, PortView, SecondaryMap};
+
+use super::FilteredGraph;
 
 impl From<petgraph::Direction> for crate::Direction {
     fn from(d: petgraph::Direction) -> Self {
@@ -258,7 +263,22 @@ macro_rules! impl_visit_sparse {
 
 impl_petgraph_traits!(PortGraph);
 impl_petgraph_traits!(MultiPortGraph);
-impl_petgraph_traits!(NodeFiltered<G, NodeFilter<Ctx>, Ctx>, ['a, G, Ctx]
+impl_petgraph_traits!(FilteredGraph<G, NodeFilter<Ctx>, LinkFilter<Ctx>, Ctx>, [G, Ctx]
+    where
+        G: LinkView + Clone,
+        <G as LinkView>::LinkEndpoint: Eq
+);
+impl_petgraph_traits!(Region<'graph, G>, ['graph, G]
+    where
+        G: LinkView + Clone,
+        <G as LinkView>::LinkEndpoint: Eq
+);
+impl_petgraph_traits!(FlatRegion<'graph, G>, ['graph, G]
+    where
+        G: LinkView + Clone,
+        <G as LinkView>::LinkEndpoint: Eq
+);
+impl_petgraph_traits!(Subgraph<G>, [G]
     where
         G: LinkView + Clone,
         <G as LinkView>::LinkEndpoint: Eq
@@ -266,7 +286,22 @@ impl_petgraph_traits!(NodeFiltered<G, NodeFilter<Ctx>, Ctx>, ['a, G, Ctx]
 
 impl_visit_dense!(PortGraph);
 impl_visit_dense!(MultiPortGraph);
-impl_visit_sparse!(NodeFiltered<G, NodeFilter<Ctx>, Ctx>, ['a, G, Ctx]
+impl_visit_sparse!(FilteredGraph<G, NodeFilter<Ctx>, LinkFilter<Ctx>, Ctx>, [G, Ctx]
+    where
+        G: LinkView + Clone,
+        <G as LinkView>::LinkEndpoint: Eq
+);
+impl_visit_sparse!(Region<'graph, G>, ['graph, G]
+    where
+        G: LinkView + Clone,
+        <G as LinkView>::LinkEndpoint: Eq
+);
+impl_visit_sparse!(FlatRegion<'graph, G>, ['graph, G]
+    where
+        G: LinkView + Clone,
+        <G as LinkView>::LinkEndpoint: Eq
+);
+impl_visit_sparse!(Subgraph<G>, [G]
     where
         G: LinkView + Clone,
         <G as LinkView>::LinkEndpoint: Eq

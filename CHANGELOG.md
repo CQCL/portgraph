@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.14.1](https://github.com/CQCL/portgraph/compare/v0.14.0...v0.14.1) - 2025-04-14
+
+### New Features
+
+- Implement petgraph traits on adaptors ([#195](https://github.com/CQCL/portgraph/pull/195))
+
 ## [0.14.0](https://github.com/CQCL/portgraph/compare/v0.13.3...v0.14.0) - 2025-04-08
 
 ### Others

@@ -100,15 +100,14 @@ impl NodeStyle {
 
     /// Set the presentation attributes of the node.
     pub fn with_attrs(mut self, attrs: PresentationStyle) -> Self {
-        match &mut self {
-            Self::Boxed { attrs: a, .. } => *a = attrs,
-            _ => {}
+        if let Self::Boxed { attrs: a, .. } = &mut self {
+            *a = attrs
         }
         self
     }
 
     /// Returns the presentation attributes of the node.
-    pub const fn attrs(&self) -> &PresentationStyle {
+    pub fn attrs(&self) -> &PresentationStyle {
         static DEFAULT: PresentationStyle = PresentationStyle::new();
         match self {
             Self::Boxed { attrs, .. } => attrs,
@@ -234,6 +233,7 @@ impl EdgeStyle {
 }
 
 #[cfg(test)]
+#[allow(clippy::type_complexity)]
 mod test {
     use std::fmt::Display;
     use std::sync::OnceLock;

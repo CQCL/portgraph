@@ -241,9 +241,9 @@ mod test {
     use rstest::{fixture, rstest};
 
     use crate::view::Region;
-    use crate::{Hierarchy, LinkMut, PortGraph, PortMut, PortView, Weights};
+    use crate::{Hierarchy, LinkMut, NodeIndex, PortGraph, PortMut, PortView, Weights};
 
-    use super::{DotFormat, MermaidFormat};
+    use super::{DotFormat, MermaidFormat, NodeStyle, PresentationStyle};
 
     /// A simple flat graph with some nodes and edges.
     #[fixture]
@@ -252,6 +252,7 @@ mod test {
         PortGraph,
         Option<Hierarchy>,
         Option<Weights<String, String>>,
+        Option<fn(NodeIndex) -> NodeStyle>,
     ) {
         let mut graph = PortGraph::new();
         let n1 = graph.add_node(3, 2);
@@ -259,7 +260,7 @@ mod test {
         let n3 = graph.add_node(1, 0);
         graph.link_nodes(n1, 0, n2, 0).unwrap();
         graph.link_nodes(n1, 1, n3, 0).unwrap();
-        ("flat", graph, None, None)
+        ("flat", graph, None, None, None)
     }
 
     #[fixture]
@@ -268,6 +269,7 @@ mod test {
         PortGraph,
         Option<Hierarchy>,
         Option<Weights<String, String>>,
+        Option<impl FnMut(NodeIndex) -> NodeStyle>,
     ) {
         let mut graph = PortGraph::new();
         let n1 = graph.add_node(3, 2);
@@ -279,7 +281,20 @@ mod test {
         hier.push_child(n2, n1).unwrap();
         hier.push_child(n3, n1).unwrap();
 
-        ("hierarchy", graph, Some(hier), None)
+        let node_style = move |n: NodeIndex| {
+            if n == n1 {
+                NodeStyle::boxed("root").with_attrs(PresentationStyle {
+                    color: Some("#f00".to_string()),
+                    fill: Some("#0f0".to_string()),
+                    stroke: Some("#00f".to_string()),
+                    stroke_width: Some("4px".to_string()),
+                })
+            } else {
+                NodeStyle::boxed(n.index())
+            }
+        };
+
+        ("hierarchy", graph, Some(hier), None, Some(node_style))
     }
 
     /// A hierarchical graph with edges between different regions.
@@ -289,6 +304,7 @@ mod test {
         PortGraph,
         Option<Hierarchy>,
         Option<Weights<String, String>>,
+        Option<fn(NodeIndex) -> NodeStyle>,
     ) {
         let mut graph = PortGraph::new();
         let n1 = graph.add_node(3, 2);
@@ -305,7 +321,7 @@ mod test {
         hier.push_child(n4, n2).unwrap();
         hier.push_child(n5, n3).unwrap();
 
-        ("hierarchy_interregional", graph, Some(hier), None)
+        ("hierarchy_interregional", graph, Some(hier), None, None)
     }
 
     #[fixture]
@@ -314,6 +330,7 @@ mod test {
         PortGraph,
         Option<Hierarchy>,
         Option<Weights<String, String>>,
+        Option<fn(NodeIndex) -> NodeStyle>,
     ) {
         let mut graph = PortGraph::new();
         let n1 = graph.add_node(0, 2);
@@ -336,18 +353,18 @@ mod test {
         weights[p20] = "in 0".to_string();
         weights[p30] = "in 0".to_string();
 
-        ("weighted", graph, None, Some(weights))
+        ("weighted", graph, None, Some(weights), None)
     }
 
     #[allow(clippy::type_complexity)]
-    type RegionViewResult = (
+    #[fixture]
+    fn region_view() -> (
         &'static str,
         Region<'static, PortGraph>,
         Option<Hierarchy>,
         Option<Weights<String, String>>,
-    );
-    #[fixture]
-    fn region_view() -> RegionViewResult {
+        Option<fn(NodeIndex) -> NodeStyle>,
+    ) {
         let mut graph = PortGraph::new();
         let other = graph.add_node(42, 0);
         let root = graph.add_node(1, 0);
@@ -369,7 +386,7 @@ mod test {
 
         let region = Region::new(graph, hierarchy, root);
 
-        ("region_view", region, Some(hierarchy.clone()), None)
+        ("region_view", region, Some(hierarchy.clone()), None, None)
     }
 
     #[rstest]
@@ -385,19 +402,25 @@ mod test {
             impl MermaidFormat,
             Option<Hierarchy>,
             Option<Weights<WN, WP>>,
+            Option<impl FnMut(NodeIndex) -> NodeStyle>,
         ),
     ) {
-        let (name, graph, hierarchy, weights) = graph_elems;
-        let mermaid = match (hierarchy, weights) {
-            (Some(h), Some(w)) => graph
-                .mermaid_format()
-                .with_hierarchy(&h)
-                .with_weights(&w)
-                .finish(),
-            (Some(h), None) => graph.mermaid_format().with_hierarchy(&h).finish(),
-            (None, Some(w)) => graph.mermaid_format().with_weights(&w).finish(),
-            (None, None) => graph.mermaid_string(),
+        let (name, graph, hierarchy, weights, node_style) = graph_elems;
+
+        let fmt = graph.mermaid_format();
+        let fmt = match &hierarchy {
+            Some(h) => fmt.with_hierarchy(h),
+            None => fmt,
         };
+        let fmt = match node_style {
+            Some(node_style) => fmt.with_node_style(node_style),
+            None => fmt,
+        };
+        let fmt = match &weights {
+            Some(w) => fmt.with_weights(w),
+            None => fmt,
+        };
+        let mermaid = fmt.finish();
 
         let name = format!("{}__mermaid", name);
         insta::assert_snapshot!(name, mermaid);
@@ -415,19 +438,25 @@ mod test {
             impl DotFormat,
             Option<Hierarchy>,
             Option<Weights<WN, WP>>,
+            Option<impl FnMut(NodeIndex) -> NodeStyle>,
         ),
     ) {
-        let (name, graph, hierarchy, weights) = graph_elems;
-        let dot = match (hierarchy, weights) {
-            (Some(h), Some(w)) => graph
-                .dot_format()
-                .with_hierarchy(&h)
-                .with_weights(&w)
-                .finish(),
-            (Some(h), None) => graph.dot_format().with_hierarchy(&h).finish(),
-            (None, Some(w)) => graph.dot_format().with_weights(&w).finish(),
-            (None, None) => graph.dot_string(),
+        let (name, graph, hierarchy, weights, node_style) = graph_elems;
+
+        let fmt = graph.dot_format();
+        let fmt = match &hierarchy {
+            Some(h) => fmt.with_hierarchy(h),
+            None => fmt,
         };
+        let fmt = match node_style {
+            Some(node_style) => fmt.with_node_style(node_style),
+            None => fmt,
+        };
+        let fmt = match &weights {
+            Some(w) => fmt.with_weights(w),
+            None => fmt,
+        };
+        let dot = fmt.finish();
 
         let name = format!("{}__dot", name);
         insta::assert_snapshot!(name, dot);

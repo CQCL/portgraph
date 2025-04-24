@@ -141,9 +141,9 @@ where
 
             let node_str = String::new()
                 + &node.index().to_string()
-                + "[shape=plain "
+                + " [shape=plain "
                 + &encode_presentation_attrs(&attrs)
-                + " label=<"
+                + "label=<"
                 + "<table border=\"1\">"
                 + &inputs_row
                 + &label_row
@@ -302,16 +302,16 @@ struct PortCellStrings {
 pub fn encode_presentation_attrs(attrs: &PresentationStyle) -> String {
     let mut result = Vec::new();
     if let Some(color) = &attrs.color {
-        result.push(format!("fontcolor=\'{color}'\""));
+        result.push(format!("fontcolor=\"{color}\" "));
     }
     if let Some(fill) = &attrs.fill {
-        result.push(format!("fillcolor=\'{fill}'\""));
+        result.push(format!("fillcolor=\"{fill}\" "));
     }
     if let Some(stroke) = &attrs.stroke {
-        result.push(format!("color=\'{stroke}'\""));
+        result.push(format!("color=\"{stroke}\" "));
     }
     if let Some(stroke_width) = &attrs.stroke_width {
-        result.push(format!("penwidth=\'{stroke_width}'\""));
+        result.push(format!("penwidth=\"{stroke_width}\" "));
     }
-    result.into_iter().join(" ")
+    result.into_iter().join("")
 }

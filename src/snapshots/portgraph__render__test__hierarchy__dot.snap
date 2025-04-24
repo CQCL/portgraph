@@ -3,7 +3,7 @@ source: src/render.rs
 expression: dot
 ---
 digraph {
-0 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="2" cellpadding="1" >0</td><td port="in1" align="text" colspan="2" cellpadding="1" >1</td><td port="in2" align="text" colspan="2" cellpadding="1" >2</td></tr><tr><td align="text" border="0" colspan="6">0</td></tr><tr><td port="out0" align="text" colspan="3" cellpadding="1" >0</td><td port="out1" align="text" colspan="3" cellpadding="1" >1</td></tr></table>>]
+0 [shape=plain fontcolor="#f00" fillcolor="#0f0" color="#00f" penwidth="4px" label=<<table border="1"><tr><td port="in0" align="text" colspan="2" cellpadding="1" >0</td><td port="in1" align="text" colspan="2" cellpadding="1" >1</td><td port="in2" align="text" colspan="2" cellpadding="1" >2</td></tr><tr><td align="text" border="0" colspan="6">root</td></tr><tr><td port="out0" align="text" colspan="3" cellpadding="1" >0</td><td port="out1" align="text" colspan="3" cellpadding="1" >1</td></tr></table>>]
 1 [shape=plain label=<<table border="1"><tr><td align="text" border="0" colspan="1">1</td></tr><tr><td port="out0" align="text" colspan="1" cellpadding="1" >0</td></tr></table>>]
 1:out0 -> 2:in0 [style=""]
 2 [shape=plain label=<<table border="1"><tr><td port="in0" align="text" colspan="1" cellpadding="1" >0</td></tr><tr><td align="text" border="0" colspan="1">2</td></tr></table>>]

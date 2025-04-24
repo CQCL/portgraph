@@ -66,7 +66,7 @@ pub enum NodeStyle {
     /// Ignore the node. No edges will be connected to it.
     Hidden,
     /// Draw a box with the label inside.
-    #[deprecated(since = "0.14.1", note = "Use `Box` instead")]
+    #[deprecated(since = "0.14.1", note = "Use `Boxed` instead")]
     Box(String),
     /// Draw a box with label inside.
     #[non_exhaustive]

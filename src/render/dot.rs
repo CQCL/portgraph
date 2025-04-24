@@ -2,9 +2,11 @@
 
 use std::fmt::Display;
 
+use itertools::Itertools;
+
 use crate::{Direction, Hierarchy, LinkView, NodeIndex, PortIndex, Weights};
 
-use super::{EdgeStyle, NodeStyle, PortStyle};
+use super::{EdgeStyle, NodeStyle, PortStyle, PresentationStyle};
 
 /// Configurable mermaid formatter for a `PortGraph`.
 pub struct DotFormatter<'g, G: LinkView> {
@@ -68,7 +70,7 @@ where
         N: Display + Clone,
         P: Display + Clone,
     {
-        self.with_node_style(|n| NodeStyle::new(&weights.nodes[n]))
+        self.with_node_style(|n| NodeStyle::boxed(&weights.nodes[n]))
             .with_port_style(|p| PortStyle::new(&weights.ports[p]))
     }
 
@@ -89,7 +91,7 @@ where
         self.node_style
             .as_mut()
             .map(|f| f(node))
-            .unwrap_or_else(|| NodeStyle::new(node.index().to_string()))
+            .unwrap_or_else(|| NodeStyle::boxed(node.index().to_string()))
     }
 
     /// Get the style of a port, using a default if none is set.
@@ -113,9 +115,14 @@ where
         for node in self.graph.nodes_iter() {
             // Format the node as a table
             let node_style = self.node_style(node);
-            let NodeStyle::Box(node_label) = node_style else {
-                // Ignore this node
-                continue;
+            let (node_label, attrs) = match node_style {
+                NodeStyle::Boxed { label, attrs } => (label, attrs),
+                #[allow(deprecated)]
+                NodeStyle::Box(label) => (label, PresentationStyle::new()),
+                NodeStyle::Hidden => {
+                    // Ignore this node
+                    continue;
+                }
             };
 
             // Get the ports to render, ignoring Hidden ones.
@@ -132,7 +139,11 @@ where
                 "<tr><td align=\"text\" border=\"0\" colspan=\"{table_width}\">{node_label}</td></tr>"
             );
 
-            let node_str = format!("{} [shape=plain label=<", node.index())
+            let node_str = String::new()
+                + &node.index().to_string()
+                + "[shape=plain "
+                + &encode_presentation_attrs(&attrs)
+                + " label=<"
                 + "<table border=\"1\">"
                 + &inputs_row
                 + &label_row
@@ -285,4 +296,22 @@ struct PortCellStrings {
     pub style: String,
     /// The label to show for the port.
     pub label: String,
+}
+
+/// Encode a [`PresentationStyle`] into dot attributes.
+pub fn encode_presentation_attrs(attrs: &PresentationStyle) -> String {
+    let mut result = Vec::new();
+    if let Some(color) = &attrs.color {
+        result.push(format!("fontcolor=\'{color}'\""));
+    }
+    if let Some(fill) = &attrs.fill {
+        result.push(format!("fillcolor=\'{fill}'\""));
+    }
+    if let Some(stroke) = &attrs.stroke {
+        result.push(format!("color=\'{stroke}'\""));
+    }
+    if let Some(stroke_width) = &attrs.stroke_width {
+        result.push(format!("penwidth=\'{stroke_width}'\""));
+    }
+    result.into_iter().join(" ")
 }

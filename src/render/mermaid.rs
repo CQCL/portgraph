@@ -3,10 +3,12 @@
 use std::collections::HashMap;
 use std::fmt::Display;
 
+use itertools::Itertools;
+
 use crate::algorithms::{lca, LCA};
 use crate::{Hierarchy, LinkView, NodeIndex, Weights};
 
-use super::{EdgeStyle, NodeStyle};
+use super::{EdgeStyle, NodeStyle, PresentationStyle};
 
 /// The indentation separator for the mermaid string.
 ///
@@ -86,7 +88,7 @@ where
         'w: 'g,
         N: Display + Clone,
     {
-        self.with_node_style(|n| NodeStyle::new(&weights.nodes[n]))
+        self.with_node_style(|n| NodeStyle::boxed(&weights.nodes[n]))
     }
 
     /// Encode the graph in mermaid format.
@@ -326,8 +328,20 @@ impl<'g, G: LinkView> MermaidBuilder<'g, G> {
 
         match style {
             NodeStyle::Hidden => self.push_strings(&[id.as_ref(), ":::hidden"]),
+            #[allow(deprecated)]
             NodeStyle::Box(lbl) => {
-                self.push_strings(&[id.as_ref(), "[", &encode_label(&id, &lbl), "]"])
+                self.push_strings(&[id.as_ref(), "[", &encode_label(&id, &lbl), "]"]);
+            }
+            NodeStyle::Boxed { label, attrs } => {
+                self.push_strings(&[id.as_ref(), "[", &encode_label(&id, &label), "]"]);
+                if !attrs.is_empty() {
+                    self.push_strings(&[
+                        "style ",
+                        id.as_ref(),
+                        " ",
+                        &encode_presentation_attrs(&attrs),
+                    ]);
+                }
             }
         }
     }
@@ -343,8 +357,16 @@ impl<'g, G: LinkView> MermaidBuilder<'g, G> {
             .map_or_else(NodeStyle::default, |f| f(node));
         let id = node.index().to_string();
 
-        match style {
+        match &style {
             NodeStyle::Hidden => self.push_strings(&["subgraph ", id.as_ref(), " [ ]"]),
+            NodeStyle::Boxed { label, .. } => self.push_strings(&[
+                "subgraph ",
+                id.as_ref(),
+                " [",
+                &encode_label(&id, &label),
+                "]",
+            ]),
+            #[allow(deprecated)]
             NodeStyle::Box(lbl) => self.push_strings(&[
                 "subgraph ",
                 id.as_ref(),
@@ -355,6 +377,15 @@ impl<'g, G: LinkView> MermaidBuilder<'g, G> {
         }
         self.indent += 1;
         self.push_line("direction LR");
+
+        if !style.attrs().is_empty() {
+            self.push_strings(&[
+                "style ",
+                id.as_ref(),
+                " ",
+                &encode_presentation_attrs(&style.attrs()),
+            ]);
+        }
     }
 
     /// End the current indented block.
@@ -397,4 +428,22 @@ pub fn encode_label(id: &str, label: &str) -> String {
         return id.to_string();
     }
     format!("\"{}\"", label.replace('"', "#quot;").replace('\n', "<br>"))
+}
+
+/// Encode a [`PresentationStyle`] into mermaid `style` attributes.
+pub fn encode_presentation_attrs(attrs: &PresentationStyle) -> String {
+    let mut result = Vec::new();
+    if let Some(color) = &attrs.color {
+        result.push(format!("color:{}", color));
+    }
+    if let Some(fill) = &attrs.fill {
+        result.push(format!("fill:{}", fill));
+    }
+    if let Some(stroke) = &attrs.stroke {
+        result.push(format!("stroke:{}", stroke));
+    }
+    if let Some(stroke_width) = &attrs.stroke_width {
+        result.push(format!("stroke-width:{}", stroke_width));
+    }
+    result.into_iter().join(",")
 }

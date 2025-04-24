@@ -11,7 +11,53 @@ pub use mermaid::{MermaidFormat, MermaidFormatter};
 
 use self::mermaid::encode_label;
 
-/// Style of a rendered edge.
+/// Presentation attributes of a rendered element
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct PresentationStyle {
+    /// Main color of the element.
+    ///
+    /// Encoded as an RGB hex string.
+    /// E.g. `#f00`, `#AE00FF`.
+    pub color: Option<String>,
+    /// Background fill color.
+    ///
+    /// Encoded as an RGB hex string.
+    /// E.g. `#f00`, `#AE00FF`.
+    pub fill: Option<String>,
+    /// Stroke color.
+    ///
+    /// Encoded as an RGB hex string.
+    /// E.g. `#ff0000`, `#AE00FF`.
+    pub stroke: Option<String>,
+    /// Stroke width.
+    ///
+    /// Encoded as pixels or a similar unit.
+    /// E.g. `1px`, `2pt`, `0.5em`.
+    pub stroke_width: Option<String>,
+}
+
+impl PresentationStyle {
+    /// Returns a new presentation style with no attributes set.
+    pub const fn new() -> Self {
+        Self {
+            color: None,
+            fill: None,
+            stroke: None,
+            stroke_width: None,
+        }
+    }
+
+    /// Returns `true` if the presentation style is empty.
+    pub const fn is_empty(&self) -> bool {
+        self.color.is_none()
+            && self.fill.is_none()
+            && self.stroke.is_none()
+            && self.stroke_width.is_none()
+    }
+}
+
+/// Style of a rendered node.
 ///
 /// Defaults to a box with no label.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -20,19 +66,63 @@ pub enum NodeStyle {
     /// Ignore the node. No edges will be connected to it.
     Hidden,
     /// Draw a box with the label inside.
+    #[deprecated(since = "0.14.1", note = "Use `Box` instead")]
     Box(String),
+    /// Draw a box with label inside.
+    #[non_exhaustive]
+    Boxed {
+        /// Label of the node.
+        label: String,
+        /// Additional presentation attributes.
+        attrs: PresentationStyle,
+    },
 }
 
 impl NodeStyle {
     /// Show a node label with the default style.
+    #[deprecated(since = "0.14.1", note = "Use `boxed` instead")]
     pub fn new(label: impl ToString) -> Self {
-        Self::Box(label.to_string())
+        Self::Boxed {
+            label: label.to_string(),
+            attrs: Default::default(),
+        }
+    }
+
+    /// Show a node in a box.
+    ///
+    /// Additional presentation attributes can be set using [`NodeStyle::with_attrs`].
+    pub fn boxed(label: impl ToString) -> Self {
+        Self::Boxed {
+            label: label.to_string(),
+            attrs: Default::default(),
+        }
+    }
+
+    /// Set the presentation attributes of the node.
+    pub fn with_attrs(mut self, attrs: PresentationStyle) -> Self {
+        match &mut self {
+            Self::Boxed { attrs: a, .. } => *a = attrs,
+            _ => {}
+        }
+        self
+    }
+
+    /// Returns the presentation attributes of the node.
+    pub const fn attrs(&self) -> &PresentationStyle {
+        static DEFAULT: PresentationStyle = PresentationStyle::new();
+        match self {
+            Self::Boxed { attrs, .. } => attrs,
+            _ => &DEFAULT,
+        }
     }
 }
 
 impl Default for NodeStyle {
     fn default() -> Self {
-        Self::Box(String::new())
+        Self::Boxed {
+            label: String::new(),
+            attrs: Default::default(),
+        }
     }
 }
 

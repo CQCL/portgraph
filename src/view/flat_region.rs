@@ -6,7 +6,10 @@ use crate::{Direction, Hierarchy, NodeIndex, PortIndex, PortOffset};
 use delegate::delegate;
 use itertools::Either;
 
-/// View of a portgraph containing only a root node and its direct children in a [`Hierarchy`].
+/// View of a portgraph containing a flat region in a [`Hierarchy`].
+///
+/// Depending on the constructor used, this view may or may not include the root node
+/// in addition to all its direct children.
 ///
 /// For a view of all descendants, see [`crate::view::Region`].
 #[derive(Debug, Clone, PartialEq)]
@@ -17,6 +20,8 @@ pub struct FlatRegion<'g, G> {
     region_root: NodeIndex,
     /// The graph's hierarchy
     hierarchy: &'g Hierarchy,
+    /// Whether to include the root in the region.
+    include_root: bool,
 }
 
 impl<'a, G> FlatRegion<'a, G>
@@ -25,15 +30,41 @@ where
 {
     /// Create a new region view including only a root node and its direct
     /// children in a [`Hierarchy`].
+    ///
+    /// The root node is included in the region. For a view that does not
+    /// include the root node, see [`FlatRegion::new_without_root`].
     pub fn new(graph: G, hierarchy: &'a Hierarchy, root: NodeIndex) -> Self {
         Self {
             graph,
             region_root: root,
             hierarchy,
+            include_root: true,
         }
     }
 
+    /// Create a new region view including only the direct children of a root in
+    /// a [`Hierarchy`].
+    ///
+    /// The root node is not included in the region. For a view that includes
+    /// the root node, see [`FlatRegion::new`].
+    pub fn new_without_root(graph: G, hierarchy: &'a Hierarchy, root: NodeIndex) -> Self {
+        Self {
+            graph,
+            region_root: root,
+            hierarchy,
+            include_root: false,
+        }
+    }
+
+    /// Returns `true` if the root node is included in the region.
+    pub fn includes_root(&self) -> bool {
+        self.include_root
+    }
+
     /// Get the root node of the region.
+    ///
+    /// Note that if `include_root` is `false`, this will return a node that is not
+    /// part of the region.
     pub fn region_root(&self) -> NodeIndex {
         self.region_root
     }
@@ -62,7 +93,8 @@ where
 {
     #[inline(always)]
     fn contains_node(&'_ self, node: NodeIndex) -> bool {
-        node == self.region_root || self.hierarchy.parent(node) == Some(self.region_root)
+        (self.include_root && node == self.region_root)
+            || self.hierarchy.parent(node) == Some(self.region_root)
     }
 
     #[inline(always)]
@@ -81,7 +113,7 @@ where
 
     #[inline]
     fn node_count(&self) -> usize {
-        self.hierarchy.child_count(self.region_root) + 1
+        self.hierarchy.child_count(self.region_root) + self.include_root as usize
     }
 
     #[inline]
@@ -91,7 +123,9 @@ where
 
     #[inline]
     fn nodes_iter(&self) -> impl Iterator<Item = NodeIndex> + Clone {
-        std::iter::once(self.region_root).chain(self.hierarchy.children(self.region_root))
+        let root = self.include_root.then_some(self.region_root);
+        root.into_iter()
+            .chain(self.hierarchy.children(self.region_root))
     }
 
     #[inline]
@@ -337,6 +371,103 @@ mod test {
             region.get_connections(a, root).collect_vec().as_slice(),
             [(a_o1, root_i0)]
         );
+        assert_eq!(region.get_connections(b, a).count(), 0);
+        assert_eq!(region.all_neighbours(root).collect_vec().as_slice(), [a]);
+
+        // Multiports
+        let multigraph = MultiPortGraph::from(graph);
+        let region = FlatRegion::new(&multigraph, &hierarchy, root);
+        let a_o1 = SubportIndex::new_unique(a_o1);
+        assert_eq!(
+            region.all_subports(a).collect_vec(),
+            multigraph.all_subports(a).collect_vec()
+        );
+        assert_eq!(
+            region.subports(a, Direction::Incoming).collect_vec(),
+            multigraph.subports(a, Direction::Incoming).collect_vec()
+        );
+        assert_eq!(region.subport_link(a_o1), multigraph.subport_link(a_o1));
+
+        Ok(())
+    }
+
+    #[test]
+    fn simple_flat_region_no_root() -> Result<(), Box<dyn Error>> {
+        let mut graph = PortGraph::new();
+        let other = graph.add_node(42, 0);
+        let root = graph.add_node(1, 0);
+        let a = graph.add_node(1, 2);
+        let b = graph.add_node(0, 0);
+        let c = graph.add_node(0, 0);
+        graph.link_nodes(a, 0, other, 0)?;
+        graph.link_nodes(a, 1, root, 0)?;
+
+        let mut hierarchy = Hierarchy::new();
+        hierarchy.push_child(root, other)?;
+        hierarchy.push_child(a, root)?;
+        hierarchy.push_child(b, root)?;
+        hierarchy.push_child(c, b)?;
+
+        let region = FlatRegion::new_without_root(&graph, &hierarchy, root);
+
+        assert!(!region.is_empty());
+        assert_eq!(region.region_root(), root);
+        assert_eq!(region.node_count(), 2);
+        assert_eq!(region.port_count(), 3);
+        assert_eq!(region.node_capacity(), graph.node_capacity() - 3);
+        assert_eq!(region.port_capacity(), graph.port_capacity() - 43);
+        assert_eq!(region.node_port_capacity(a), graph.node_port_capacity(a));
+        assert_eq!(
+            region.port_offsets(a, Direction::Outgoing).collect_vec(),
+            graph.port_offsets(a, Direction::Outgoing).collect_vec()
+        );
+
+        assert!(!region.contains_node(other));
+        assert!(!region.contains_node(c));
+        assert!(!region.contains_node(root));
+        assert!(!region.contains_port(graph.input(other, 10).unwrap()));
+        assert!(region.contains_port(graph.output(a, 0).unwrap()));
+
+        assert_eq!(region.inputs(a).count(), 1);
+        assert_eq!(region.outputs(a).count(), 2);
+        assert_eq!(region.num_ports(a, Direction::Incoming), 1);
+        assert_eq!(region.num_ports(a, Direction::Outgoing), 2);
+        assert_eq!(region.all_ports(a).count(), 3);
+        assert_eq!(region.all_port_offsets(a).count(), 3);
+
+        let inputs = region
+            .inputs(a)
+            .enumerate()
+            .map(|(i, port)| (i, port, Direction::Incoming));
+        let outputs = region
+            .outputs(a)
+            .enumerate()
+            .map(|(i, port)| (i, port, Direction::Outgoing));
+        for (i, port, dir) in inputs.chain(outputs) {
+            let offset = PortOffset::new(dir, i);
+            assert_eq!(region.port_direction(port), Some(dir));
+            assert_eq!(region.port_offset(port), Some(offset));
+            assert_eq!(region.port_node(port), Some(a));
+            assert_eq!(region.port_index(a, offset), Some(port));
+        }
+
+        // Global iterators
+        let nodes = region.nodes_iter().collect_vec();
+        assert_eq!(nodes.as_slice(), [a, b]);
+
+        let ports = region.ports_iter().collect_vec();
+        assert_eq!(ports.len(), region.port_count());
+
+        assert_eq!(region, region.clone());
+
+        // Links
+        let a_o1 = region.output(a, 1).unwrap();
+        assert!(!region.connected(a, root));
+        assert_eq!(region.link_count(), 0);
+        assert_eq!(region.output_neighbours(a).collect_vec().as_slice(), []);
+        assert!(region.output_links(a).collect_vec().is_empty());
+        assert!(region.port_links(a_o1).collect_vec().is_empty());
+        assert!(region.get_connections(a, root).collect_vec().is_empty());
         assert_eq!(region.get_connections(b, a).count(), 0);
         assert_eq!(region.all_neighbours(root).collect_vec().as_slice(), [a]);
 

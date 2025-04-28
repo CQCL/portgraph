@@ -1,5 +1,7 @@
 //! View of a portgraph containing only the children of a node in a [`Hierarchy`].
 
+use std::borrow::Cow;
+
 use super::{LinkView, MultiView, PortView};
 use crate::{Direction, Hierarchy, NodeIndex, PortIndex, PortOffset};
 
@@ -19,7 +21,7 @@ pub struct FlatRegion<'g, G> {
     /// The root node of the region
     region_root: NodeIndex,
     /// The graph's hierarchy
-    hierarchy: &'g Hierarchy,
+    hierarchy: Cow<'g, Hierarchy>,
     /// Whether to include the root in the region.
     include_root: bool,
 }
@@ -33,11 +35,25 @@ where
     ///
     /// The root node is included in the region. For a view that does not
     /// include the root node, see [`FlatRegion::new_without_root`].
+    #[deprecated(since = "0.14.1", note = "Use `FlatRegion::new_with_root` instead")]
     pub fn new(graph: G, hierarchy: &'a Hierarchy, root: NodeIndex) -> Self {
+        Self::new_with_root(graph, hierarchy, root)
+    }
+
+    /// Create a new region view including only a root node and its direct
+    /// children in a [`Hierarchy`].
+    ///
+    /// The root node is included in the region. For a view that does not
+    /// include the root node, see [`FlatRegion::new_without_root`].
+    pub fn new_with_root(
+        graph: G,
+        hierarchy: impl Into<Cow<'a, Hierarchy>>,
+        root: NodeIndex,
+    ) -> Self {
         Self {
             graph,
             region_root: root,
-            hierarchy,
+            hierarchy: hierarchy.into(),
             include_root: true,
         }
     }
@@ -46,12 +62,16 @@ where
     /// a [`Hierarchy`].
     ///
     /// The root node is not included in the region. For a view that includes
-    /// the root node, see [`FlatRegion::new`].
-    pub fn new_without_root(graph: G, hierarchy: &'a Hierarchy, root: NodeIndex) -> Self {
+    /// the root node, see [`FlatRegion::new_with_root`].
+    pub fn new_without_root(
+        graph: G,
+        hierarchy: impl Into<Cow<'a, Hierarchy>>,
+        root: NodeIndex,
+    ) -> Self {
         Self {
             graph,
             region_root: root,
-            hierarchy,
+            hierarchy: hierarchy.into(),
             include_root: false,
         }
     }
@@ -275,7 +295,7 @@ mod test {
 
         let hierarchy = Hierarchy::new();
 
-        let region = FlatRegion::new(&graph, &hierarchy, root);
+        let region = FlatRegion::new_with_root(&graph, &hierarchy, root);
         assert_eq!(region.node_count(), 1);
         assert_eq!(region.port_count(), 0);
     }
@@ -297,7 +317,7 @@ mod test {
         hierarchy.push_child(b, root)?;
         hierarchy.push_child(c, b)?;
 
-        let region = FlatRegion::new(&graph, &hierarchy, root);
+        let region = FlatRegion::new_with_root(&graph, &hierarchy, root);
 
         assert!(!region.is_empty());
         assert_eq!(region.region_root(), root);
@@ -376,7 +396,7 @@ mod test {
 
         // Multiports
         let multigraph = MultiPortGraph::from(graph);
-        let region = FlatRegion::new(&multigraph, &hierarchy, root);
+        let region = FlatRegion::new_with_root(&multigraph, &hierarchy, root);
         let a_o1 = SubportIndex::new_unique(a_o1);
         assert_eq!(
             region.all_subports(a).collect_vec(),
@@ -473,7 +493,7 @@ mod test {
 
         // Multiports
         let multigraph = MultiPortGraph::from(graph);
-        let region = FlatRegion::new(&multigraph, &hierarchy, root);
+        let region = FlatRegion::new_with_root(&multigraph, &hierarchy, root);
         let a_o1 = SubportIndex::new_unique(a_o1);
         assert_eq!(
             region.all_subports(a).collect_vec(),

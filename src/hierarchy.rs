@@ -48,6 +48,7 @@
 //! hierarchy.shrink_to(graph.node_count());
 //! ```
 
+use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::iter::FusedIterator;
 use std::mem::{replace, take};
@@ -527,6 +528,18 @@ impl Hierarchy {
             self.remove(NodeIndex::new(node));
         }
         self.data.shrink_to(capacity);
+    }
+}
+
+impl<'a> From<&'a Hierarchy> for Cow<'a, Hierarchy> {
+    fn from(hierarchy: &'a Hierarchy) -> Self {
+        Cow::Borrowed(hierarchy)
+    }
+}
+
+impl From<Hierarchy> for Cow<'_, Hierarchy> {
+    fn from(hierarchy: Hierarchy) -> Self {
+        Cow::Owned(hierarchy)
     }
 }
 

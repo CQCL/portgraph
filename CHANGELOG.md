@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.14.1](https://github.com/CQCL/portgraph/compare/v0.14.0...v0.14.1) - 2025-04-28
+
+### New Features
+
+- Implement petgraph traits on adaptors ([#195](https://github.com/CQCL/portgraph/pull/195))
+- FlatRegions that do not include their root node ([#200](https://github.com/CQCL/portgraph/pull/200))
+- Node style attributes in render options ([#199](https://github.com/CQCL/portgraph/pull/199))
+- Allow the FlatRegion to own its hierarchy ([#201](https://github.com/CQCL/portgraph/pull/201))
+
 ## [0.14.0](https://github.com/CQCL/portgraph/compare/v0.13.3...v0.14.0) - 2025-04-08
 
 ### Others

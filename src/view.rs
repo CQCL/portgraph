@@ -562,9 +562,17 @@ pub trait LinkMut: LinkView + PortMut {
         &mut self,
         other: &impl LinkView,
     ) -> Result<HashMap<NodeIndex, NodeIndex>, LinkError> {
-        self.reserve(other.node_count(), other.port_count());
-        let mut rekeys = HashMap::with_capacity(other.node_count());
-        for old in other.nodes_iter() {
+        let nodes = other.nodes_iter();
+
+        // If we can cheaply compute the number of nodes and ports, we can
+        // reserve space for them in advance. This won't be the case e.g. for
+        // a `Region` view.
+        let num_nodes_hint = nodes.size_hint().1.unwrap_or_default();
+        let num_ports_hint = other.ports_iter().size_hint().1.unwrap_or_default();
+        self.reserve(num_nodes_hint, num_ports_hint);
+        let mut rekeys = HashMap::with_capacity(num_nodes_hint);
+
+        for old in nodes {
             let new = self.add_node(other.num_inputs(old), other.num_outputs(old));
             rekeys.insert(old, new);
             for (from, to) in other.all_links(old) {

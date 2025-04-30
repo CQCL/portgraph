@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.14.2](https://github.com/CQCL/portgraph/compare/v0.14.1...v0.14.2) - 2025-04-30
+
+### Performance
+
+- Avoid double graph traversals in insert_graph ([#206](https://github.com/CQCL/portgraph/pull/206))
+
 ## [0.14.1](https://github.com/CQCL/portgraph/compare/v0.14.0...v0.14.1) - 2025-04-28
 
 ### New Features

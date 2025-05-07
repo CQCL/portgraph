@@ -13,6 +13,27 @@ use crate::{LinkView, NodeIndex, PortGraph, PortIndex, PortView, SecondaryMap};
 
 use super::FilteredGraph;
 
+/// A trait for portgraph that implement petgraph's traits.
+pub trait PetgraphView:
+    LinkView<LinkEndpoint: Eq>
+    + petgraph::visit::GraphBase<NodeId = NodeIndex>
+    + petgraph::visit::GraphProp
+    + petgraph::visit::NodeCount
+    + petgraph::visit::NodeIndexable
+    + petgraph::visit::EdgeCount
+    + petgraph::visit::Data<NodeWeight = (), EdgeWeight = ()>
+    + petgraph::visit::Visitable
+where
+    for<'a> &'a Self: petgraph::visit::IntoNodeIdentifiers,
+    for<'a> &'a Self: petgraph::visit::IntoNodeReferences,
+    for<'a> &'a Self: petgraph::visit::IntoNeighbors,
+    for<'a> &'a Self: petgraph::visit::IntoNeighborsDirected,
+    for<'a> &'a Self: petgraph::visit::IntoEdgeReferences,
+    for<'a> &'a Self: petgraph::visit::IntoEdges,
+    for<'a> &'a Self: petgraph::visit::IntoEdgesDirected,
+{
+}
+
 impl From<petgraph::Direction> for crate::Direction {
     fn from(d: petgraph::Direction) -> Self {
         match d {
@@ -56,6 +77,8 @@ macro_rules! impl_petgraph_traits {
     ($graph:ty) => {impl_petgraph_traits!($graph, []);};
     ($graph:ty, [$($args:tt)*]) => {impl_petgraph_traits!($graph, [$($args)*] where );};
     ($graph:ty, [$($args:tt)*] where $($where:tt)*) => {
+        impl<$($args)*> crate::view::petgraph::PetgraphView for $graph where $($where)* {}
+
         impl<$($args)*> petgraph::visit::GraphBase for $graph where $($where)* {
             type NodeId = NodeIndex;
             type EdgeId = (

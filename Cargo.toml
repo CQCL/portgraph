@@ -41,7 +41,7 @@ proptest = ["dep:proptest", "dep:rand"]
 petgraph = ["dep:petgraph"]
 
 [dev-dependencies]
-criterion = { version = "0.5.1", features = ["html_reports"] }
+criterion = { version = "0.6.0", features = ["html_reports"] }
 iai-callgrind = "0.14.0"
 rmp-serde = "1.1.1"
 rstest = "0.25.0"

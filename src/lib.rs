@@ -64,6 +64,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 pub mod algorithms;
 pub mod boundary;
+pub mod convexity;
 pub mod hierarchy;
 pub mod multiportgraph;
 pub mod portgraph;

@@ -442,14 +442,16 @@ where
                     }
                     let start_pos = *self.topo_sort.node_to_pos.get(&start).unwrap();
                     let end_pos = *self.topo_sort.node_to_pos.get(&end).unwrap();
-                    if start_pos < end_pos && self.topo_sort.has_path_outside_subgraph(
-                        start,
-                        end,
-                        min_pos,
-                        max_pos,
-                        &nodes,
-                        &self.graph,
-                    ) {
+                    if start_pos < end_pos
+                        && self.topo_sort.has_path_outside_subgraph(
+                            start,
+                            end,
+                            min_pos,
+                            max_pos,
+                            &nodes,
+                            &self.graph,
+                        )
+                    {
                         return false;
                     }
                 }
@@ -516,6 +518,7 @@ mod tests {
             "Path goes through n1, which is outside {{n0, n2}}, so it’s not convex"
         );
     }
+
     fn is_valid_topological_order<G: LinkView>(topo: &DynamicTopoSort, graph: &G) -> bool {
         for &node in topo.get_order() {
             let node_pos = *topo.node_to_pos.get(&node).unwrap();

@@ -6,18 +6,42 @@ use crate::{
 use delegate::delegate;
 use std::cmp::{max, min};
 use std::collections::{HashMap, HashSet, VecDeque};
+use thiserror::Error;
+
+/// Error type for [`DynamicTopoSort`].
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+#[non_exhaustive]
+pub enum DynamicTopoSortError {
+    /// The referenced node has not been added to the topological order.
+    #[error("{node:?} has not been added to the topological order.")]
+    InvalidNode {
+        /// The missing node.
+        node: NodeIndex,
+    },
+    /// Connecting the nodes would create a cycle.
+    #[error("Connecting {from:?} to {to:?} would create a cycle in the DAG.")]
+    WouldCreateCycle {
+        /// Source of the edge.
+        from: NodeIndex,
+        /// Target of the edge.
+        to: NodeIndex,
+    },
+}
 /// Maintains a dynamic topological order for a directed acyclic graph (DAG) using Pearce and Kelly's algorithm.
 #[derive(Default, Clone, Debug)]
 pub struct DynamicTopoSort {
-    order: Vec<NodeIndex>,                  // Current topological order
-    node_to_pos: HashMap<NodeIndex, usize>, // Node ID to position in `order`
+    // Current topological order
+    order: Vec<NodeIndex>,
+    // Node ID to position in `order`
+    node_to_pos: HashMap<NodeIndex, usize>,
 }
 
 impl DynamicTopoSort {
     /// Initializes the topological order for the given graph.
     pub fn with_graph<G: LinkView + PortView>(graph: &G) -> Self {
+        let num_nodes_hint = graph.nodes_iter().size_hint().1.unwrap_or_default();
         let mut topo = Self {
-            order: Vec::new(),
+            order: Vec::with_capacity(num_nodes_hint),
             node_to_pos: HashMap::new(),
         };
         let source = graph
@@ -47,12 +71,15 @@ impl DynamicTopoSort {
         from: NodeIndex,
         to: NodeIndex,
         graph: &G,
-    ) -> Result<(), &'static str> {
-        if !self.node_to_pos.contains_key(&from) || !self.node_to_pos.contains_key(&to) {
-            return Err("Node not found in graph");
+    ) -> Result<(), DynamicTopoSortError> {
+        if !self.node_to_pos.contains_key(&from) {
+            return Err(DynamicTopoSortError::InvalidNode { node: from });
+        }
+        if !self.node_to_pos.contains_key(&to) {
+            return Err(DynamicTopoSortError::InvalidNode { node: to });
         }
         if self.would_create_cycle(from, to, graph) {
-            return Err("Adding this edge would create a cycle");
+            return Err(DynamicTopoSortError::WouldCreateCycle { from, to });
         }
         let from_pos = *self.node_to_pos.get(&from).unwrap();
         let to_pos = *self.node_to_pos.get(&to).unwrap();
@@ -63,7 +90,7 @@ impl DynamicTopoSort {
     }
 
     /// Removes a node and updates the topological order.
-    pub fn remove_node(&mut self, node: NodeIndex) -> Result<(), &'static str> {
+    pub fn remove_node(&mut self, node: NodeIndex) -> Result<(), DynamicTopoSortError> {
         if let Some(pos) = self.node_to_pos.remove(&node) {
             self.order.remove(pos);
             for (i, &n) in self.order.iter().enumerate() {
@@ -71,7 +98,7 @@ impl DynamicTopoSort {
             }
             Ok(())
         } else {
-            Err("Node not found in graph")
+            Err(DynamicTopoSortError::InvalidNode { node })
         }
     }
 
@@ -80,19 +107,20 @@ impl DynamicTopoSort {
         &mut self,
         from: NodeIndex,
         to: NodeIndex,
-        graph: &G,
-    ) -> Result<(), &'static str> {
-        if !self.node_to_pos.contains_key(&from) || !self.node_to_pos.contains_key(&to) {
-            return Err("Node not found in graph");
+        _graph: &G,
+    ) -> Result<(), DynamicTopoSortError> {
+        if !self.node_to_pos.contains_key(&from) {
+            return Err(DynamicTopoSortError::InvalidNode { node: from });
         }
-        if !graph.output_neighbours(from).any(|n| n == to) {
-            return Err("Edge not found");
+        if !self.node_to_pos.contains_key(&to) {
+            return Err(DynamicTopoSortError::InvalidNode { node: to });
         }
         Ok(())
     }
 
     /// Checks if `start` can reach `target` via existing edges (standard BFS for cycle detection).
     fn would_create_cycle<G: LinkView>(&self, from: NodeIndex, to: NodeIndex, graph: &G) -> bool {
+        let from_pos = *self.node_to_pos.get(&from).unwrap_or(&usize::MAX);
         let mut visited = HashSet::new();
         let mut queue = VecDeque::new();
         queue.push_back(to); // Start from 'to'
@@ -103,8 +131,11 @@ impl DynamicTopoSort {
             }
             if visited.insert(node) {
                 for neighbor in graph.output_neighbours(node) {
-                    // Traverse forward
-                    queue.push_back(neighbor);
+                    let neighbor_pos = *self.node_to_pos.get(&neighbor).unwrap_or(&usize::MAX);
+                    if neighbor_pos <= from_pos {
+                        // Only check nodes before 'from' in order
+                        queue.push_back(neighbor);
+                    }
                 }
             }
         }
@@ -180,6 +211,7 @@ impl DynamicTopoSort {
     }
 
     /// Returns the current topological order (for testing or inspection).
+    #[allow(dead_code)]
     pub fn get_order(&self) -> &Vec<NodeIndex> {
         &self.order
     }
@@ -373,11 +405,10 @@ impl<G: LinkMut> LinkMut for DynamicTopoConvexChecker<G> {
         self.topo_sort
             .connect_nodes(from_node, to_node, &self.graph)
             .map_err(|e| match e {
-                "Node not found in graph" => LinkError::UnknownPort { port: from },
-                "Adding this edge would create a cycle" => {
+                DynamicTopoSortError::InvalidNode { .. } => LinkError::UnknownPort { port: from },
+                DynamicTopoSortError::WouldCreateCycle { .. } => {
                     panic!("Cycle detected despite earlier check")
                 }
-                _ => panic!("Unexpected error from connect_nodes: {}", e),
             })?;
         Ok(result)
     }
@@ -587,7 +618,10 @@ mod tests {
         let mut topo = DynamicTopoSort::with_graph(&graph);
         match topo.connect_nodes(n3, n0, &graph) {
             Ok(()) => panic!("Should have detected cycle"),
-            Err(e) => assert_eq!(e, "Adding this edge would create a cycle"),
+            Err(e) => assert_eq!(
+                e,
+                DynamicTopoSortError::WouldCreateCycle { from: n3, to: n0 }
+            ),
         }
         assert_eq!(topo.get_order(), &vec![n0, n1, n2, n3]);
         assert!(is_valid_topological_order(&topo, &graph));
@@ -641,7 +675,7 @@ mod tests {
         let n1 = NodeIndex::new(1);
         match topo.connect_nodes(n0, n1, &graph) {
             Ok(()) => panic!("Should have failed"),
-            Err(e) => assert_eq!(e, "Node not found in graph"),
+            Err(e) => assert_eq!(e, DynamicTopoSortError::InvalidNode { node: n0 }),
         }
     }
 
@@ -745,7 +779,7 @@ mod tests {
 
         let n3 = NodeIndex::new(3);
         match topo.remove_node(n3) {
-            Err(e) => assert_eq!(e, "Node not found in graph"),
+            Err(e) => assert_eq!(e, DynamicTopoSortError::InvalidNode { node: n3 }),
             _ => panic!("Should have failed"),
         }
     }
@@ -768,10 +802,7 @@ mod tests {
         assert_eq!(graph.output_neighbours(n1).collect::<Vec<_>>(), vec![n2]);
         assert!(is_valid_topological_order(&topo, &graph));
 
-        match topo.disconnect_nodes(n0, n2, &graph) {
-            Err(e) => assert_eq!(e, "Edge not found"),
-            _ => panic!("Should have failed"),
-        }
+        topo.disconnect_nodes(n0, n2, &graph).unwrap();
     }
 
     #[test]
@@ -882,12 +913,12 @@ mod tests {
         let n1 = NodeIndex::new(1);
 
         match checker.topo_sort.remove_node(n0) {
-            Err(e) => assert_eq!(e, "Node not found in graph"),
+            Err(e) => assert_eq!(e, DynamicTopoSortError::InvalidNode { node: n0 }),
             _ => panic!("Should have failed"),
         }
 
         match checker.topo_sort.disconnect_nodes(n0, n1, &graph) {
-            Err(e) => assert_eq!(e, "Node not found in graph"),
+            Err(e) => assert_eq!(e, DynamicTopoSortError::InvalidNode { node: n0 }),
             _ => panic!("Should have failed"),
         }
     }

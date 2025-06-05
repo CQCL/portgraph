@@ -211,7 +211,7 @@ impl Hierarchy {
         }
 
         self.get_mut(parent).children_count += 1;
-        let before_prev = replace(&mut self.get_mut(before).siblings[0], Some(node));
+        let before_prev = self.get_mut(before).siblings[0].replace(node);
 
         {
             let node_data = self.get_mut(node);
@@ -252,7 +252,7 @@ impl Hierarchy {
         }
 
         self.get_mut(parent).children_count += 1;
-        let after_next = replace(&mut self.get_mut(after).siblings[1], Some(node));
+        let after_next = self.get_mut(after).siblings[1].replace(node);
 
         {
             let node_data = self.get_mut(node);

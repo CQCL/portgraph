@@ -13,7 +13,7 @@
 mod iter;
 
 use delegate::delegate;
-use std::mem::{replace, take};
+use std::mem::take;
 use std::num::{NonZeroU16, NonZeroU32};
 use std::ops::Range;
 use thiserror::Error;
@@ -204,7 +204,7 @@ impl PortGraph {
         }
 
         // Add this slab to the free list.
-        self.port_link[ports.index()] = replace(ports_free, Some(ports));
+        self.port_link[ports.index()] = ports_free.replace(ports);
     }
 
     #[inline]

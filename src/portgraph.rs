@@ -15,9 +15,10 @@ mod iter;
 use delegate::delegate;
 use std::mem::take;
 use std::num::{NonZeroU16, NonZeroU32};
-use std::ops::Range;
+use std::ops::{Index, Range};
 use thiserror::Error;
 
+use crate::index::IndexType;
 use crate::view::{LinkMut, PortMut};
 use crate::{Direction, LinkView, NodeIndex, PortIndex, PortOffset, PortView};
 
@@ -31,33 +32,47 @@ pub use crate::portgraph::iter::*;
 
 /// An unlabelled port graph.
 ///
-/// A port graph consists of a collection of nodes identified by a [`NodeIndex`].
-/// Each node has an ordered sequence of input and output ports, identified by a [`PortIndex`] that is unique within the graph.
-/// To optimize for the most common use case, the number of input and output ports of a node must be specified when the node is created.
+/// A port graph consists of a collection of nodes identified by a
+/// [`NodeIndex`]. Each node has an ordered sequence of input and output ports,
+/// identified by a [`PortIndex`] that is unique within the graph. To optimize
+/// for the most common use case, the number of input and output ports of a node
+/// must be specified when the node is created.
 ///
-/// When a node and its associated ports are removed their indices will be reused on a best effort basis
-/// when a new node is added.
-/// The indices of unaffected nodes and ports remain stable.
-/// [`PortGraph::compact_nodes`] and [`PortGraph::compact_ports`] to eliminate fragmentation in the index space.
-#[cfg_attr(feature = "pyo3", pyclass)]
+/// When a node and its associated ports are removed their indices will be
+/// reused on a best effort basis when a new node is added. The indices of
+/// unaffected nodes and ports remain stable. [`PortGraph::compact_nodes`] and
+/// [`PortGraph::compact_ports`] to eliminate fragmentation in the index space.
+///
+/// # Generic Parameters
+///
+/// - `N`: The [`IndexType`] of the node index. This is expected to be a
+///   `NonZero<T>` type or similar that allows for null pointer optimizations.
+/// - `P`: The [`IndexType`] of the port index. This is expected to be a
+///   `NonZero<T>` type or similar that allows for null pointer optimizations.
+/// - `PO`: The [`IndexType`] of the port offset. Defaults to [`u16`].
+//#[cfg_attr(feature = "pyo3", pyclass)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[derive(Clone, PartialEq)]
-pub struct PortGraph {
+pub struct PortGraph<
+    N: IndexType,  // = NonZeroU32,
+    P: IndexType,  // = NonZeroU32,
+    PO: IndexType, // = NonZeroU16,
+> {
     /// Metadata for each node. Free slots form a linked list.
-    node_meta: Vec<NodeEntry>,
+    node_meta: Vec<NodeEntry<N, P, PO>>,
     /// Links from ports to other ports. Free ports slabs (fixed-length lists of
     /// ports) form a linked list, with the next slab index stored in the first
     /// port.
-    port_link: Vec<Option<PortIndex>>,
+    port_link: Vec<Option<PortIndex<P>>>,
     /// Metadata for each port. Ports of a node are stored contiguously, with
     /// incoming ports first.
     port_meta: Vec<PortEntry>,
     /// Index of the first free node slot in the free-node linked list embedded
     /// in `node_meta`.
-    node_free: Option<NodeIndex>,
+    node_free: Option<NodeIndex<N>>,
     /// List of free slabs of ports. Each i-th item is the index of the first
     /// slab of size `i+1` in the free-port linked list embedded in `port_link`.
-    port_free: Vec<Option<PortIndex>>,
+    port_free: Vec<Option<PortIndex<P>>>,
     /// Number of nodes in the graph.
     node_count: usize,
     /// Number of ports in the graph.
@@ -66,7 +81,7 @@ pub struct PortGraph {
     link_count: usize,
 }
 
-impl PortGraph {
+impl<N: IndexType, P: IndexType, PO: IndexType> PortGraph<N, P, PO> {
     /// Create a new empty [`PortGraph`].
     pub fn new() -> Self {
         Self {
@@ -96,7 +111,7 @@ impl PortGraph {
     }
 
     #[inline]
-    fn alloc_node(&mut self) -> NodeIndex {
+    fn alloc_node(&mut self) -> NodeIndex<N> {
         match self.node_free {
             Some(node) => {
                 let free_entry = self.node_meta[node.index()].free_entry().unwrap();
@@ -124,7 +139,7 @@ impl PortGraph {
         incoming: usize,
         outgoing: usize,
         extra_capacity: usize,
-    ) -> NodeMeta {
+    ) -> NodeMeta<P, PO> {
         let requested = incoming + outgoing + extra_capacity;
         if requested == 0 {
             return NodeMeta::default();
@@ -790,18 +805,18 @@ impl Default for PortGraph {
 /// Meta data stored for a valid node.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-struct NodeMeta {
+struct NodeMeta<P: IndexType, PO: IndexType> {
     /// The index of the first port in the port list.
     /// If the node has no ports, this will point to the index 0.
-    first_port: PortIndex,
+    first_port: PortIndex<P>,
     /// The number of incoming ports plus 1.
     /// We use the `NonZeroU16` here to ensure that `NodeEntry` is 8 bytes.
-    incoming: NonZeroU16,
+    incoming: PO,
     /// The number of outgoing ports.
-    outgoing: u16,
+    outgoing: PO,
     /// The port capacity allocated to this node. Changing the number of ports
     /// up to this capacity does not require reallocation.
-    capacity: u16,
+    capacity: PO,
 }
 
 impl NodeMeta {
@@ -914,23 +929,23 @@ impl Default for NodeMeta {
 /// Meta data stored for a node, which might be free.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-enum NodeEntry {
+enum NodeEntry<N: IndexType, P: IndexType, PO: IndexType> {
     /// No node is stored at this entry.
     /// Instead the entry forms a doubly-linked list of free nodes.
     #[cfg_attr(feature = "serde", serde(rename = "f",))]
-    Free(FreeNodeEntry),
+    Free(FreeNodeEntry<N>),
     /// A node is stored at this entry.
     ///
     /// This value allows for null-value optimization so that
     /// `size_of::<NodeEntry>() == size_of::<NodeMeta>()`.
     #[cfg_attr(feature = "serde", serde(rename = "n"))]
-    Node(NodeMeta),
+    Node(NodeMeta<P, PO>),
 }
 
-impl NodeEntry {
+impl<N: IndexType, P: IndexType, PO: IndexType> NodeEntry<N, P, PO> {
     /// Returns the free node list entry.
     #[inline]
-    pub fn free_entry(&self) -> Option<&FreeNodeEntry> {
+    pub fn free_entry(&self) -> Option<&FreeNodeEntry<N>> {
         match self {
             NodeEntry::Free(entry) => Some(entry),
             NodeEntry::Node(_) => None,
@@ -939,7 +954,7 @@ impl NodeEntry {
 
     /// Returns the free node list entry.
     #[inline]
-    pub fn free_entry_mut(&mut self) -> Option<&mut FreeNodeEntry> {
+    pub fn free_entry_mut(&mut self) -> Option<&mut FreeNodeEntry<N>> {
         match self {
             NodeEntry::Free(entry) => Some(entry),
             NodeEntry::Node(_) => None,
@@ -948,7 +963,7 @@ impl NodeEntry {
 
     /// Create a new free node entry
     #[inline]
-    pub fn new_free(prev: Option<NodeIndex>, next: Option<NodeIndex>) -> Self {
+    pub fn new_free(prev: Option<NodeIndex<N>>, next: Option<NodeIndex<N>>) -> Self {
         NodeEntry::Free(FreeNodeEntry { prev, next })
     }
 }
@@ -958,11 +973,11 @@ impl NodeEntry {
 /// The entry forms a doubly-linked list of free nodes.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-struct FreeNodeEntry {
+struct FreeNodeEntry<N: IndexType> {
     /// The previous free node.
-    prev: Option<NodeIndex>,
+    prev: Option<NodeIndex<N>>,
     /// The next free node.
-    next: Option<NodeIndex>,
+    next: Option<NodeIndex<N>>,
 }
 
 impl std::fmt::Debug for PortGraph {
@@ -1012,12 +1027,12 @@ mod debug {
                 write!(fmt, "[]")?;
             } else if self.0.len() == 1 {
                 write!(fmt, "[")?;
-                PortIndex::new(self.0.start).fmt(fmt)?;
+                PortIndex::<u16>::new(self.0.start).fmt(fmt)?;
                 write!(fmt, "]")?;
             } else {
-                PortIndex::new(self.0.start).fmt(fmt)?;
+                PortIndex::<u16>::new(self.0.start).fmt(fmt)?;
                 write!(fmt, "..")?;
-                PortIndex::new(self.0.end).fmt(fmt)?;
+                PortIndex::<u16>::new(self.0.end).fmt(fmt)?;
             }
             Ok(())
         }

@@ -112,10 +112,10 @@ fn graph_from_edges<G: PortMut + LinkMut + Default>(edges: &[Edge]) -> G {
     let mut out_port_counts = BTreeMap::new();
     let mut add_port = |v, p| {
         let (max, port) = match p {
-            PortOffset::Incoming(p) => (in_port_counts.entry(v).or_insert(0), p),
-            PortOffset::Outgoing(p) => (out_port_counts.entry(v).or_insert(0), p),
+            PortOffset::Incoming(_) => (in_port_counts.entry(v).or_insert(0), p.index()),
+            PortOffset::Outgoing(_) => (out_port_counts.entry(v).or_insert(0), p.index()),
         };
-        *max = (*max).max(port as usize + 1);
+        *max = (*max).max(port + 1);
     };
     for &Edge {
         src_v,

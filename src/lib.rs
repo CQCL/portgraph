@@ -311,14 +311,19 @@ pub struct IndexError {
     index: usize,
 }
 
+#[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize), serde(transparent))]
+/// Index of a port offset within a node.
+pub struct PortOffsetIndex(u16);
+
 /// Port offset in a node
 #[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub enum PortOffset {
     /// Input to a node.
-    Incoming(u16),
+    Incoming(PortOffsetIndex),
     /// Output from a node.
-    Outgoing(u16),
+    Outgoing(PortOffsetIndex),
 }
 
 impl PortOffset {
@@ -334,21 +339,21 @@ impl PortOffset {
     /// Creates a new incoming port offset.
     #[inline(always)]
     pub fn new_incoming(offset: usize) -> Self {
-        PortOffset::Incoming(
+        PortOffset::Incoming(PortOffsetIndex(
             offset
                 .try_into()
                 .expect("The offset must be less than 2^16."),
-        )
+        ))
     }
 
     /// Creates a new outgoing port offset.
     #[inline(always)]
     pub fn new_outgoing(offset: usize) -> Self {
-        PortOffset::Outgoing(
+        PortOffset::Outgoing(PortOffsetIndex(
             offset
                 .try_into()
                 .expect("The offset must be less than 2^16."),
-        )
+        ))
     }
 
     /// Returns the direction of the port.
@@ -364,8 +369,8 @@ impl PortOffset {
     #[inline(always)]
     pub fn index(self) -> usize {
         match self {
-            PortOffset::Incoming(offset) => offset as usize,
-            PortOffset::Outgoing(offset) => offset as usize,
+            PortOffset::Incoming(offset) => offset.0 as usize,
+            PortOffset::Outgoing(offset) => offset.0 as usize,
         }
     }
 
@@ -391,8 +396,8 @@ impl Default for PortOffset {
 impl std::fmt::Debug for PortOffset {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PortOffset::Incoming(idx) => write!(f, "Incoming({})", idx),
-            PortOffset::Outgoing(idx) => write!(f, "Outgoing({})", idx),
+            PortOffset::Incoming(idx) => write!(f, "Incoming({})", idx.0),
+            PortOffset::Outgoing(idx) => write!(f, "Outgoing({})", idx.0),
         }
     }
 }
@@ -403,8 +408,8 @@ mod tests {
 
     #[test]
     fn test_opposite() {
-        let incoming = PortOffset::Incoming(5);
-        let outgoing = PortOffset::Outgoing(5);
+        let incoming = PortOffset::new_incoming(5);
+        let outgoing = PortOffset::new_outgoing(5);
 
         assert_eq!(incoming.opposite(), outgoing);
         assert_eq!(outgoing.opposite(), incoming);

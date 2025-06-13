@@ -4,7 +4,9 @@
 //! returns strategies that generate random portgraphs.
 use std::collections::{BTreeMap, HashSet};
 
-use crate::{LinkMut, MultiPortGraph, NodeIndex, PortGraph, PortMut, PortOffset, PortView};
+use crate::{
+    Direction, LinkMut, MultiPortGraph, NodeIndex, PortGraph, PortMut, PortOffset, PortView,
+};
 use proptest::prelude::*;
 
 #[derive(Debug, Clone, Copy)]
@@ -110,10 +112,10 @@ fn graph_from_edges<G: PortMut + LinkMut + Default>(edges: &[Edge]) -> G {
     let mut map_vertices = BTreeMap::new();
     let mut in_port_counts = BTreeMap::new();
     let mut out_port_counts = BTreeMap::new();
-    let mut add_port = |v, p| {
-        let (max, port) = match p {
-            PortOffset::Incoming(_) => (in_port_counts.entry(v).or_insert(0), p.index()),
-            PortOffset::Outgoing(_) => (out_port_counts.entry(v).or_insert(0), p.index()),
+    let mut add_port = |v, p: PortOffset| {
+        let (max, port) = match p.direction() {
+            Direction::Incoming => (in_port_counts.entry(v).or_insert(0), p.index()),
+            Direction::Outgoing => (out_port_counts.entry(v).or_insert(0), p.index()),
         };
         *max = (*max).max(port + 1);
     };

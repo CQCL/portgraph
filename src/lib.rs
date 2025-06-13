@@ -94,6 +94,7 @@ pub use crate::weights::Weights;
 /// Direction of a port.
 #[cfg_attr(feature = "pyo3", pyclass(eq, eq_int))]
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Eq, Ord, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub enum Direction {
     /// Input to a node.
     #[default]
@@ -314,11 +315,9 @@ pub struct IndexError {
 /// Port offset in a node
 #[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub enum PortOffset {
-    /// Input to a node.
-    Incoming(u16),
-    /// Output from a node.
-    Outgoing(u16),
+pub struct PortOffset {
+    index: u16,
+    direction: Direction,
 }
 
 impl PortOffset {
@@ -334,39 +333,35 @@ impl PortOffset {
     /// Creates a new incoming port offset.
     #[inline(always)]
     pub fn new_incoming(offset: usize) -> Self {
-        PortOffset::Incoming(
-            offset
+        Self {
+            index: offset
                 .try_into()
                 .expect("The offset must be less than 2^16."),
-        )
+            direction: Direction::Incoming,
+        }
     }
 
     /// Creates a new outgoing port offset.
     #[inline(always)]
     pub fn new_outgoing(offset: usize) -> Self {
-        PortOffset::Outgoing(
-            offset
+        Self {
+            index: offset
                 .try_into()
                 .expect("The offset must be less than 2^16."),
-        )
+            direction: Direction::Outgoing,
+        }
     }
 
     /// Returns the direction of the port.
     #[inline(always)]
     pub fn direction(self) -> Direction {
-        match self {
-            PortOffset::Incoming(_) => Direction::Incoming,
-            PortOffset::Outgoing(_) => Direction::Outgoing,
-        }
+        self.direction
     }
 
     /// Returns the offset of the port.
     #[inline(always)]
     pub fn index(self) -> usize {
-        match self {
-            PortOffset::Incoming(offset) => offset as usize,
-            PortOffset::Outgoing(offset) => offset as usize,
-        }
+        self.index as usize
     }
 
     /// Returns the opposite port offset.
@@ -375,9 +370,9 @@ impl PortOffset {
     /// vice versa.
     #[inline(always)]
     pub fn opposite(&self) -> Self {
-        match *self {
-            PortOffset::Incoming(idx) => PortOffset::Outgoing(idx),
-            PortOffset::Outgoing(idx) => PortOffset::Incoming(idx),
+        Self {
+            index: self.index,
+            direction: self.direction.reverse(),
         }
     }
 }
@@ -390,9 +385,9 @@ impl Default for PortOffset {
 
 impl std::fmt::Debug for PortOffset {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PortOffset::Incoming(idx) => write!(f, "Incoming({})", idx),
-            PortOffset::Outgoing(idx) => write!(f, "Outgoing({})", idx),
+        match self.direction {
+            Direction::Incoming => write!(f, "Incoming({})", self.index),
+            Direction::Outgoing => write!(f, "Outgoing({})", self.index),
         }
     }
 }
@@ -403,8 +398,8 @@ mod tests {
 
     #[test]
     fn test_opposite() {
-        let incoming = PortOffset::Incoming(5);
-        let outgoing = PortOffset::Outgoing(5);
+        let incoming = PortOffset::new_incoming(5);
+        let outgoing = PortOffset::new_outgoing(5);
 
         assert_eq!(incoming.opposite(), outgoing);
         assert_eq!(outgoing.opposite(), incoming);

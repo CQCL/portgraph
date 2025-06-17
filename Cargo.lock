@@ -648,7 +648,7 @@ checksum = "f84267b20a16ea918e43c6a88433c2d54fa145c92a811b5b047ccbe153674483"
 
 [[package]]
 name = "portgraph"
-version = "0.14.1"
+version = "0.15.0"
 dependencies = [
  "bitvec",
  "criterion",

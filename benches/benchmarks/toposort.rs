@@ -1,5 +1,3 @@
-#![allow(clippy::unit_arg)] // Required for black_box uses
-
 use criterion::{criterion_group, Criterion};
 use portgraph::{algorithms, Direction, NodeIndex, PortGraph};
 

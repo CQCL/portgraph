@@ -1,6 +1,4 @@
-#![allow(clippy::unit_arg)] // Required for black_box uses
-
-use criterion::{black_box, criterion_group, Criterion};
+use criterion::{criterion_group, Criterion};
 use portgraph::{Hierarchy, NodeIndex, PortGraph};
 
 use crate::helpers::*;
@@ -46,7 +44,7 @@ impl SizedBenchmark for TraverseHierarchy {
     fn run(&self) -> impl Sized {
         let mut stack = vec![self.root];
         while let Some(node) = stack.pop() {
-            black_box(node);
+            std::hint::black_box(node);
             for child in self.hierarchy.children(node) {
                 stack.push(child);
             }

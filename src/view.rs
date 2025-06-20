@@ -39,17 +39,14 @@ pub trait PortView {
 
     /// Returns the index of a `port` within its node's port list.
     #[must_use]
-    fn port_offset(
-        &self,
-        port: impl Into<PortIndex<Self::Port>>,
-    ) -> Option<PortOffset<Self::Offset>>;
+    fn port_offset(&self, port: impl Into<PortIndex<Self::Port>>) -> Option<PortOffset>;
 
     /// Returns the port index for a given node and offset.
     #[must_use]
     fn port_index(
         &self,
         node: NodeIndex<Self::Node>,
-        offset: PortOffset<Self::Offset>,
+        offset: PortOffset,
     ) -> Option<PortIndex<Self::Port>>;
 
     /// Iterates over all the ports of the `node` in the given `direction`.
@@ -142,14 +139,14 @@ pub trait PortView {
         &self,
         node: NodeIndex<Self::Node>,
         direction: Direction,
-    ) -> impl Iterator<Item = PortOffset<Self::Offset>> + Clone;
+    ) -> impl Iterator<Item = PortOffset> + Clone;
 
     /// Iterates over the input and output port offsets of the `node` in sequence.
     #[must_use]
     fn all_port_offsets(
         &self,
         node: NodeIndex<Self::Node>,
-    ) -> impl Iterator<Item = PortOffset<Self::Offset>> + Clone;
+    ) -> impl Iterator<Item = PortOffset> + Clone;
 
     /// Iterates over all the input port offsets of the `node`.
     ///
@@ -159,7 +156,7 @@ pub trait PortView {
     fn input_offsets(
         &self,
         node: NodeIndex<Self::Node>,
-    ) -> impl Iterator<Item = PortOffset<Self::Offset>> + Clone {
+    ) -> impl Iterator<Item = PortOffset> + Clone {
         self.port_offsets(node, Direction::Incoming)
     }
 
@@ -171,7 +168,7 @@ pub trait PortView {
     fn output_offsets(
         &self,
         node: NodeIndex<Self::Node>,
-    ) -> impl Iterator<Item = PortOffset<Self::Offset>> + Clone {
+    ) -> impl Iterator<Item = PortOffset> + Clone {
         self.port_offsets(node, Direction::Outgoing)
     }
 
@@ -585,9 +582,9 @@ pub trait LinkMut: LinkView + PortMut {
     fn link_offsets(
         &mut self,
         node_a: NodeIndex<Self::Node>,
-        offset_a: PortOffset<Self::Offset>,
+        offset_a: PortOffset,
         node_b: NodeIndex<Self::Node>,
-        offset_b: PortOffset<Self::Offset>,
+        offset_b: PortOffset,
     ) -> Result<
         (Self::LinkEndpoint, Self::LinkEndpoint),
         LinkError<Self::Node, Self::Port, Self::Offset>,

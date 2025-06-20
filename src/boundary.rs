@@ -6,18 +6,17 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use itertools::Itertools;
 
 use crate::algorithms::TopoSort;
-use crate::index::IndexType;
 use crate::{Direction, LinkView, NodeIndex, PortIndex, PortView};
 
 /// A port boundary in a graph.
 ///
 /// Defined from a set of incoming and outgoing ports.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Boundary<P: IndexType> {
+pub struct Boundary<Port: PortIndex> {
     /// The ordered list of incoming ports in the boundary.
-    inputs: Vec<PortIndex<P>>,
+    inputs: Vec<Port>,
     /// The ordered list of outgoing ports in the boundary.
-    outputs: Vec<PortIndex<P>>,
+    outputs: Vec<Port>,
 }
 
 /// Boundary port ID.
@@ -35,19 +34,19 @@ pub struct BoundaryPort {
 }
 
 /// Trait for graph structures that define a boundary of input and output ports.
-pub trait HasBoundary<P: IndexType> {
+pub trait HasBoundary<Port: PortIndex> {
     /// Returns the boundary of the node.
-    fn port_boundary(&self) -> Cow<'_, Boundary<P>>;
+    fn port_boundary(&self) -> Cow<'_, Boundary<Port>>;
 }
 
-impl<P: IndexType> Boundary<P> {
+impl<Port: PortIndex> Boundary<Port> {
     /// Creates a new boundary from the given input and output ports.
     ///
     /// Queries the direction of each port to split them into inputs and outputs.
     /// For a version that doesn't borrow the graph, use [`Boundary::new`].
     pub fn from_ports(
-        graph: &impl PortView<Port = P>,
-        ports: impl IntoIterator<Item = PortIndex<P>>,
+        graph: &impl PortView<Port = Port>,
+        ports: impl IntoIterator<Item = Port>,
     ) -> Self {
         let (inputs, outputs): (Vec<_>, Vec<_>) = ports.into_iter().partition_map(|p| match graph
             .port_direction(p)
@@ -69,8 +68,8 @@ impl<P: IndexType> Boundary<P> {
     ///
     /// For a safe version, use [`Boundary::from_ports`].
     pub fn new(
-        inputs: impl IntoIterator<Item = PortIndex<P>>,
-        outputs: impl IntoIterator<Item = PortIndex<P>>,
+        inputs: impl IntoIterator<Item = Port>,
+        outputs: impl IntoIterator<Item = Port>,
     ) -> Self {
         let inputs = inputs.into_iter().collect();
         let outputs = outputs.into_iter().collect();
@@ -83,7 +82,7 @@ impl<P: IndexType> Boundary<P> {
     }
 
     /// Returns the [`BoundaryPort`] corresponding to a port index.
-    pub fn find_port(&self, port: PortIndex<P>, direction: Direction) -> BoundaryPort {
+    pub fn find_port(&self, port: Port, direction: Direction) -> BoundaryPort {
         let ports = match direction {
             Direction::Incoming => &self.inputs,
             Direction::Outgoing => &self.outputs,
@@ -120,7 +119,7 @@ impl<P: IndexType> Boundary<P> {
     }
 
     /// Returns the [`PortIndex`] corresponding to a [`BoundaryPort`] in this boundary.
-    pub fn port_index(&self, port: &BoundaryPort) -> PortIndex<P> {
+    pub fn port_index(&self, port: &BoundaryPort) -> Port {
         match port.direction {
             Direction::Incoming => self.inputs[port.index],
             Direction::Outgoing => self.outputs[port.index],
@@ -132,7 +131,7 @@ impl<P: IndexType> Boundary<P> {
     ///
     /// When two boundaries are compatible, [`BoundaryPort`]s that are valid in
     /// one boundary are also valid in the other boundary.
-    pub fn is_compatible(&self, other: &Boundary<impl IndexType>) -> bool {
+    pub fn is_compatible(&self, other: &Boundary<impl PortIndex>) -> bool {
         self.inputs.len() == other.inputs.len() && self.outputs.len() == other.outputs.len()
     }
 
@@ -150,13 +149,13 @@ impl<P: IndexType> Boundary<P> {
     /// In the worse case, the complexity of this operation is `O(e log(n) +
     /// k*n)`, where `e` is the number of links in the `graph`, `n` is the
     /// number of nodes, and `k` is the number of ports in the boundary.
-    pub fn port_ordering(&self, graph: &impl LinkView<Port = P>) -> PortOrdering {
-        let boundary_ports: HashSet<PortIndex<P>> =
+    pub fn port_ordering(&self, graph: &impl LinkView<Port = Port>) -> PortOrdering {
+        let boundary_ports: HashSet<Port> =
             self.inputs.iter().chain(&self.outputs).copied().collect();
 
         // Maps between the input/output ports in the boundary and the nodes they belong to.
-        let mut input_nodes: BTreeMap<NodeIndex<_>, Vec<PortIndex<P>>> = BTreeMap::new();
-        let mut output_nodes: BTreeMap<NodeIndex<_>, Vec<PortIndex<P>>> = BTreeMap::new();
+        let mut input_nodes: BTreeMap<NodeIndex, Vec<Port>> = BTreeMap::new();
+        let mut output_nodes: BTreeMap<NodeIndex, Vec<Port>> = BTreeMap::new();
         for &port in self.inputs.iter() {
             let node = graph.port_node(port).unwrap();
             input_nodes.entry(node).or_default().push(port);
@@ -179,8 +178,8 @@ impl<P: IndexType> Boundary<P> {
                 .all(|p| boundary_ports.contains(&p) || graph.port_links(p).count() == 0)
         });
 
-        let mut reaching: BTreeMap<NodeIndex<_>, (usize, HashSet<PortIndex<P>>)> = BTreeMap::new();
-        let mut topo = TopoSort::<_, HashSet<PortIndex<P>>>::new(
+        let mut reaching: BTreeMap<NodeIndex, (usize, HashSet<Port>)> = BTreeMap::new();
+        let mut topo = TopoSort::<_, HashSet<Port>>::new(
             graph,
             source_nodes,
             Direction::Outgoing,
@@ -221,7 +220,7 @@ impl<P: IndexType> Boundary<P> {
 
             // Collect the reaching ports, plus any ports in the node itself.
             // Removes the node from the input_nodes map.
-            let mut reaching_ports: HashSet<PortIndex<P>> =
+            let mut reaching_ports: HashSet<Port> =
                 input_nodes.remove(&node).into_iter().flatten().collect();
 
             // Add the reaching ports from the input neighbours.
@@ -282,19 +281,19 @@ impl<P: IndexType> Boundary<P> {
 
     /// Returns the input port indices in the boundary.
     #[inline]
-    pub fn input_indices(&self) -> &[PortIndex<P>] {
+    pub fn input_indices(&self) -> &[Port] {
         &self.inputs
     }
 
     /// Returns the output port indices in the boundary.
     #[inline]
-    pub fn output_indices(&self) -> &[PortIndex<P>] {
+    pub fn output_indices(&self) -> &[Port] {
         &self.outputs
     }
 
     /// Iterate over the [`PortIndex`]es in the boundary. The iterator first
     /// yields the input ports, then the output ports.
-    pub fn port_indices(&self) -> impl Iterator<Item = PortIndex<P>> + '_ {
+    pub fn port_indices(&self) -> impl Iterator<Item = Port> + '_ {
         self.inputs
             .iter()
             .copied()

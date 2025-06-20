@@ -17,7 +17,6 @@ use std::mem::take;
 use std::ops::{Index, Range};
 use thiserror::Error;
 
-use crate::index::IndexType;
 use crate::view::{LinkMut, PortMut};
 use crate::{Direction, LinkView, NodeIndex, PortIndex, PortOffset, PortView};
 
@@ -44,34 +43,35 @@ pub use crate::portgraph::iter::*;
 ///
 /// # Generic Parameters
 ///
-/// - `N`: The [`IndexType`] of the node index. This is expected to be a
+/// - `Node`: The internal [`NodeIndex`] type. It is recommended to use a
 ///   `NonZero<T>` type or similar that allows for null pointer optimizations.
-/// - `P`: The [`IndexType`] of the port index. This is expected to be a
+/// - `Port`: The internal [`PortIndex`] type. It is recommended to use a
 ///   `NonZero<T>` type or similar that allows for null pointer optimizations.
-/// - `PO`: The [`IndexType`] of the port offset. Defaults to [`u16`].
+/// - `Offset`: The internal [`PortOffset`] type. It is recommended to use a
+///   `NonZero<T>` type or similar that allows for null pointer optimizations.
 //#[cfg_attr(feature = "pyo3", pyclass)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[derive(Clone, PartialEq)]
 pub struct PortGraph<
-    N: IndexType, // = NonZeroU32, TODO: Uncomment once we're sure everything has been implemented generically
-    P: IndexType, // = NonZeroU32,
-    PO: IndexType, // = NonZeroU16,
+    Node: NodeIndex, // = NonZeroU32, TODO: Uncomment once we're sure everything has been implemented generically
+    Port: PortIndex, // = NonZeroU32,
+    Offset: PortOffset, // = NonZeroU16,
 > {
     /// Metadata for each node. Free slots form a linked list.
-    node_meta: Vec<NodeEntry<N, P, PO>>,
+    node_meta: Vec<NodeEntry<Node, Port, Offset>>,
     /// Links from ports to other ports. Free ports slabs (fixed-length lists of
     /// ports) form a linked list, with the next slab index stored in the first
     /// port.
-    port_link: Vec<Option<PortIndex<P>>>,
+    port_link: Vec<Option<Port>>,
     /// Metadata for each port. Ports of a node are stored contiguously, with
     /// incoming ports first.
-    port_meta: Vec<PortEntry<N>>,
+    port_meta: Vec<PortEntry<Node>>,
     /// Index of the first free node slot in the free-node linked list embedded
     /// in `node_meta`.
-    node_free: Option<NodeIndex<N>>,
+    node_free: Option<Node>,
     /// List of free slabs of ports. Each i-th item is the index of the first
     /// slab of size `i+1` in the free-port linked list embedded in `port_link`.
-    port_free: Vec<Option<PortIndex<P>>>,
+    port_free: Vec<Option<Port>>,
     /// Number of nodes in the graph.
     node_count: usize,
     /// Number of ports in the graph.
@@ -80,7 +80,7 @@ pub struct PortGraph<
     link_count: usize,
 }
 
-impl<N: IndexType, P: IndexType, PO: IndexType> PortGraph<N, P, PO> {
+impl<Node: NodeIndex, Port: PortIndex, Offset: PortOffset> PortGraph<Node, Port, Offset> {
     /// Create a new empty [`PortGraph`].
     pub fn new() -> Self {
         Self {
@@ -110,13 +110,15 @@ impl<N: IndexType, P: IndexType, PO: IndexType> PortGraph<N, P, PO> {
     }
 
     #[inline]
-    fn alloc_node(&mut self) -> NodeIndex<N> {
+    fn alloc_node(&mut self) -> Node {
         match self.node_free {
             Some(node) => {
-                let free_entry = self.node_meta[node.index()].free_entry().unwrap();
+                let free_entry = self.node_meta[node.node_as_usize()].free_entry().unwrap();
                 self.node_free = free_entry.next;
                 if let Some(next) = free_entry.next {
-                    let next_entry = self.node_meta[next.index()].free_entry_mut().unwrap();
+                    let next_entry = self.node_meta[next.node_as_usize()]
+                        .free_entry_mut()
+                        .unwrap();
                     next_entry.prev = None;
                 }
                 node
@@ -134,11 +136,11 @@ impl<N: IndexType, P: IndexType, PO: IndexType> PortGraph<N, P, PO> {
     #[inline]
     fn alloc_ports(
         &mut self,
-        node: NodeIndex<N>,
+        node: Node,
         incoming: usize,
         outgoing: usize,
         extra_capacity: usize,
-    ) -> NodeMeta<P, PO> {
+    ) -> NodeMeta<Port, Offset> {
         let requested = incoming + outgoing + extra_capacity;
         if requested == 0 {
             return NodeMeta::default();
@@ -152,20 +154,23 @@ impl<N: IndexType, P: IndexType, PO: IndexType> PortGraph<N, P, PO> {
                 // TODO: Over-allocate if there are similarly-sized free slabs.
                 let capacity = requested;
 
-                let free_next = take(&mut self.port_link[port.index()]);
+                let free_next = take(&mut self.port_link[port.port_as_usize()]);
                 self.port_free[requested - 1] = free_next;
 
-                let node_meta = NodeMeta::new(port, PO::new(incoming), PO::new(outgoing), capacity);
+                let node_meta = NodeMeta::new(port, incoming, outgoing, capacity);
 
                 let incoming = node_meta.incoming_ports();
                 let outgoing = node_meta.outgoing_ports();
                 let unused = node_meta.unused_ports();
 
-                self.port_meta[incoming.start.index()..incoming.end.index()].fill(meta_incoming);
-                self.port_meta[outgoing.start.index()..outgoing.end.index()].fill(meta_outgoing);
-                self.port_meta[unused.start.index()..unused.end.index()].fill(meta_empty);
+                self.port_meta[incoming.start.port_as_usize()..incoming.end.port_as_usize()]
+                    .fill(meta_incoming);
+                self.port_meta[outgoing.start.port_as_usize()..outgoing.end.port_as_usize()]
+                    .fill(meta_outgoing);
+                self.port_meta[unused.start.port_as_usize()..unused.end.port_as_usize()]
+                    .fill(meta_empty);
 
-                self.port_link[port.index()..port.index() + capacity].fill(None);
+                self.port_link[port.port_as_usize()..port.port_as_usize() + capacity].fill(None);
 
                 node_meta
             }
@@ -183,18 +188,20 @@ impl<N: IndexType, P: IndexType, PO: IndexType> PortGraph<N, P, PO> {
 
                 self.port_link.resize(old_len + capacity, None);
 
-                NodeMeta::new(port, PO::new(incoming), PO::new(outgoing), capacity)
+                NodeMeta::new(port, incoming, outgoing, capacity)
             }
         }
     }
 
     #[inline]
-    fn free_node(&mut self, node: NodeIndex<N>) {
+    fn free_node(&mut self, node: Node) {
         if let Some(node_free) = self.node_free {
-            let free_list = self.node_meta[node_free.index()].free_entry_mut().unwrap();
+            let free_list = self.node_meta[node_free.node_as_usize()]
+                .free_entry_mut()
+                .unwrap();
             free_list.prev = Some(node);
         }
-        self.node_meta[node.index()] = NodeEntry::new_free(None, self.node_free);
+        self.node_meta[node.node_as_usize()] = NodeEntry::new_free(None, self.node_free);
         self.node_free = Some(node);
     }
 
@@ -202,7 +209,7 @@ impl<N: IndexType, P: IndexType, PO: IndexType> PortGraph<N, P, PO> {
     ///
     /// Disconnects all links and adds the slab to the free port list.
     #[inline]
-    fn free_ports(&mut self, ports: PortIndex<P>, size: usize) {
+    fn free_ports(&mut self, ports: Port, size: usize) {
         if size > self.port_free.len() {
             self.port_free.resize(size, None);
         }
@@ -212,22 +219,22 @@ impl<N: IndexType, P: IndexType, PO: IndexType> PortGraph<N, P, PO> {
 
         let ports_free = &mut self.port_free[size - 1];
 
-        for i in ports.index()..ports.index() + size {
+        for i in ports.port_as_usize()..ports.port_as_usize() + size {
             self.port_meta[i] = PortEntry::Free;
 
             if let Some(link) = self.port_link[i].take() {
-                self.port_link[link.index()] = None;
+                self.port_link[link.port_as_usize()] = None;
                 self.link_count -= 1;
             }
         }
 
         // Add this slab to the free list.
-        self.port_link[ports.index()] = ports_free.replace(ports);
+        self.port_link[ports.port_as_usize()] = ports_free.replace(ports);
     }
 
     #[inline]
-    fn node_meta_valid(&self, node: NodeIndex<N>) -> Option<NodeMeta<P, PO>> {
-        match self.node_meta.get(node.index()) {
+    fn node_meta_valid(&self, node: Node) -> Option<NodeMeta<Port, Offset>> {
+        match self.node_meta.get(node.node_as_usize()) {
             Some(NodeEntry::Node(node_meta)) => Some(*node_meta),
             _ => None,
         }
@@ -235,8 +242,8 @@ impl<N: IndexType, P: IndexType, PO: IndexType> PortGraph<N, P, PO> {
 
     #[inline]
     #[must_use]
-    fn port_meta_valid(&self, port: PortIndex<P>) -> Option<PortMeta<N>> {
-        match self.port_meta.get(port.index()) {
+    fn port_meta_valid(&self, port: Port) -> Option<PortMeta<Node>> {
+        match self.port_meta.get(port.port_as_usize()) {
             Some(PortEntry::Port(port_meta)) => Some(*port_meta),
             _ => None,
         }
@@ -257,18 +264,18 @@ impl<N: IndexType, P: IndexType, PO: IndexType> PortGraph<N, P, PO> {
     /// If `incoming + outgoing` is more than the allocated port capacity.
     fn resize_ports_inplace<F>(
         &mut self,
-        node: NodeIndex<N>,
+        node: Node,
         incoming: usize,
         outgoing: usize,
         mut rekey: F,
     ) where
-        F: FnMut(PortIndex<P>, PortOperation<P>),
+        F: FnMut(Port, PortOperation<Port>),
     {
         let node_meta = self.node_meta_valid(node).expect("Node must be valid");
         let new_meta = NodeMeta::new(
             node_meta.first_port(),
-            PO::new(incoming),
-            PO::new(outgoing),
+            incoming,
+            outgoing,
             node_meta.capacity(),
         );
 
@@ -450,7 +457,9 @@ impl PortView for PortGraph {
     }
 }
 
-impl<N: IndexType, P: IndexType, PO: IndexType> PortMut for PortGraph<N, P, PO> {
+impl<Node: NodeIndex, Port: PortIndex, Offset: PortOffset> PortMut
+    for PortGraph<Node, Port, Offset>
+{
     fn add_node(&mut self, incoming: usize, outgoing: usize) -> NodeIndex {
         assert!(
             incoming <= NodeMeta::MAX_INCOMING,
@@ -589,7 +598,7 @@ impl<N: IndexType, P: IndexType, PO: IndexType> PortMut for PortGraph<N, P, PO> 
 
     fn compact_nodes<F>(&mut self, mut rekey: F)
     where
-        F: FnMut(NodeIndex<N>, NodeIndex<N>),
+        F: FnMut(Node, Node),
     {
         let mut old_index = 0;
         let mut new_index = 0;
@@ -807,62 +816,75 @@ impl Default for PortGraph {
 
 /// Meta data stored for a valid node.
 ///
-/// The port index type PO should ideally be a `NonZero` type to allow for
+/// The port index type Offset should ideally be a `NonZero` type to allow for
 /// null pointer optimizations.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-struct NodeMeta<P: IndexType, PO: IndexType> {
+struct NodeMeta<Port: PortIndex, Offset: PortOffset> {
     /// The index of the first port in the port list.
     /// If the node has no ports, this will point to the index 0.
-    first_port: PortIndex<P>,
+    first_port: Port,
     /// The number of incoming ports.
-    incoming: PO,
+    incoming: Offset::OffsetCountTy,
     /// The number of outgoing ports.
-    outgoing: PO,
+    outgoing: Offset::OffsetCountTy,
     /// The port capacity allocated to this node. Changing the number of ports
     /// up to this capacity does not require reallocation.
     capacity: usize,
 }
 
-impl<P: IndexType, PO: IndexType> NodeMeta<P, PO> {
+impl<Port: PortIndex, Offset: PortOffset> NodeMeta<Port, Offset> {
     /// The maximum number of incoming ports for a node.
-    const MAX_INCOMING: usize = PO::MAX;
+    const MAX_INCOMING: usize = Offset::MAX_OFFSET;
     /// The maximum number of outgoing ports for a node.
-    const MAX_OUTGOING: usize = PO::MAX;
+    const MAX_OUTGOING: usize = Offset::MAX_OFFSET;
 
     #[inline]
-    pub fn new(first_port: PortIndex<P>, incoming: PO, outgoing: PO, capacity: usize) -> Self {
-        assert!(incoming.get() <= Self::MAX_INCOMING);
-        assert!(outgoing.get() <= Self::MAX_OUTGOING);
-        assert!(incoming.get().saturating_add(outgoing.get()) <= capacity.get());
-        assert!(capacity.get() > 0 || first_port.index() == 0);
+    pub fn new(first_port: Port, incoming: usize, outgoing: usize, capacity: usize) -> Self {
+        assert!(
+            incoming <= Self::MAX_INCOMING,
+            "Incoming port count exceeds maximum."
+        );
+        assert!(
+            outgoing <= Self::MAX_OUTGOING,
+            "Outgoing port count exceeds maximum."
+        );
+        assert!(
+            incoming.checked_add(outgoing).is_some(),
+            "Total port count exceeds maximum."
+        );
+        assert!(
+            incoming + outgoing <= capacity,
+            "Total port count exceeds allocated capacity."
+        );
+        debug_assert!(capacity > 0 || first_port.port_as_usize() == 0);
         Self {
             first_port,
-            incoming,
-            outgoing,
+            incoming: Offset::port_offset_count(incoming),
+            outgoing: Offset::port_offset_count(outgoing),
             capacity,
         }
     }
 
     #[inline]
-    pub fn first_port(&self) -> PortIndex<P> {
+    pub fn first_port(&self) -> Port {
         self.first_port
     }
 
     /// Returns the number of incoming ports.
     #[inline]
-    pub fn incoming(&self) -> PO {
-        self.incoming
+    pub fn incoming(&self) -> usize {
+        Offset::port_offset_count_as_usize(&self.incoming)
     }
 
     /// Returns the number of outgoing ports.
     #[inline]
-    pub fn outgoing(&self) -> PO {
-        self.outgoing
+    pub fn outgoing(&self) -> usize {
+        Offset::port_offset_count_as_usize(&self.outgoing)
     }
 
     /// Returns the number of ports in a given direction.
-    pub fn num_ports(&self, dir: Direction) -> PO {
+    pub fn num_ports(&self, dir: Direction) -> usize {
         match dir {
             Direction::Incoming => self.incoming(),
             Direction::Outgoing => self.outgoing(),
@@ -872,7 +894,7 @@ impl<P: IndexType, PO: IndexType> NodeMeta<P, PO> {
     /// Returns the total number ports.
     #[inline]
     pub fn port_count(&self) -> usize {
-        self.outgoing.get() + self.incoming().get()
+        self.outgoing() + self.incoming()
     }
 
     /// Returns the allocated port capacity for this node.
@@ -883,15 +905,15 @@ impl<P: IndexType, PO: IndexType> NodeMeta<P, PO> {
 
     /// Returns a range over the port indices of this node.
     #[inline]
-    pub fn all_ports(&self) -> Range<PortIndex<P>> {
+    pub fn all_ports(&self) -> Range<Port> {
         let start = self.first_port;
-        let end = PortIndex::new(start.index() + self.incoming().get() + self.outgoing().get());
+        let end = PortIndex::new(start.port_as_usize() + self.incoming() + self.outgoing());
         start..end
     }
 
     /// Returns a range over the port indices of this node in a given direction.
     #[inline]
-    pub fn ports(&self, direction: Direction) -> Range<PortIndex<P>> {
+    pub fn ports(&self, direction: Direction) -> Range<Port> {
         match direction {
             Direction::Incoming => self.incoming_ports(),
             Direction::Outgoing => self.outgoing_ports(),
@@ -900,55 +922,55 @@ impl<P: IndexType, PO: IndexType> NodeMeta<P, PO> {
 
     /// Returns a range over the incoming port indices of this node.
     #[inline]
-    pub fn incoming_ports(&self) -> Range<PortIndex<P>> {
+    pub fn incoming_ports(&self) -> Range<Port> {
         let start = self.first_port;
-        let end = PortIndex::new(start.index() + self.incoming().get());
+        let end = PortIndex::new(start.port_as_usize() + self.incoming());
         start..end
     }
 
     /// Returns a range over the outgoing port indices of this node.
     #[inline]
-    pub fn outgoing_ports(&self) -> Range<PortIndex<P>> {
+    pub fn outgoing_ports(&self) -> Range<Port> {
         let start = self.first_port;
-        let end = PortIndex::new(start.index() + self.outgoing().get());
+        let end = PortIndex::new(start.port_as_usize() + self.outgoing());
         start..end
     }
 
     /// Returns a range over the unused pre-allocated port indices of this node.
     #[inline]
-    pub fn unused_ports(&self) -> Range<PortIndex<P>> {
-        let start = PortIndex::new(self.first_port.index() + self.port_count());
-        let end = PortIndex::new(self.first_port.index() + self.capacity());
+    pub fn unused_ports(&self) -> Range<Port> {
+        let start = PortIndex::new(self.first_port.port_as_usize() + self.port_count());
+        let end = PortIndex::new(self.first_port.port_as_usize() + self.capacity());
         start..end
     }
 }
 
-impl<P: IndexType, PO: IndexType> Default for NodeMeta<P, PO> {
+impl<Port: PortIndex, Offset: PortOffset> Default for NodeMeta<Port, Offset> {
     fn default() -> Self {
-        Self::new(PortIndex::default(), PO::new(0), PO::new(0), 0)
+        Self::new(PortIndex::default(), 0, 0, 0)
     }
 }
 
 /// Meta data stored for a node, which might be free.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-enum NodeEntry<N: IndexType, P: IndexType, PO: IndexType> {
+enum NodeEntry<Node: NodeIndex, Port: PortIndex, Offset: PortOffset> {
     /// No node is stored at this entry.
     /// Instead the entry forms a doubly-linked list of free nodes.
     #[cfg_attr(feature = "serde", serde(rename = "f",))]
-    Free(FreeNodeEntry<N>),
+    Free(FreeNodeEntry<Node>),
     /// A node is stored at this entry.
     ///
     /// This value allows for null-value optimization so that
     /// `size_of::<NodeEntry>() == size_of::<NodeMeta>()`.
     #[cfg_attr(feature = "serde", serde(rename = "n"))]
-    Node(NodeMeta<P, PO>),
+    Node(NodeMeta<Port, Offset>),
 }
 
-impl<N: IndexType, P: IndexType, PO: IndexType> NodeEntry<N, P, PO> {
+impl<Node: NodeIndex, Port: PortIndex, Offset: PortOffset> NodeEntry<Node, Port, Offset> {
     /// Returns the free node list entry.
     #[inline]
-    pub fn free_entry(&self) -> Option<&FreeNodeEntry<N>> {
+    pub fn free_entry(&self) -> Option<&FreeNodeEntry<Node>> {
         match self {
             NodeEntry::Free(entry) => Some(entry),
             NodeEntry::Node(_) => None,
@@ -957,7 +979,7 @@ impl<N: IndexType, P: IndexType, PO: IndexType> NodeEntry<N, P, PO> {
 
     /// Returns the free node list entry.
     #[inline]
-    pub fn free_entry_mut(&mut self) -> Option<&mut FreeNodeEntry<N>> {
+    pub fn free_entry_mut(&mut self) -> Option<&mut FreeNodeEntry<Node>> {
         match self {
             NodeEntry::Free(entry) => Some(entry),
             NodeEntry::Node(_) => None,
@@ -966,7 +988,7 @@ impl<N: IndexType, P: IndexType, PO: IndexType> NodeEntry<N, P, PO> {
 
     /// Create a new free node entry
     #[inline]
-    pub fn new_free(prev: Option<NodeIndex<N>>, next: Option<NodeIndex<N>>) -> Self {
+    pub fn new_free(prev: Option<Node>, next: Option<Node>) -> Self {
         NodeEntry::Free(FreeNodeEntry { prev, next })
     }
 }
@@ -976,11 +998,11 @@ impl<N: IndexType, P: IndexType, PO: IndexType> NodeEntry<N, P, PO> {
 /// The entry forms a doubly-linked list of free nodes.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-struct FreeNodeEntry<N: IndexType> {
+struct FreeNodeEntry<Node: NodeIndex> {
     /// The previous free node.
-    prev: Option<NodeIndex<N>>,
+    prev: Option<Node>,
     /// The next free node.
-    next: Option<NodeIndex<N>>,
+    next: Option<Node>,
 }
 
 impl std::fmt::Debug for PortGraph {
@@ -1081,21 +1103,21 @@ mod debug {
 /// Stores the node index and the direction of the port.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-struct PortMeta<N: IndexType> {
+struct PortMeta<Node: NodeIndex> {
     /// The node this port is attached to.
-    node: NodeIndex<N>,
+    node: Node,
     /// Direction of the port.
     direction: Direction,
 }
 
-impl<N: IndexType> PortMeta<N> {
+impl<Node: NodeIndex> PortMeta<Node> {
     #[inline]
-    pub fn new(node: NodeIndex<N>, direction: Direction) -> Self {
+    pub fn new(node: Node, direction: Direction) -> Self {
         Self { node, direction }
     }
 
     #[inline]
-    pub fn node(self) -> NodeIndex<N> {
+    pub fn node(self) -> Node {
         self.node
     }
 
@@ -1108,64 +1130,63 @@ impl<N: IndexType> PortMeta<N> {
 /// Meta data stored for a port, which might be free.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize), serde(untagged))]
-enum PortEntry<N: IndexType> {
+enum PortEntry<Node: NodeIndex> {
     /// No port is stored at this entry.
     /// The index will be part of a port list currently on the free list.
     Free,
     /// A port is stored at this entry.
-    Port(PortMeta<N>),
+    Port(PortMeta<Node>),
 }
 
 /// Error generated when linking ports.
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 #[allow(missing_docs)]
-pub enum LinkError<N: IndexType, P: IndexType, PO: IndexType> {
+pub enum LinkError<Node: NodeIndex, Port: PortIndex, Offset: PortOffset> {
     /// The port is already linked.
-    #[error("port {port:?} is already linked")]
-    AlreadyLinked { port: PortIndex<P> },
+    #[error("port {} is already linked", port.port_string())]
+    AlreadyLinked { port: Port },
     /// The port does not exist.
-    #[error("unknown port '{port:?}''")]
-    UnknownPort { port: PortIndex<P> },
+    #[error("unknown port '{}'", port.port_string())]
+    UnknownPort { port: Port },
     /// The port offset is invalid.
-    #[error("unknown port offset {} in node {node:?} in direction {:?}", offset.index(), offset.direction())]
-    UnknownOffset {
-        node: NodeIndex<N>,
-        offset: PortOffset<PO>,
-    },
+    #[error("unknown port offset {} in node {} in direction {:?}", offset.index(), node.node_string(), offset.direction())]
+    UnknownOffset { node: Node, offset: Offset },
     /// The ports have the same direction so they cannot be linked.
-    #[error("Cannot link two ports with direction {dir:?}. In ports {port_a:?} and {port_b:?}")]
+    #[error("Cannot link two ports with direction {dir:?}. In ports {} and {}", port_a.port_string(), port_b.port_string())]
     IncompatibleDirections {
-        port_a: PortIndex<P>,
-        port_b: PortIndex<P>,
+        port_a: Port,
+        port_b: Port,
         dir: Direction,
     },
 }
 
 #[cfg(feature = "pyo3")]
-impl<N: IndexType, P: IndexType, PO: IndexType> From<LinkError<N, P, PO>> for PyErr {
-    fn from(s: LinkError<N, P, PO>) -> Self {
+impl<Node: NodeIndex, Port: PortIndex, Offset: PortOffset> From<LinkError<Node, Port, Offset>>
+    for PyErr
+{
+    fn from(s: LinkError<Node, Port, Offset>) -> Self {
         pyo3::exceptions::PyRuntimeError::new_err(s.to_string())
     }
 }
 
 /// Operations applied to a port, used by the callback in [`PortGraph::set_num_ports`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PortOperation<P: IndexType> {
+pub enum PortOperation<Port: PortIndex> {
     /// The port was moved to a new position.
     Moved {
         /// New index for the port
-        new_index: PortIndex<P>,
+        new_index: Port,
     },
     /// The port was removed.
     Removed {
         /// The old link from the port, if any.
-        old_link: Option<PortIndex<P>>,
+        old_link: Option<Port>,
     },
 }
 
-impl<P: IndexType> PortOperation<P> {
+impl<Port: PortIndex> PortOperation<Port> {
     /// Return the new index of the port, if it was moved
-    pub fn new_index(&self) -> Option<PortIndex<P>> {
+    pub fn new_index(&self) -> Option<Port> {
         match self {
             PortOperation::Moved { new_index } => Some(*new_index),
             _ => None,

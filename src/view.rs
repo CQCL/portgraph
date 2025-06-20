@@ -12,6 +12,7 @@ pub mod petgraph;
 
 use std::collections::HashMap;
 
+use crate::index::IndexType;
 use crate::{portgraph::PortOperation, Direction, LinkError, NodeIndex, PortIndex, PortOffset};
 
 pub use filter::{FilteredGraph, LinkFilter, NodeFilter, NodeFiltered};
@@ -21,40 +22,60 @@ pub use subgraph::{CopySubgraphError, Subgraph};
 
 /// Core capabilities for querying a graph containing nodes and ports.
 pub trait PortView {
+    /// The index type for nodes in the portgraph.
+    type Node: IndexType;
+    /// The index type for ports in the portgraph.
+    type Port: IndexType;
+    /// The index type for port offsets in the portgraph.
+    type Offset: IndexType;
+
     /// Returns the direction of the `port`.
     #[must_use]
-    fn port_direction(&self, port: impl Into<PortIndex>) -> Option<Direction>;
+    fn port_direction(&self, port: impl Into<PortIndex<Self::Port>>) -> Option<Direction>;
 
     /// Returns the node that the `port` belongs to.
     #[must_use]
-    fn port_node(&self, port: impl Into<PortIndex>) -> Option<NodeIndex>;
+    fn port_node(&self, port: impl Into<PortIndex<Self::Port>>) -> Option<NodeIndex<Self::Node>>;
 
     /// Returns the index of a `port` within its node's port list.
     #[must_use]
-    fn port_offset(&self, port: impl Into<PortIndex>) -> Option<PortOffset>;
+    fn port_offset(
+        &self,
+        port: impl Into<PortIndex<Self::Port>>,
+    ) -> Option<PortOffset<Self::Offset>>;
 
     /// Returns the port index for a given node and offset.
     #[must_use]
-    fn port_index(&self, node: NodeIndex, offset: PortOffset) -> Option<PortIndex>;
+    fn port_index(
+        &self,
+        node: NodeIndex<Self::Node>,
+        offset: PortOffset<Self::Offset>,
+    ) -> Option<PortIndex<Self::Port>>;
 
     /// Iterates over all the ports of the `node` in the given `direction`.
     #[must_use]
     fn ports(
         &self,
-        node: NodeIndex,
+        node: NodeIndex<Self::Node>,
         direction: Direction,
-    ) -> impl Iterator<Item = PortIndex> + Clone;
+    ) -> impl Iterator<Item = PortIndex<Self::Port>> + Clone;
 
     /// Iterates over the input and output ports of the `node` in sequence.
     #[must_use]
-    fn all_ports(&self, node: NodeIndex) -> impl Iterator<Item = PortIndex> + Clone;
+    fn all_ports(
+        &self,
+        node: NodeIndex<Self::Node>,
+    ) -> impl Iterator<Item = PortIndex<Self::Port>> + Clone;
 
     /// Iterates over all the input ports of the `node`.
     ///
     /// Shorthand for [`PortView::ports`]`(`[`Direction::Incoming`]`)`.
     #[must_use]
     #[inline]
-    fn inputs(&self, node: NodeIndex) -> impl Iterator<Item = PortIndex> + Clone {
+    fn inputs(
+        &self,
+        node: NodeIndex<Self::Node>,
+    ) -> impl Iterator<Item = PortIndex<Self::Port>> + Clone {
         self.ports(node, Direction::Incoming)
     }
 
@@ -63,7 +84,10 @@ pub trait PortView {
     /// Shorthand for [`PortView::ports`]`(`[`Direction::Outgoing`]`)`.
     #[must_use]
     #[inline]
-    fn outputs(&self, node: NodeIndex) -> impl Iterator<Item = PortIndex> + Clone {
+    fn outputs(
+        &self,
+        node: NodeIndex<Self::Node>,
+    ) -> impl Iterator<Item = PortIndex<Self::Port>> + Clone {
         self.ports(node, Direction::Outgoing)
     }
 
@@ -71,20 +95,20 @@ pub trait PortView {
     ///
     /// Shorthand for [`PortView::port_index`].
     #[must_use]
-    fn input(&self, node: NodeIndex, offset: usize) -> Option<PortIndex>;
+    fn input(&self, node: NodeIndex<Self::Node>, offset: usize) -> Option<PortIndex<Self::Port>>;
 
     /// Returns the output port at the given offset in the `node`.
     ///
     /// Shorthand for [`PortView::port_index`].
     #[must_use]
-    fn output(&self, node: NodeIndex, offset: usize) -> Option<PortIndex>;
+    fn output(&self, node: NodeIndex<Self::Node>, offset: usize) -> Option<PortIndex<Self::Port>>;
 
     /// Returns the number of input ports of the `node`.
     ///
     /// Shorthand for [`PortView::num_ports`]`(`[`Direction::Incoming`]`)`..
     #[must_use]
     #[inline]
-    fn num_inputs(&self, node: NodeIndex) -> usize {
+    fn num_inputs(&self, node: NodeIndex<Self::Node>) -> usize {
         self.num_ports(node, Direction::Incoming)
     }
 
@@ -93,13 +117,13 @@ pub trait PortView {
     /// Shorthand for [`PortView::num_ports`]`(`[`Direction::Outgoing`]`)`..
     #[must_use]
     #[inline]
-    fn num_outputs(&self, node: NodeIndex) -> usize {
+    fn num_outputs(&self, node: NodeIndex<Self::Node>) -> usize {
         self.num_ports(node, Direction::Outgoing)
     }
 
     /// Returns the number of ports of the `node` in the given `direction`.
     #[must_use]
-    fn num_ports(&self, node: NodeIndex, direction: Direction) -> usize;
+    fn num_ports(&self, node: NodeIndex<Self::Node>, direction: Direction) -> usize;
 
     /// Iterates over all the port offsets of the `node` in the given `direction`.
     ///
@@ -116,20 +140,26 @@ pub trait PortView {
     #[must_use]
     fn port_offsets(
         &self,
-        node: NodeIndex,
+        node: NodeIndex<Self::Node>,
         direction: Direction,
-    ) -> impl Iterator<Item = PortOffset> + Clone;
+    ) -> impl Iterator<Item = PortOffset<Self::Offset>> + Clone;
 
     /// Iterates over the input and output port offsets of the `node` in sequence.
     #[must_use]
-    fn all_port_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset> + Clone;
+    fn all_port_offsets(
+        &self,
+        node: NodeIndex<Self::Node>,
+    ) -> impl Iterator<Item = PortOffset<Self::Offset>> + Clone;
 
     /// Iterates over all the input port offsets of the `node`.
     ///
     /// Shorthand for [`PortView::port_offsets`]`(`[`Direction::Incoming`]`)`.
     #[must_use]
     #[inline]
-    fn input_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset> + Clone {
+    fn input_offsets(
+        &self,
+        node: NodeIndex<Self::Node>,
+    ) -> impl Iterator<Item = PortOffset<Self::Offset>> + Clone {
         self.port_offsets(node, Direction::Incoming)
     }
 
@@ -138,17 +168,20 @@ pub trait PortView {
     /// Shorthand for [`PortView::port_offsets`]`(`[`Direction::Outgoing`]`)`.
     #[must_use]
     #[inline]
-    fn output_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset> + Clone {
+    fn output_offsets(
+        &self,
+        node: NodeIndex<Self::Node>,
+    ) -> impl Iterator<Item = PortOffset<Self::Offset>> + Clone {
         self.port_offsets(node, Direction::Outgoing)
     }
 
     /// Returns whether the port graph contains the `node`.
     #[must_use]
-    fn contains_node(&self, node: NodeIndex) -> bool;
+    fn contains_node(&self, node: NodeIndex<Self::Node>) -> bool;
 
     /// Returns whether the port graph contains the `port`.
     #[must_use]
-    fn contains_port(&self, port: PortIndex) -> bool;
+    fn contains_port(&self, port: PortIndex<Self::Port>) -> bool;
 
     /// Returns whether the port graph has no nodes nor ports.
     #[must_use]
@@ -164,11 +197,11 @@ pub trait PortView {
 
     /// Iterates over the nodes in the port graph.
     #[must_use]
-    fn nodes_iter(&self) -> impl Iterator<Item = NodeIndex> + Clone;
+    fn nodes_iter(&self) -> impl Iterator<Item = NodeIndex<Self::Node>> + Clone;
 
     /// Iterates over the ports in the port graph.
     #[must_use]
-    fn ports_iter(&self) -> impl Iterator<Item = PortIndex> + Clone;
+    fn ports_iter(&self) -> impl Iterator<Item = PortIndex<Self::Port>> + Clone;
 
     /// Returns the capacity of the underlying buffer for nodes.
     #[must_use]
@@ -183,7 +216,7 @@ pub trait PortView {
     /// Changes to the number of ports of the node will not reallocate
     /// until the number of ports exceeds this capacity.
     #[must_use]
-    fn node_port_capacity(&self, node: NodeIndex) -> usize;
+    fn node_port_capacity(&self, node: NodeIndex<Self::Node>) -> usize;
 }
 
 /// Core capabilities for mutating a graph containing nodes and ports.
@@ -204,7 +237,7 @@ pub trait PortMut: PortView {
     /// assert_eq!(g.outputs(node).count(), 3);
     /// assert!(g.contains_node(node));
     /// ```
-    fn add_node(&mut self, incoming: usize, outgoing: usize) -> NodeIndex;
+    fn add_node(&mut self, incoming: usize, outgoing: usize) -> NodeIndex<Self::Node>;
 
     /// Remove a node from the port graph. All ports of the node will be
     /// unlinked and removed as well. Does nothing if the node does not exist.
@@ -227,7 +260,7 @@ pub trait PortMut: PortView {
     /// assert!(g.port_link(g.outputs(node1).nth(0).unwrap()).is_none());
     /// assert!(g.port_link(g.inputs(node1).nth(0).unwrap()).is_none());
     /// ```
-    fn remove_node(&mut self, node: NodeIndex);
+    fn remove_node(&mut self, node: NodeIndex<Self::Node>);
 
     /// Removes all nodes and ports from the port graph.
     fn clear(&mut self);
@@ -246,12 +279,17 @@ pub trait PortMut: PortView {
     /// If the port is removed, the new index will be `None`.
     ///
     /// This operation is O(n) where n is the number of ports of the node.
-    fn set_num_ports<F>(&mut self, node: NodeIndex, incoming: usize, outgoing: usize, rekey: F)
-    where
-        F: FnMut(PortIndex, PortOperation);
+    fn set_num_ports<F>(
+        &mut self,
+        node: NodeIndex<Self::Node>,
+        incoming: usize,
+        outgoing: usize,
+        rekey: F,
+    ) where
+        F: FnMut(PortIndex<Self::Port>, PortOperation<Self::Port>);
 
     /// Swaps the indices of two nodes.
-    fn swap_nodes(&mut self, a: NodeIndex, b: NodeIndex);
+    fn swap_nodes(&mut self, a: NodeIndex<Self::Node>, b: NodeIndex<Self::Node>);
 
     /// Compacts the storage of nodes in the portgraph as much as possible. Note
     /// that node indices won't necessarily be consecutive after this process.
@@ -260,7 +298,7 @@ pub trait PortMut: PortView {
     /// old and new index.
     fn compact_nodes<F>(&mut self, rekey: F)
     where
-        F: FnMut(NodeIndex, NodeIndex);
+        F: FnMut(NodeIndex<Self::Node>, NodeIndex<Self::Node>);
 
     /// Compacts the storage of ports in the portgraph as much as possible. Note
     /// that indices won't necessarily be consecutive after this process.
@@ -269,7 +307,7 @@ pub trait PortMut: PortView {
     /// old and new index.
     fn compact_ports<F>(&mut self, rekey: F)
     where
-        F: FnMut(PortIndex, PortIndex);
+        F: FnMut(PortIndex<Self::Port>, PortIndex<Self::Port>);
 
     /// Shrinks the underlying buffers to the fit the data.
     ///
@@ -280,7 +318,7 @@ pub trait PortMut: PortView {
 /// Operations pertaining the adjacency of nodes in a port graph.
 pub trait LinkView: PortView {
     /// The identifier for the endpoints of a link.
-    type LinkEndpoint: Into<PortIndex> + Copy;
+    type LinkEndpoint: Into<PortIndex<Self::Port>> + Copy;
 
     /// Returns an iterator over every pair of matching ports connecting `from`
     /// to `to`, i.e. in that direction.
@@ -303,8 +341,8 @@ pub trait LinkView: PortView {
     #[must_use]
     fn get_connections(
         &self,
-        from: NodeIndex,
-        to: NodeIndex,
+        from: NodeIndex<Self::Node>,
+        to: NodeIndex<Self::Node>,
     ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone;
 
     /// Checks whether there is a directed link between the two nodes and
@@ -325,8 +363,8 @@ pub trait LinkView: PortView {
     #[must_use]
     fn get_connection(
         &self,
-        from: NodeIndex,
-        to: NodeIndex,
+        from: NodeIndex<Self::Node>,
+        to: NodeIndex<Self::Node>,
     ) -> Option<(Self::LinkEndpoint, Self::LinkEndpoint)> {
         self.get_connections(from, to).next()
     }
@@ -346,7 +384,7 @@ pub trait LinkView: PortView {
     /// ```
     #[must_use]
     #[inline]
-    fn connected(&self, from: NodeIndex, to: NodeIndex) -> bool {
+    fn connected(&self, from: NodeIndex<Self::Node>, to: NodeIndex<Self::Node>) -> bool {
         self.get_connection(from, to).is_some()
     }
 
@@ -354,14 +392,14 @@ pub trait LinkView: PortView {
     #[must_use]
     fn port_links(
         &self,
-        port: PortIndex,
+        port: PortIndex<Self::Port>,
     ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone;
 
     /// Return the link to the provided port, if not connected return None.
     /// If this port has multiple connected subports, an arbitrary one is returned.
     #[must_use]
     #[inline]
-    fn port_link(&self, port: PortIndex) -> Option<Self::LinkEndpoint> {
+    fn port_link(&self, port: PortIndex<Self::Port>) -> Option<Self::LinkEndpoint> {
         self.port_links(port).next().map(|(_, p)| p)
     }
 
@@ -389,7 +427,7 @@ pub trait LinkView: PortView {
     #[must_use]
     fn links(
         &self,
-        node: NodeIndex,
+        node: NodeIndex<Self::Node>,
         direction: Direction,
     ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone;
 
@@ -397,7 +435,7 @@ pub trait LinkView: PortView {
     #[must_use]
     fn all_links(
         &self,
-        node: NodeIndex,
+        node: NodeIndex<Self::Node>,
     ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone;
 
     /// Iterates over the connected input links of the `node`. Shorthand for
@@ -406,7 +444,7 @@ pub trait LinkView: PortView {
     #[inline]
     fn input_links(
         &self,
-        node: NodeIndex,
+        node: NodeIndex<Self::Node>,
     ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone {
         self.links(node, Direction::Incoming)
     }
@@ -417,7 +455,7 @@ pub trait LinkView: PortView {
     #[inline]
     fn output_links(
         &self,
-        node: NodeIndex,
+        node: NodeIndex<Self::Node>,
     ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone {
         self.links(node, Direction::Outgoing)
     }
@@ -444,20 +482,26 @@ pub trait LinkView: PortView {
     #[must_use]
     fn neighbours(
         &self,
-        node: NodeIndex,
+        node: NodeIndex<Self::Node>,
         direction: Direction,
-    ) -> impl Iterator<Item = NodeIndex> + Clone;
+    ) -> impl Iterator<Item = NodeIndex<Self::Node>> + Clone;
 
     /// Iterates over the input and output neighbours of the `node` in sequence.
     #[must_use]
-    fn all_neighbours(&self, node: NodeIndex) -> impl Iterator<Item = NodeIndex> + Clone;
+    fn all_neighbours(
+        &self,
+        node: NodeIndex<Self::Node>,
+    ) -> impl Iterator<Item = NodeIndex<Self::Node>> + Clone;
 
     /// Iterates over the input neighbours of the `node`.
     ///
     /// Shorthand for [`LinkView::neighbours`]`(`[`Direction::Incoming`]`)`.
     #[must_use]
     #[inline]
-    fn input_neighbours(&self, node: NodeIndex) -> impl Iterator<Item = NodeIndex> + Clone {
+    fn input_neighbours(
+        &self,
+        node: NodeIndex<Self::Node>,
+    ) -> impl Iterator<Item = NodeIndex<Self::Node>> + Clone {
         self.neighbours(node, Direction::Incoming)
     }
 
@@ -466,7 +510,10 @@ pub trait LinkView: PortView {
     /// Shorthand for [`LinkView::neighbours`]`(`[`Direction::Outgoing`]`)`.
     #[must_use]
     #[inline]
-    fn output_neighbours(&self, node: NodeIndex) -> impl Iterator<Item = NodeIndex> + Clone {
+    fn output_neighbours(
+        &self,
+        node: NodeIndex<Self::Node>,
+    ) -> impl Iterator<Item = NodeIndex<Self::Node>> + Clone {
         self.neighbours(node, Direction::Outgoing)
     }
 
@@ -499,9 +546,12 @@ pub trait LinkMut: LinkView + PortMut {
     ///  - If `port_a` and `port_b` have the same direction.
     fn link_ports(
         &mut self,
-        port_a: PortIndex,
-        port_b: PortIndex,
-    ) -> Result<(Self::LinkEndpoint, Self::LinkEndpoint), LinkError>;
+        port_a: PortIndex<Self::Port>,
+        port_b: PortIndex<Self::Port>,
+    ) -> Result<
+        (Self::LinkEndpoint, Self::LinkEndpoint),
+        LinkError<Self::Node, Self::Port, Self::Offset>,
+    >;
 
     /// Links two nodes at an input and output port offsets.
     ///
@@ -510,11 +560,14 @@ pub trait LinkMut: LinkView + PortMut {
     ///  - If the ports and nodes do not exist.
     fn link_nodes(
         &mut self,
-        from: NodeIndex,
+        from: NodeIndex<Self::Node>,
         from_output: usize,
-        to: NodeIndex,
+        to: NodeIndex<Self::Node>,
         to_input: usize,
-    ) -> Result<(Self::LinkEndpoint, Self::LinkEndpoint), LinkError> {
+    ) -> Result<
+        (Self::LinkEndpoint, Self::LinkEndpoint),
+        LinkError<Self::Node, Self::Port, Self::Offset>,
+    > {
         self.link_offsets(
             from,
             PortOffset::new_outgoing(from_output),
@@ -531,11 +584,14 @@ pub trait LinkMut: LinkView + PortMut {
     ///  - If the ports have the same direction.
     fn link_offsets(
         &mut self,
-        node_a: NodeIndex,
-        offset_a: PortOffset,
-        node_b: NodeIndex,
-        offset_b: PortOffset,
-    ) -> Result<(Self::LinkEndpoint, Self::LinkEndpoint), LinkError> {
+        node_a: NodeIndex<Self::Node>,
+        offset_a: PortOffset<Self::Offset>,
+        node_b: NodeIndex<Self::Node>,
+        offset_b: PortOffset<Self::Offset>,
+    ) -> Result<
+        (Self::LinkEndpoint, Self::LinkEndpoint),
+        LinkError<Self::Node, Self::Port, Self::Offset>,
+    > {
         let from_port = self
             .port_index(node_a, offset_a)
             .ok_or(LinkError::UnknownOffset {
@@ -553,15 +609,18 @@ pub trait LinkMut: LinkView + PortMut {
 
     /// Unlinks all connections to the `port`. If the port was connected,
     /// returns one of the ports it was connected to.
-    fn unlink_port(&mut self, port: PortIndex) -> Option<Self::LinkEndpoint>;
+    fn unlink_port(&mut self, port: PortIndex<Self::Port>) -> Option<Self::LinkEndpoint>;
 
     /// Inserts another graph into this graph.
     ///
     /// Returns a map from the old node indices to the new node indices.
-    fn insert_graph(
+    fn insert_graph<Other: LinkView>(
         &mut self,
-        other: &impl LinkView,
-    ) -> Result<HashMap<NodeIndex, NodeIndex>, LinkError> {
+        other: &Other,
+    ) -> Result<
+        HashMap<NodeIndex<Other::Node>, NodeIndex<Self::Node>>,
+        LinkError<Self::Node, Self::Port, Self::Offset>,
+    > {
         let nodes = other.nodes_iter();
 
         // If we can cheaply compute the number of nodes and ports, we can
@@ -577,14 +636,14 @@ pub trait LinkMut: LinkView + PortMut {
             rekeys.insert(old, new);
             for (from, to) in other.all_links(old) {
                 // If the other node has already been inserted, we can link
-                let Some(&other_node) = rekeys.get(&other.port_node(to).unwrap()) else {
+                let Some(&other_node) = HashMap::get(&rekeys, &other.port_node(to).unwrap()) else {
                     continue;
                 };
                 self.link_offsets(
                     new,
-                    other.port_offset(from).unwrap(),
+                    PortOffset::new_outgoing(other.port_offset(from).unwrap().index()),
                     other_node,
-                    other.port_offset(to).unwrap(),
+                    PortOffset::new_incoming(other.port_offset(to).unwrap().index()),
                 )?;
             }
         }
@@ -603,20 +662,26 @@ pub trait MultiView: LinkView {
     #[must_use]
     fn subports(
         &self,
-        node: NodeIndex,
+        node: NodeIndex<Self::Node>,
         direction: Direction,
     ) -> impl Iterator<Item = Self::LinkEndpoint> + Clone;
 
     /// Iterates over the input and output subports of the `node` in sequence.
     #[must_use]
-    fn all_subports(&self, node: NodeIndex) -> impl Iterator<Item = Self::LinkEndpoint> + Clone;
+    fn all_subports(
+        &self,
+        node: NodeIndex<Self::Node>,
+    ) -> impl Iterator<Item = Self::LinkEndpoint> + Clone;
 
     /// Iterates over all the input subports of the `node`.
     ///
     /// Shorthand for [`MultiView::subports`].
     #[must_use]
     #[inline]
-    fn subport_inputs(&self, node: NodeIndex) -> impl Iterator<Item = Self::LinkEndpoint> + Clone {
+    fn subport_inputs(
+        &self,
+        node: NodeIndex<Self::Node>,
+    ) -> impl Iterator<Item = Self::LinkEndpoint> + Clone {
         self.subports(node, Direction::Incoming)
     }
 
@@ -625,7 +690,10 @@ pub trait MultiView: LinkView {
     /// Shorthand for [`MultiView::subports`].
     #[must_use]
     #[inline]
-    fn subport_outputs(&self, node: NodeIndex) -> impl Iterator<Item = Self::LinkEndpoint> + Clone {
+    fn subport_outputs(
+        &self,
+        node: NodeIndex<Self::Node>,
+    ) -> impl Iterator<Item = Self::LinkEndpoint> + Clone {
         self.subports(node, Direction::Outgoing)
     }
 }
@@ -643,7 +711,7 @@ pub trait MultiMut: MultiView + LinkMut {
         &mut self,
         subport_from: Self::LinkEndpoint,
         subport_to: Self::LinkEndpoint,
-    ) -> Result<(), LinkError>;
+    ) -> Result<(), LinkError<Self::Node, Self::Port, Self::Offset>>;
 
     /// Unlinks the `port` and returns the subport it was linked to. Returns `None`
     /// when the port was not linked.

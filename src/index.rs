@@ -132,6 +132,12 @@ impl<N: IndexType> NodeIndex<N> {
     pub fn index(self) -> usize {
         self.0.get()
     }
+
+    /// Return the internal index type.
+    #[inline]
+    pub fn inner(self) -> N {
+        self.0
+    }
 }
 
 impl<N: IndexType> From<NodeIndex<N>> for usize {
@@ -217,6 +223,12 @@ impl<P: IndexType> PortIndex<P> {
     pub fn index(self) -> usize {
         self.0.get()
     }
+
+    /// Return the internal index type.
+    #[inline]
+    pub fn inner(self) -> P {
+        self.0
+    }
 }
 
 impl<P: IndexType> From<PortIndex<P>> for usize {
@@ -276,7 +288,7 @@ impl<O: IndexType> PortOffset<O> {
     ///
     /// Panics if the offset is greater than O's [`IndexType::MAX`].
     #[inline(always)]
-    pub fn new(direction: Direction, offset: O) -> Self {
+    pub fn new(direction: Direction, offset: usize) -> Self {
         match direction {
             Direction::Incoming => Self::new_incoming(offset),
             Direction::Outgoing => Self::new_outgoing(offset),
@@ -289,9 +301,9 @@ impl<O: IndexType> PortOffset<O> {
     ///
     /// Panics if the offset is greater than O's [`IndexType::MAX`].
     #[inline(always)]
-    pub fn new_incoming(offset: O) -> Self {
+    pub fn new_incoming(offset: usize) -> Self {
         Self {
-            index: offset,
+            index: O::new(offset),
             direction: Direction::Incoming,
         }
     }
@@ -302,9 +314,9 @@ impl<O: IndexType> PortOffset<O> {
     ///
     /// Panics if the offset is greater than O's [`IndexType::MAX`].
     #[inline(always)]
-    pub fn new_outgoing(offset: O) -> Self {
+    pub fn new_outgoing(offset: usize) -> Self {
         Self {
-            index: offset,
+            index: O::new(offset),
             direction: Direction::Outgoing,
         }
     }
@@ -322,6 +334,12 @@ impl<O: IndexType> PortOffset<O> {
     #[inline(always)]
     pub fn index(self) -> usize {
         self.index.get()
+    }
+
+    /// Returns the internal index type.
+    #[inline(always)]
+    pub fn inner(self) -> O {
+        self.index
     }
 
     /// Returns the opposite port offset.
@@ -380,11 +398,11 @@ impl<'de, O: IndexType> Deserialize<'de> for PortOffset<O> {
                 match variant {
                     "Incoming" => {
                         let idx: usize = value.newtype_variant()?;
-                        Ok(PortOffset::new_incoming(O::new(idx)))
+                        Ok(PortOffset::new_incoming(idx))
                     }
                     "Outgoing" => {
                         let idx: usize = value.newtype_variant()?;
-                        Ok(PortOffset::new_outgoing(O::new(idx)))
+                        Ok(PortOffset::new_outgoing(idx))
                     }
                     _ => Err(serde::de::Error::unknown_variant(
                         variant,
@@ -404,7 +422,7 @@ impl<'de, O: IndexType> Deserialize<'de> for PortOffset<O> {
 
 impl<O: IndexType> Default for PortOffset<O> {
     fn default() -> Self {
-        PortOffset::new_outgoing(O::new(0))
+        PortOffset::new_outgoing(0)
     }
 }
 
@@ -469,8 +487,8 @@ mod tests {
 
     #[test]
     fn test_opposite() {
-        let incoming = PortOffset::new_incoming(5u16);
-        let outgoing = PortOffset::new_outgoing(5u16);
+        let incoming = PortOffset::<u16>::new_incoming(5);
+        let outgoing = PortOffset::<u16>::new_outgoing(5);
 
         assert_eq!(incoming.opposite(), outgoing);
         assert_eq!(outgoing.opposite(), incoming);

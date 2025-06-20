@@ -110,7 +110,7 @@ where
 /// See [`toposort`] for more information.
 ///
 /// Implements [Kahn's algorithm](https://en.wikipedia.org/wiki/Topological_sorting#Kahn's_algorithm).
-pub struct TopoSort<'f, G, Map = BitVec> {
+pub struct TopoSort<'f, G: LinkView, Map = BitVec> {
     graph: G,
     visited_ports: Map,
     /// A VecDeque is used for the node list to produce a canonical ordering,
@@ -122,10 +122,10 @@ pub struct TopoSort<'f, G, Map = BitVec> {
     nodes_seen: usize,
     /// A filter closure for the nodes to visit. If the closure returns false,
     /// the node is skipped.
-    node_filter: Option<Box<dyn FnMut(NodeIndex) -> bool + 'f>>,
+    node_filter: Option<Box<dyn FnMut(NodeIndex<G::Node>) -> bool + 'f>>,
     /// A filter closure for the ports to visit. If the closure returns false,
     /// the port is skipped.
-    port_filter: Option<Box<dyn FnMut(NodeIndex, PortIndex) -> bool + 'f>>,
+    port_filter: Option<Box<dyn FnMut(NodeIndex<G::Node>, PortIndex<G::Port>) -> bool + 'f>>,
 }
 
 impl<'f, Map, G> TopoSort<'f, G, Map>
@@ -141,10 +141,10 @@ where
     /// If the default value of `Map` is not `false`, this requires O(#ports) time.
     pub fn new(
         graph: G,
-        source: impl IntoIterator<Item = NodeIndex>,
+        source: impl IntoIterator<Item = NodeIndex<G::Node>>,
         direction: Direction,
-        mut node_filter: Option<Box<dyn FnMut(NodeIndex) -> bool + 'f>>,
-        port_filter: Option<Box<dyn FnMut(NodeIndex, PortIndex) -> bool + 'f>>,
+        mut node_filter: Option<Box<dyn FnMut(NodeIndex<G::Node>) -> bool + 'f>>,
+        port_filter: Option<Box<dyn FnMut(NodeIndex<G::Node>, PortIndex<G::Port>) -> bool + 'f>>,
     ) -> Self {
         let mut visited_ports: Map = SecondaryMap::new();
 

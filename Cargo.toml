@@ -42,7 +42,7 @@ petgraph = ["dep:petgraph"]
 
 [dev-dependencies]
 criterion = { version = ">= 0.5.1, < 0.7.0", features = ["html_reports"] }
-iai-callgrind = "0.14.0"
+iai-callgrind = "0.15.1"
 rmp-serde = "1.1.1"
 rstest = "0.25.0"
 itertools = "0.14.0"

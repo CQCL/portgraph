@@ -12,54 +12,6 @@ use crate::{Direction, LinkView, NodeIndex, PortIndex, PortOffset, PortView};
 ///
 /// Used internally by other iterator implementations to avoid the generic RPITIT return types.
 impl MultiPortGraph {
-    #[inline]
-    /// Returns an iterator over every pair of matching ports connecting `from`
-    /// with `to`.
-    pub(crate) fn _get_connections(&self, from: NodeIndex, to: NodeIndex) -> NodeConnections {
-        NodeConnections::new(self, to, self._output_links(from))
-    }
-
-    /// Returns the port that the given `port` is linked to.
-    #[inline]
-    pub(crate) fn _port_links(&self, port: PortIndex) -> PortLinks {
-        PortLinks::new(self, port)
-    }
-
-    /// Iterates over the connected links of the `node` in the given
-    /// `direction`.
-    #[inline]
-    pub(crate) fn _links(&self, node: NodeIndex, direction: Direction) -> NodeLinks {
-        NodeLinks::new(self, self.graph._ports(node, direction), 0..0)
-    }
-
-    /// Iterates over the connected input and output links of the `node` in sequence.
-    #[inline]
-    pub(crate) fn _all_links(&self, node: NodeIndex) -> NodeLinks {
-        let output_ports = self.graph.node_outgoing_ports(node);
-        NodeLinks::new(self, self.graph._all_ports(node), output_ports)
-    }
-
-    /// Iterates over the connected output links of the `node`. Shorthand for
-    /// [`LinkView::links`].
-    #[must_use]
-    #[inline]
-    pub(crate) fn _output_links(&self, node: NodeIndex) -> NodeLinks {
-        self._links(node, Direction::Outgoing)
-    }
-
-    /// Iterates over neighbour nodes in the given `direction`.
-    /// May contain duplicates if the graph has multiple links between nodes.
-    #[inline]
-    pub(crate) fn _neighbours(&self, node: NodeIndex, direction: Direction) -> Neighbours {
-        Neighbours::new(self, self._subports(node, direction), node, false)
-    }
-
-    /// Iterates over the input and output neighbours of the `node` in sequence.
-    #[inline]
-    pub(crate) fn _all_neighbours(&self, node: NodeIndex) -> Neighbours {
-        Neighbours::new(self, self._all_subports(node), node, true)
-    }
-
     /// Iterates over all the subports of the `node` in the given `direction`.
     #[inline]
     pub(crate) fn _subports(&self, node: NodeIndex, direction: Direction) -> NodeSubports {
@@ -321,18 +273,14 @@ impl FusedIterator for NodeLinks<'_> {}
 /// Iterator over the links between two nodes, created by
 /// [`MultiPortGraph::get_connections`].
 #[derive(Debug, Clone)]
-pub struct NodeConnections<'a> {
+pub struct NodeConnections<'a, NL: 'a> {
     multigraph: &'a MultiPortGraph,
     target: NodeIndex,
-    links: NodeLinks<'a>,
+    links: NL,
 }
 
-impl<'a> NodeConnections<'a> {
-    pub(super) fn new(
-        multigraph: &'a MultiPortGraph,
-        target: NodeIndex,
-        links: NodeLinks<'a>,
-    ) -> Self {
+impl<'a, NL: Iterator<Item = (SubportIndex, SubportIndex)> + 'a> NodeConnections<'a, NL> {
+    pub(super) fn new(multigraph: &'a MultiPortGraph, target: NodeIndex, links: NL) -> Self {
         Self {
             multigraph,
             target,
@@ -341,7 +289,9 @@ impl<'a> NodeConnections<'a> {
     }
 }
 
-impl Iterator for NodeConnections<'_> {
+impl<'a, NL: Iterator<Item = (SubportIndex, SubportIndex)> + 'a> Iterator
+    for NodeConnections<'a, NL>
+{
     /// A link from one of the node's subports to another subport.
     type Item = (SubportIndex, SubportIndex);
 
@@ -356,7 +306,10 @@ impl Iterator for NodeConnections<'_> {
     }
 }
 
-impl FusedIterator for NodeConnections<'_> {}
+impl<'a, NL: Iterator<Item = (SubportIndex, SubportIndex)> + 'a> FusedIterator
+    for NodeConnections<'a, NL>
+{
+}
 
 /// Iterator over the links of a port
 #[derive(Debug, Clone)]

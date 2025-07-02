@@ -266,21 +266,47 @@ impl LinkView for MultiPortGraph {
         self.graph.link_count() - self.copy_node_count
     }
 
-    delegate! {
-        to self {
-            #[call(_get_connections)]
-            fn get_connections(&self, from: NodeIndex, to: NodeIndex) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone;
-            #[call(_port_links)]
-            fn port_links(&self, port: PortIndex) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone;
-            #[call(_links)]
-            fn links(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone;
-            #[call(_all_links)]
-            fn all_links(&self, node: NodeIndex) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone;
-            #[call(_neighbours)]
-            fn neighbours(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = NodeIndex> + Clone;
-            #[call(_all_neighbours)]
-            fn all_neighbours(&self, node: NodeIndex) -> impl Iterator<Item = NodeIndex> + Clone;
-        }
+    fn get_connections(
+        &self,
+        from: NodeIndex,
+        to: NodeIndex,
+    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone {
+        NodeConnections::new(self, to, self.output_links(from))
+    }
+
+    fn port_links(
+        &self,
+        port: PortIndex,
+    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone {
+        PortLinks::new(self, port)
+    }
+
+    fn links(
+        &self,
+        node: NodeIndex,
+        direction: Direction,
+    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone {
+        NodeLinks::new(self, self.graph._ports(node, direction), 0..0)
+    }
+
+    fn all_links(
+        &self,
+        node: NodeIndex,
+    ) -> impl Iterator<Item = (Self::LinkEndpoint, Self::LinkEndpoint)> + Clone {
+        let output_ports = self.graph.node_outgoing_ports(node);
+        NodeLinks::new(self, self.graph._all_ports(node), output_ports)
+    }
+
+    fn neighbours(
+        &self,
+        node: NodeIndex,
+        direction: Direction,
+    ) -> impl Iterator<Item = NodeIndex> + Clone {
+        Neighbours::new(self, self._subports(node, direction), node, false)
+    }
+
+    fn all_neighbours(&self, node: NodeIndex) -> impl Iterator<Item = NodeIndex> + Clone {
+        Neighbours::new(self, self._all_subports(node), node, true)
     }
 }
 

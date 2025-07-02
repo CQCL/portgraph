@@ -24,7 +24,7 @@ pub trait NodeIndex: Copy + Clone + PartialEq + Eq + PartialOrd + Ord + Hash {
     /// A type used to count the number of different node indices.
     ///
     /// It should be able to represent `NodeIndex::MAX_NODE + 1`.
-    type NodeCountTy: Copy + Clone + PartialEq + Eq + PartialOrd + Ord + Hash;
+    type NodeCountTy: Copy + Clone + std::fmt::Debug + PartialEq + Eq + PartialOrd + Ord + Hash;
 
     /// Returns the node index as a zero-based `usize`.
     ///
@@ -81,7 +81,7 @@ pub trait PortIndex: Copy + Clone + PartialEq + Eq + PartialOrd + Ord + Hash {
     /// A type used to count the number of different port indices.
     ///
     /// It should be able to represent `PortIndex::MAX_PORT + 1`.
-    type PortCountTy: Copy + Clone + PartialEq + Eq + PartialOrd + Ord + Hash;
+    type PortCountTy: Copy + Clone + std::fmt::Debug + PartialEq + Eq + PartialOrd + Ord + Hash;
 
     /// Returns the port index as a zero-based `usize`.
     ///
@@ -134,7 +134,7 @@ pub trait PortOffset: Copy + Clone + PartialEq + Eq + PartialOrd + Ord + Hash {
     /// A type used to count the number of different port offsets.
     ///
     /// It should be able to represent `PortOffset::MAX_OFFSET + 1`.
-    type OffsetCountTy: Copy + Clone + PartialEq + Eq + PartialOrd + Ord + Hash;
+    type OffsetCountTy: Copy + Clone + std::fmt::Debug + PartialEq + Eq + PartialOrd + Ord + Hash;
 
     /// Creates a new port offset.
     ///

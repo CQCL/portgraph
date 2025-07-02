@@ -74,8 +74,8 @@ pub fn make_weights(graph: &PortGraph) -> Weights<usize, isize> {
 pub fn make_hierarchy(graph: &PortGraph) -> Hierarchy {
     let mut hierarchy = Hierarchy::with_capacity(graph.node_count());
     for i in 1..graph.node_count() {
-        let parent = NodeIndex::new((i - 1) / 2);
-        hierarchy.push_child(NodeIndex::new(i), parent).unwrap();
+        let parent = Node::node_from_usize((i - 1) / 2);
+        hierarchy.push_child(Node::node_from_usize(i), parent).unwrap();
     }
     hierarchy
 }

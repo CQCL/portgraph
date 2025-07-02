@@ -37,7 +37,7 @@ impl SizedBenchmark for TraverseHierarchy {
     fn setup(size: usize) -> Self {
         let graph = make_two_track_dag(size);
         let hierarchy = make_hierarchy(&graph);
-        let root = NodeIndex::new(0);
+        let root = Node::node_from_usize(0);
         Self { hierarchy, root }
     }
 

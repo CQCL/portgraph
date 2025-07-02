@@ -671,8 +671,8 @@ mod tests {
     fn test_connect_nodes_nonexistent_node() {
         let graph = PortGraph::new();
         let mut topo = DynamicTopoSort::with_graph(&graph);
-        let n0 = NodeIndex::new(0);
-        let n1 = NodeIndex::new(1);
+        let n0 = Node::node_from_usize(0);
+        let n1 = Node::node_from_usize(1);
         match topo.connect_nodes(n0, n1, &graph) {
             Ok(()) => panic!("Should have failed"),
             Err(e) => assert_eq!(e, DynamicTopoSortError::InvalidNode { node: n0 }),
@@ -777,7 +777,7 @@ mod tests {
         assert!(!topo.node_to_pos.contains_key(&n1));
         assert!(is_valid_topological_order(&topo, &graph));
 
-        let n3 = NodeIndex::new(3);
+        let n3 = Node::node_from_usize(3);
         match topo.remove_node(n3) {
             Err(e) => assert_eq!(e, DynamicTopoSortError::InvalidNode { node: n3 }),
             _ => panic!("Should have failed"),
@@ -909,8 +909,8 @@ mod tests {
     fn test_operations_on_empty_graph() {
         let graph = PortGraph::new();
         let mut checker = DynamicTopoConvexChecker::new(graph.clone());
-        let n0 = NodeIndex::new(0);
-        let n1 = NodeIndex::new(1);
+        let n0 = Node::node_from_usize(0);
+        let n1 = Node::node_from_usize(1);
 
         match checker.topo_sort.remove_node(n0) {
             Err(e) => assert_eq!(e, DynamicTopoSortError::InvalidNode { node: n0 }),
@@ -968,7 +968,7 @@ mod tests {
         let mut graph = PortGraph::new();
         let _n0 = graph.add_node(0, 0);
         let checker = DynamicTopoConvexChecker::new(graph);
-        let invalid_subgraph = HashSet::from([NodeIndex::new(1)]);
+        let invalid_subgraph = HashSet::from([Node::node_from_usize(1)]);
         assert!(
             !checker.is_convex(invalid_subgraph, vec![], vec![]),
             "Subgraph with invalid node should not be convex"

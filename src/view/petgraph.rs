@@ -84,7 +84,7 @@ macro_rules! impl_petgraph_traits {
             }
 
             fn from_index(&self, ix: usize) -> Self::NodeId {
-                NodeIndex::new(ix)
+                Node::node_from_usize(ix)
             }
         }
 

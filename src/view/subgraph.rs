@@ -454,7 +454,7 @@ mod tests {
     #[test]
     fn test_traverse_subgraph_single_node() {
         let graph = graph();
-        let (_, n1, _, _, _, _) = (0..6).map(NodeIndex::new).collect_tuple().unwrap();
+        let (_, n1, _, _, _, _) = (0..6).map(Node::node_from_usize).collect_tuple().unwrap();
 
         // Define the incoming and outgoing boundary edges
         let boundary = Boundary::new(graph.inputs(n1), graph.outputs(n1));
@@ -470,7 +470,7 @@ mod tests {
     #[test]
     fn test_traverse_subgraph_all_but_one_edge() {
         let graph = graph();
-        let (_, n1, _, _, n4, _) = (0..6).map(NodeIndex::new).collect_tuple().unwrap();
+        let (_, n1, _, _, n4, _) = (0..6).map(Node::node_from_usize).collect_tuple().unwrap();
 
         // Define both ends of the `1 -> 4` edge as boundary, effectively selecting the whole graph.
         let boundary = Boundary::new(
@@ -488,7 +488,7 @@ mod tests {
     #[test]
     fn test_traverse_subgraph_basic() {
         let graph = graph();
-        let (_, n1, n2, _, _, n5) = (0..6).map(NodeIndex::new).collect_tuple().unwrap();
+        let (_, n1, n2, _, _, n5) = (0..6).map(Node::node_from_usize).collect_tuple().unwrap();
 
         // Define the incoming and outgoing boundary edges
         let incoming = [graph.inputs(n1), graph.inputs(n2)].into_iter().flatten();
@@ -506,7 +506,7 @@ mod tests {
     #[test]
     fn test_traverse_subgraph_almost_complete() {
         let graph = graph();
-        let (n0, n1, n2, n3, n4, n5) = (0..6).map(NodeIndex::new).collect_tuple().unwrap();
+        let (n0, n1, n2, n3, n4, n5) = (0..6).map(Node::node_from_usize).collect_tuple().unwrap();
 
         // Define the incoming and outgoing boundary edges
         let incoming = [
@@ -541,7 +541,7 @@ mod tests {
     #[test]
     fn test_with_nodes() {
         let graph = graph();
-        let (_, n1, n2, _, n4, _) = (0..6).map(NodeIndex::new).collect_tuple().unwrap();
+        let (_, n1, n2, _, n4, _) = (0..6).map(Node::node_from_usize).collect_tuple().unwrap();
 
         let boundary = Boundary::new(
             [
@@ -561,7 +561,7 @@ mod tests {
     #[test]
     fn test_properties() {
         let graph = graph();
-        let (n0, n1, n2, _n3, n4, _n5) = (0..6).map(NodeIndex::new).collect_tuple().unwrap();
+        let (n0, n1, n2, _n3, n4, _n5) = (0..6).map(Node::node_from_usize).collect_tuple().unwrap();
         let subgraph = Subgraph::with_nodes(&graph, [n1, n2, n4]);
 
         let n1_o0 = subgraph.output(n1, 0).unwrap();
@@ -665,7 +665,7 @@ mod tests {
     #[test]
     fn test_is_convex() {
         let graph = graph();
-        let (n0, n1, n2, _, n4, n5) = (0..6).map(NodeIndex::new).collect_tuple().unwrap();
+        let (n0, n1, n2, _, n4, n5) = (0..6).map(Node::node_from_usize).collect_tuple().unwrap();
 
         let boundary = Boundary::new(graph.inputs(n1), graph.outputs(n1));
         let subg = Subgraph::new_subgraph(&graph, boundary);

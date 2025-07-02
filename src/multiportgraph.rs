@@ -641,7 +641,7 @@ impl SubportIndex {
 
 impl From<SubportIndex> for PortIndex {
     fn from(index: SubportIndex) -> Self {
-        PortIndex::new(index.port.index())
+        Port::port_from_usize(index.port.index())
     }
 }
 

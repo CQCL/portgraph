@@ -26,8 +26,8 @@ prop_compose! {
     ) -> Vec<Edge> {
         out_ports.into_iter().zip(in_ports).map(|((src_v, src_p), (target_v, target_p))| {
             Edge {
-                src_v: NodeIndex::new(src_v),
-                target_v: NodeIndex::new(target_v),
+                src_v: Node::node_from_usize(src_v),
+                target_v: Node::node_from_usize(target_v),
                 src_p: PortOffset::new_outgoing(src_p),
                 target_p: PortOffset::new_incoming(target_p),
             }
@@ -45,8 +45,8 @@ prop_compose! {
         // edges directly. Might make shrinking slightly more difficult.
         out_ports.into_iter().zip(in_ports).map(|((src_v, src_p), (target_v, target_p))| {
             Edge {
-                src_v: NodeIndex::new(src_v),
-                target_v: NodeIndex::new(target_v),
+                src_v: Node::node_from_usize(src_v),
+                target_v: Node::node_from_usize(target_v),
                 src_p: PortOffset::new_outgoing(src_p),
                 target_p: PortOffset::new_incoming(target_p),
             }

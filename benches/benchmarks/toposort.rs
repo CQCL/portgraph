@@ -18,7 +18,7 @@ impl SizedBenchmark for Toposort {
 
     fn setup(size: usize) -> Self {
         let graph = make_two_track_dag(size);
-        let roots = [0, 1].map(NodeIndex::new);
+        let roots = [0, 1].map(Node::node_from_usize);
         Self { graph, roots }
     }
 

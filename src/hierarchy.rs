@@ -525,7 +525,7 @@ impl Hierarchy {
     /// Does nothing when the capacity of the secondary map is already lower.
     pub fn shrink_to(&mut self, capacity: usize) {
         for node in (capacity..self.data.capacity()).rev() {
-            self.remove(NodeIndex::new(node));
+            self.remove(Node::node_from_usize(node));
         }
         self.data.shrink_to(capacity);
     }
@@ -744,7 +744,7 @@ mod test {
     #[test]
     fn test_basic() {
         let mut hierarchy = Hierarchy::new();
-        let root = NodeIndex::new(4);
+        let root = Node::node_from_usize(4);
 
         assert_eq!(hierarchy.child_count(root), 0);
         assert_eq!(hierarchy.parent(root), None);
@@ -757,9 +757,9 @@ mod test {
         //  |-> child0
         //  |-> child1
         //   -> child2
-        let child0 = NodeIndex::new(0);
-        let child1 = NodeIndex::new(1);
-        let child2 = NodeIndex::new(2);
+        let child0 = Node::node_from_usize(0);
+        let child1 = Node::node_from_usize(1);
+        let child2 = Node::node_from_usize(2);
         let children = [child0, child1, child2];
         hierarchy.push_front_child(child0, root).unwrap();
         hierarchy.push_child(child2, root).unwrap();
@@ -809,11 +809,11 @@ mod test {
     #[test]
     fn test_detach() {
         let mut hierarchy = Hierarchy::new();
-        let root = NodeIndex::new(4);
+        let root = Node::node_from_usize(4);
 
-        let child0 = NodeIndex::new(0);
-        let child1 = NodeIndex::new(1);
-        let child2 = NodeIndex::new(2);
+        let child0 = Node::node_from_usize(0);
+        let child1 = Node::node_from_usize(1);
+        let child2 = Node::node_from_usize(2);
         hierarchy.push_child(child2, root).unwrap();
         hierarchy.insert_before(child1, child2).unwrap();
         hierarchy.insert_before(child0, child1).unwrap();
@@ -854,11 +854,11 @@ mod test {
     #[test]
     fn test_rekey() {
         let mut hierarchy = Hierarchy::new();
-        let root = NodeIndex::new(4);
+        let root = Node::node_from_usize(4);
 
-        let child0 = NodeIndex::new(0);
-        let child1 = NodeIndex::new(1);
-        let child2 = NodeIndex::new(2);
+        let child0 = Node::node_from_usize(0);
+        let child1 = Node::node_from_usize(1);
+        let child2 = Node::node_from_usize(2);
         hierarchy.push_child(child2, root).unwrap();
         hierarchy.insert_before(child1, child2).unwrap();
         hierarchy.insert_before(child0, child1).unwrap();
@@ -868,7 +868,7 @@ mod test {
             vec![child0, child1, child2]
         );
 
-        let grandchild = NodeIndex::new(42);
+        let grandchild = Node::node_from_usize(42);
         hierarchy.push_front_child(grandchild, child1).unwrap();
 
         assert_eq!(
@@ -880,7 +880,7 @@ mod test {
             vec![grandchild]
         );
 
-        let new_child1 = NodeIndex::new(8);
+        let new_child1 = Node::node_from_usize(8);
         hierarchy.rekey(child1, new_child1);
 
         assert_eq!(
@@ -910,17 +910,17 @@ mod test {
     #[test]
     fn test_swap() {
         let mut hierarchy = Hierarchy::new();
-        let root = NodeIndex::new(4);
+        let root = Node::node_from_usize(4);
 
-        let child0 = NodeIndex::new(0);
-        let child1 = NodeIndex::new(1);
-        let child2 = NodeIndex::new(2);
+        let child0 = Node::node_from_usize(0);
+        let child1 = Node::node_from_usize(1);
+        let child2 = Node::node_from_usize(2);
         hierarchy.push_child(child2, root).unwrap();
         hierarchy.insert_before(child1, child2).unwrap();
         hierarchy.insert_before(child0, child1).unwrap();
 
-        let grandchild1 = NodeIndex::new(42);
-        let grandchild2 = NodeIndex::new(8);
+        let grandchild1 = Node::node_from_usize(42);
+        let grandchild2 = Node::node_from_usize(8);
         hierarchy.push_child(grandchild1, child1).unwrap();
         hierarchy.push_child(grandchild2, child1).unwrap();
 
@@ -1007,11 +1007,11 @@ mod test {
     fn hierarchy_serialize() {
         let mut hierarchy = Hierarchy::new();
         assert_eq!(crate::portgraph::test::ser_roundtrip(&hierarchy), hierarchy);
-        let root = NodeIndex::new(4);
+        let root = Node::node_from_usize(4);
 
-        let child0 = NodeIndex::new(0);
-        let child1 = NodeIndex::new(1);
-        let child2 = NodeIndex::new(2);
+        let child0 = Node::node_from_usize(0);
+        let child1 = Node::node_from_usize(1);
+        let child2 = Node::node_from_usize(2);
         hierarchy.push_front_child(child0, root).unwrap();
         hierarchy.push_child(child2, root).unwrap();
         hierarchy.insert_after(child1, child0).unwrap();

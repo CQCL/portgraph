@@ -224,7 +224,7 @@ mod test {
             // 14 and 15 are independent nodes.
         ];
         for (parent, node) in edges {
-            hier.push_child(NodeIndex::new(node), NodeIndex::new(parent))
+            hier.push_child(Node::node_from_usize(node), Node::node_from_usize(parent))
                 .unwrap();
         }
 
@@ -236,7 +236,7 @@ mod test {
         let lca = LCA::new(&test_hierarchy.0, &test_hierarchy.1);
 
         // Little helper to convert node indexes.
-        let n = NodeIndex::new;
+        let n = Node::node_from_usize;
 
         assert_eq!(lca.lca(n(5), n(10)), Some(n(0)));
         assert_eq!(lca.lca(n(10), n(5)), Some(n(0)));

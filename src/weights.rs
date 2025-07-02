@@ -148,8 +148,8 @@ mod test {
     #[test]
     fn test_weights() {
         let mut weights = Weights::<usize, isize>::new();
-        let node = NodeIndex::new(0);
-        let port = PortIndex::new(0);
+        let node = Node::node_from_usize(0);
+        let port = Port::port_from_usize(0);
 
         assert_eq!(weights[node], 0);
         assert_eq!(weights[port], 0);

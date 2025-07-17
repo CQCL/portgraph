@@ -19,7 +19,7 @@ use std::num::{NonZeroU16, NonZeroU32};
 use std::ops::Range;
 use thiserror::Error;
 
-use crate::index::Unsigned;
+use crate::index::{MaybeNodeIndex, MaybePortIndex, Unsigned};
 use crate::view::{LinkMut, PortMut};
 use crate::{Direction, LinkView, NodeIndex, PortIndex, PortOffset, PortView};
 
@@ -49,16 +49,16 @@ pub struct PortGraph<N: Unsigned = u32, P: Unsigned = u32, PO: Unsigned = u16> {
     /// Links from ports to other ports. Free ports slabs (fixed-length lists of
     /// ports) form a linked list, with the next slab index stored in the first
     /// port.
-    port_link: Vec<Option<PortIndex<P>>>,
+    port_link: Vec<MaybePortIndex<P>>,
     /// Metadata for each port. Ports of a node are stored contiguously, with
     /// incoming ports first.
     port_meta: Vec<PortEntry>,
     /// Index of the first free node slot in the free-node linked list embedded
     /// in `node_meta`.
-    node_free: Option<NodeIndex<N>>,
+    node_free: MaybeNodeIndex<N>,
     /// List of free slabs of ports. Each i-th item is the index of the first
     /// slab of size `i+1` in the free-port linked list embedded in `port_link`.
-    port_free: Vec<Option<PortIndex<P>>>,
+    port_free: Vec<MaybePortIndex<P>>,
     /// Number of nodes in the graph.
     node_count: usize,
     /// Number of ports in the graph.
@@ -80,7 +80,7 @@ impl<N: Unsigned, P: Unsigned, PO: Unsigned> PortGraph<N, P, PO> {
             node_meta: Vec::new(),
             port_link: Vec::new(),
             port_meta: Vec::new(),
-            node_free: None,
+            node_free: None.into(),
             port_free: Vec::new(),
             node_count: 0,
             port_count: 0,
@@ -95,7 +95,7 @@ impl<N: Unsigned, P: Unsigned, PO: Unsigned> PortGraph<N, P, PO> {
             node_meta: Vec::with_capacity(nodes),
             port_link: Vec::with_capacity(ports),
             port_meta: Vec::with_capacity(ports),
-            node_free: None,
+            node_free: None.into(),
             port_free: Vec::new(),
             node_count: 0,
             port_count: 0,
@@ -108,13 +108,13 @@ impl<N: Unsigned, P: Unsigned, PO: Unsigned> PortGraph<N, P, PO> {
 impl<PO: Unsigned> PortGraph<u32, u32, PO> {
     #[inline]
     fn alloc_node(&mut self) -> NodeIndex {
-        match self.node_free {
+        match self.node_free.to_option() {
             Some(node) => {
                 let free_entry = self.node_meta[node.index()].free_entry().unwrap();
                 self.node_free = free_entry.next;
-                if let Some(next) = free_entry.next {
+                if let Some(next) = free_entry.next.to_option() {
                     let next_entry = self.node_meta[next.index()].free_entry_mut().unwrap();
-                    next_entry.prev = None;
+                    next_entry.prev = None.into();
                 }
                 node
             }
@@ -144,7 +144,11 @@ impl<PO: Unsigned> PortGraph<u32, u32, PO> {
         let meta_incoming = PortEntry::Port(PortMeta::new(node, Direction::Incoming));
         let meta_outgoing = PortEntry::Port(PortMeta::new(node, Direction::Outgoing));
         let meta_empty = PortEntry::Free;
-        match self.port_free.get(requested - 1).copied().flatten() {
+        match self
+            .port_free
+            .get(requested - 1)
+            .and_then(|maybe_port| maybe_port.to_option())
+        {
             Some(port) => {
                 // TODO: Over-allocate if there are similarly-sized free slabs.
                 let capacity = requested;
@@ -158,7 +162,7 @@ impl<PO: Unsigned> PortGraph<u32, u32, PO> {
                 self.port_meta[node_meta.outgoing_ports()].fill(meta_outgoing);
                 self.port_meta[node_meta.unused_ports()].fill(meta_empty);
 
-                self.port_link[port.index()..port.index() + capacity].fill(None);
+                self.port_link[port.index()..port.index() + capacity].fill(None.into());
 
                 node_meta
             }
@@ -174,7 +178,7 @@ impl<PO: Unsigned> PortGraph<u32, u32, PO> {
                     .resize(old_len + incoming + outgoing, meta_outgoing);
                 self.port_meta.resize(old_len + capacity, meta_empty);
 
-                self.port_link.resize(old_len + capacity, None);
+                self.port_link.resize(old_len + capacity, None.into());
 
                 NodeMeta::new(port, incoming as u16, outgoing as u16, capacity as u16)
             }
@@ -183,12 +187,12 @@ impl<PO: Unsigned> PortGraph<u32, u32, PO> {
 
     #[inline]
     fn free_node(&mut self, node: NodeIndex) {
-        if let Some(node_free) = self.node_free {
+        if let Some(node_free) = self.node_free.to_option() {
             let free_list = self.node_meta[node_free.index()].free_entry_mut().unwrap();
-            free_list.prev = Some(node);
+            free_list.prev = node.into();
         }
         self.node_meta[node.index()] = NodeEntry::new_free(None, self.node_free);
-        self.node_free = Some(node);
+        self.node_free = node.into();
     }
 
     /// Free a slab of ports.
@@ -197,7 +201,7 @@ impl<PO: Unsigned> PortGraph<u32, u32, PO> {
     #[inline]
     fn free_ports(&mut self, ports: PortIndex, size: usize) {
         if size > self.port_free.len() {
-            self.port_free.resize(size, None);
+            self.port_free.resize(size, None.into());
         }
         if size == 0 {
             return;
@@ -208,8 +212,8 @@ impl<PO: Unsigned> PortGraph<u32, u32, PO> {
         for i in ports.index()..ports.index() + size {
             self.port_meta[i] = PortEntry::Free;
 
-            if let Some(link) = self.port_link[i].take() {
-                self.port_link[link.index()] = None;
+            if let Some(link) = self.port_link[i].take().to_option() {
+                self.port_link[link.index()] = None.into();
                 self.link_count -= 1;
             }
         }
@@ -281,8 +285,8 @@ impl<PO: Unsigned> PortGraph<u32, u32, PO> {
             self.port_link[new] = self.port_link[old];
             self.port_meta[new] = self.port_meta[old];
             rekey(old_index, PortOperation::Moved { new_index });
-            if let Some(link) = self.port_link[new] {
-                self.port_link[link.index()] = Some(new_index);
+            if let Some(link) = self.port_link[new].to_option() {
+                self.port_link[link.index()] = new_index.into();
             }
         };
 
@@ -300,14 +304,14 @@ impl<PO: Unsigned> PortGraph<u32, u32, PO> {
         for dir in Direction::BOTH {
             let existing = node_meta.num_ports(dir) as usize;
             for port in new_meta.ports(dir).skip(existing) {
-                self.port_link[port] = None;
+                self.port_link[port] = None.into();
                 self.port_meta[port] = PortEntry::Port(PortMeta::new(node, dir));
             }
         }
         // Empty ports that are no longer used.
         for port_offset in new_meta.port_count()..node_meta.port_count() {
             let port = new_meta.first_port().index() + port_offset;
-            self.port_link[port] = None;
+            self.port_link[port] = None.into();
             self.port_meta[port] = PortEntry::Free;
         }
 
@@ -448,16 +452,12 @@ impl<PO: Unsigned> PortView for PortGraph<u32, u32, PO> {
 impl<PO: Unsigned> PortMut for PortGraph<u32, u32, PO> {
     fn add_node(&mut self, incoming: usize, outgoing: usize) -> NodeIndex {
         assert!(
-            incoming <= NodeMeta::MAX_INCOMING,
+            incoming <= PortOffset::<PO>::max_offset(),
             "Incoming port count exceeds maximum."
         );
         assert!(
-            outgoing <= NodeMeta::MAX_OUTGOING,
+            outgoing <= PortOffset::<PO>::max_offset(),
             "Outgoing port count exceeds maximum."
-        );
-        assert!(
-            incoming + outgoing <= u16::MAX as usize,
-            "Total port count exceeds maximum u16::MAX."
         );
 
         let node = self.alloc_node();
@@ -499,7 +499,7 @@ impl<PO: Unsigned> PortMut for PortGraph<u32, u32, PO> {
         self.node_meta.clear();
         self.port_link.clear();
         self.port_meta.clear();
-        self.node_free = None;
+        self.node_free = None.into();
         self.port_free.clear();
         self.node_count = 0;
         self.port_count = 0;
@@ -565,8 +565,8 @@ impl<PO: Unsigned> PortMut for PortGraph<u32, u32, PO> {
         for dir in Direction::BOTH {
             let rekeys = node_meta.ports(dir).zip(new_meta.ports(dir));
             for (old, new) in rekeys {
-                if let Some(link) = self.port_link[old] {
-                    self.port_link[link.index()] = Some(PortIndex::new(new));
+                if let Some(link) = self.port_link[old].to_option() {
+                    self.port_link[link.index()] = PortIndex::new(new).into();
                 }
                 self.port_link[new] = self.port_link[old].take();
                 self.port_meta[new] = self.port_meta[old];
@@ -610,7 +610,7 @@ impl<PO: Unsigned> PortMut for PortGraph<u32, u32, PO> {
             true
         });
 
-        self.node_free = None;
+        self.node_free = None.into();
     }
 
     fn swap_nodes(&mut self, a: NodeIndex, b: NodeIndex) {
@@ -633,11 +633,11 @@ impl<PO: Unsigned> PortMut for PortGraph<u32, u32, PO> {
         // Update the free node linked list, only if we swapping empty and
         // non-empty spaces.
         let mut update_free_list = |new_node: NodeIndex, entry: FreeNodeEntry| {
-            if let Some(prev) = entry.prev {
-                self.node_meta[prev.index()].free_entry_mut().unwrap().next = Some(new_node);
+            if let Some(prev) = entry.prev.to_option() {
+                self.node_meta[prev.index()].free_entry_mut().unwrap().next = new_node.into();
             }
-            if let Some(next) = entry.next {
-                self.node_meta[next.index()].free_entry_mut().unwrap().prev = Some(new_node);
+            if let Some(next) = entry.next.to_option() {
+                self.node_meta[next.index()].free_entry_mut().unwrap().prev = new_node.into();
             }
         };
         match (meta_a, meta_b) {
@@ -666,8 +666,8 @@ impl<PO: Unsigned> PortMut for PortGraph<u32, u32, PO> {
             // backlinks pointing to the correctly updated port indices.
             //
             // At the end of the loop, all port links have been updated.
-            if let Some(link) = self.port_link[old_index] {
-                self.port_link[link.index()] = Some(PortIndex::new(new_index));
+            if let Some(link) = self.port_link[old_index].to_option() {
+                self.port_link[link.index()] = PortIndex::new(new_index).into();
             }
             self.port_link.swap(new_index, old_index);
             new_index += 1;
@@ -726,6 +726,7 @@ impl<PO: Unsigned> LinkView for PortGraph<u32, u32, PO> {
     fn port_links(&self, port: PortIndex) -> impl Iterator<Item = (PortIndex, PortIndex)> + Clone {
         self.port_meta_valid(port).unwrap();
         self.port_link[port.index()]
+            .to_option()
             .map(|link| (port, link))
             .into_iter()
     }
@@ -779,16 +780,16 @@ impl<PO: Unsigned> LinkMut for PortGraph<u32, u32, PO> {
             return Err(LinkError::AlreadyLinked { port: port_b });
         }
 
-        self.port_link[port_a.index()] = Some(port_b);
-        self.port_link[port_b.index()] = Some(port_a);
+        self.port_link[port_a.index()] = port_b.into();
+        self.port_link[port_b.index()] = port_a.into();
         self.link_count += 1;
         Ok((port_a, port_b))
     }
 
     fn unlink_port(&mut self, port: PortIndex) -> Option<PortIndex> {
         self.port_meta_valid(port)?;
-        let linked = take(&mut self.port_link[port.index()])?;
-        self.port_link[linked.index()] = None;
+        let linked = self.port_link[port.index()].take().to_option()?;
+        self.port_link[linked.index()] = None.into();
         self.link_count -= 1;
         Some(linked)
     }
@@ -961,8 +962,14 @@ impl NodeEntry {
 
     /// Create a new free node entry
     #[inline]
-    pub fn new_free(prev: Option<NodeIndex>, next: Option<NodeIndex>) -> Self {
-        NodeEntry::Free(FreeNodeEntry { prev, next })
+    pub fn new_free(
+        prev: impl Into<MaybeNodeIndex<u32>>,
+        next: impl Into<MaybeNodeIndex<u32>>,
+    ) -> Self {
+        NodeEntry::Free(FreeNodeEntry {
+            prev: prev.into(),
+            next: next.into(),
+        })
     }
 }
 
@@ -973,9 +980,9 @@ impl NodeEntry {
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 struct FreeNodeEntry {
     /// The previous free node.
-    prev: Option<NodeIndex>,
+    prev: MaybeNodeIndex<u32>,
     /// The next free node.
-    next: Option<NodeIndex>,
+    next: MaybeNodeIndex<u32>,
 }
 
 impl<PO: Unsigned> std::fmt::Debug for PortGraph<u32, u32, PO> {

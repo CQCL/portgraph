@@ -1,6 +1,6 @@
 //! Index types for nodes and ports.
 
-use std::ops;
+use std::{fmt, mem, ops};
 
 use thiserror::Error;
 
@@ -15,7 +15,7 @@ use crate::Direction;
 /// Index of a node within a `PortGraph`.
 ///
 /// For a bit field with n bits, the index value will be restricted to at
-/// most `2^n - 1` . The all null value is reserved for null-pointer optimisation.
+/// most `2^(n-1) - 1` . The all null value is reserved for null-pointer optimisation.
 ///
 /// Use with one of `usize`, `u64`, `u32`, `u16` and `u8`. Choose the bit width
 /// that suits your needs.
@@ -35,7 +35,7 @@ pub struct NodeIndex<U = u32>(BitField<U>);
 /// Index of a port within a `PortGraph`.
 ///
 /// For an index type with n bits, the index value will be restricted to at
-/// most `2^n - 1` . The all null value is reserved for null-pointer optimisation.
+/// most `2^(n-1) - 1` . The all null value is reserved for null-pointer optimisation.
 #[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
@@ -49,7 +49,7 @@ pub struct NodeIndex<U = u32>(BitField<U>);
 #[cfg_attr(feature = "pyo3", derive(IntoPyObject))]
 pub struct PortIndex<U = u32>(BitField<U>);
 
-// Wraps the ShiftedIndex API for NodeIndex and PortIndex.
+// Wraps the BitField API for NodeIndex and PortIndex.
 macro_rules! index_impls {
     ($name:ident) => {
         impl<U: Unsigned> $name<U> {
@@ -63,28 +63,29 @@ macro_rules! index_impls {
             /// # Panics
             ///
             /// Panics if the index is greater than `Self::MAX`.
-            #[inline]
+            #[inline(always)]
             pub fn new(index: usize) -> Self {
                 Self(BitField::new(index, false))
             }
 
             /// Returns the index as a `T`.
+            #[inline(always)]
             pub fn index(&self) -> usize {
-                self.0.index().expect("invalid index")
+                self.0.index_unchecked()
             }
         }
 
         impl<U: Unsigned> TryFrom<usize> for $name<U> {
             type Error = IndexError;
 
-            #[inline]
+            #[inline(always)]
             fn try_from(index: usize) -> Result<Self, Self::Error> {
                 BitField::try_from(index).map(Self)
             }
         }
 
         impl<U: Unsigned> From<$name<U>> for usize {
-            #[inline]
+            #[inline(always)]
             fn from(index: $name<U>) -> Self {
                 Self::from(index.0)
             }
@@ -94,6 +95,13 @@ macro_rules! index_impls {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 // avoid unnecessary newlines in alternate mode
                 write!(f, concat!(stringify!($name), "({})"), self.index())
+            }
+        }
+
+        impl<U: Unsigned> AsMut<$name<U>> for BitField<U> {
+            fn as_mut(&mut self) -> &mut $name<U> {
+                // safety: Index types are repr(transparent)
+                unsafe { &mut *(self as *mut BitField<U> as *mut $name<U>) }
             }
         }
     };
@@ -108,10 +116,169 @@ impl<U: Unsigned> Default for PortIndex<U> {
     }
 }
 
+/// Equivalent to `Option<NodeIndex<U>>` but stored within the size of `U`.
+///
+/// Uses the spare bit flag of the NodeIndex to store the `None` case.
+#[derive(Clone, Copy, PartialEq, Eq)]
+#[repr(transparent)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[cfg_attr(
+    feature = "serde",
+    serde(bound(
+        serialize = "U: Serialize + Unsigned",
+        deserialize = "U: Deserialize<'de> + Unsigned"
+    ))
+)]
+pub struct MaybeNodeIndex<U>(BitField<U>);
+
+/// Equivalent to `Option<PortIndex<U>>` but stored within the size of `U`.
+///
+/// Uses the spare bit flag of the PortIndex to store the `None` case.
+#[derive(Clone, Copy, PartialEq, Eq)]
+#[repr(transparent)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[cfg_attr(
+    feature = "serde",
+    serde(bound(
+        serialize = "U: Serialize + Unsigned",
+        deserialize = "U: Deserialize<'de> + Unsigned"
+    ))
+)]
+pub struct MaybePortIndex<U>(BitField<U>);
+
+macro_rules! maybe_index_impls {
+    ($maybe_index:ident, $index:ident) => {
+        impl<U: Unsigned> $maybe_index<U> {
+            /// Create a new maybe index from an optional index.
+            pub fn new(value: Option<$index<U>>) -> Self {
+                match value {
+                    Some(value) => {
+                        debug_assert!(!value.0.is_none(), "invalid index");
+                        Self(value.0)
+                    }
+                    None => Self(BitField::new_none()),
+                }
+            }
+
+            /// Convert the maybe index to an option.
+            #[inline(always)]
+            pub fn to_option(self) -> Option<$index<U>> {
+                if self.0.is_none() {
+                    None
+                } else {
+                    Some($index(self.0))
+                }
+            }
+
+            /// Get a mutable reference to the index, if it is not `None`.
+            #[inline(always)]
+            pub fn as_mut(&mut self) -> Option<&mut $index<U>> {
+                if self.is_none() {
+                    None
+                } else {
+                    Some(self.0.as_mut())
+                }
+            }
+
+            /// Whether `self` contains an index.
+            #[inline(always)]
+            pub fn is_some(self) -> bool {
+                !self.is_none()
+            }
+
+            /// Whether `self` does not contain an index.
+            #[inline(always)]
+            pub fn is_none(self) -> bool {
+                self.0.is_none()
+            }
+
+            /// Unwrap the index, panicking with the given message if `self` is
+            /// `None`.
+            #[inline(always)]
+            pub fn expect(self, msg: &str) -> $index<U> {
+                if self.is_none() {
+                    panic!("{msg}");
+                }
+                $index(self.0)
+            }
+
+            /// Unwrap the index, panicking if `self` is `None`.
+            #[inline(always)]
+            pub fn unwrap(self) -> $index<U> {
+                self.expect("unwrap called on None")
+            }
+
+            /// Move the value out of the maybe index, leaving a `None` in its place.
+            #[inline(always)]
+            pub fn take(&mut self) -> Self {
+                mem::replace(self, None.into())
+            }
+
+            /// Replace the value in the maybe index with a new value.
+            #[inline(always)]
+            pub fn replace(&mut self, value: $index<U>) -> Self {
+                mem::replace(self, value.into())
+            }
+        }
+
+        impl<U: Unsigned> fmt::Debug for $maybe_index<U> {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, "{:?}", self.to_option())
+            }
+        }
+
+        impl<U: Unsigned> From<$index<U>> for $maybe_index<U> {
+            #[inline(always)]
+            fn from(index: $index<U>) -> Self {
+                Self(index.0)
+            }
+        }
+
+        impl<U: Unsigned> From<$maybe_index<U>> for Option<$index<U>> {
+            #[inline(always)]
+            fn from(maybe_index: $maybe_index<U>) -> Self {
+                maybe_index.to_option()
+            }
+        }
+
+        impl<U: Unsigned> From<Option<$index<U>>> for $maybe_index<U> {
+            #[inline(always)]
+            fn from(index: Option<$index<U>>) -> Self {
+                Self::new(index)
+            }
+        }
+
+        impl<U: Unsigned> Default for $maybe_index<U> {
+            #[inline(always)]
+            fn default() -> Self {
+                Self(BitField::new_none())
+            }
+        }
+
+        impl<U: Unsigned> IntoIterator for $maybe_index<U> {
+            type Item = $index<U>;
+            type IntoIter = std::option::IntoIter<Self::Item>;
+
+            fn into_iter(self) -> Self::IntoIter {
+                self.to_option().into_iter()
+            }
+        }
+    };
+}
+
+maybe_index_impls!(MaybeNodeIndex, NodeIndex);
+maybe_index_impls!(MaybePortIndex, PortIndex);
+
+impl MaybeNodeIndex<u32> {
+    /// The `None` value for `MaybeNodeIndex<u32>`.
+    // TODO: Added here so that [`crate::Hierarchy::new`] may be const.
+    pub const NONE: Self = Self(BitField(u32::MAX));
+}
+
 /// Port offset in a node.
 ///
 /// For an index type with n bits, the index value will be restricted to at
-/// most `2^(n-1)` . The most significant bit is reserved to store the direction
+/// most `2^(n-1) - 1` . The most significant bit is reserved to store the direction
 /// of the offset, see [`PortOffset::direction`].
 #[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
@@ -235,6 +402,7 @@ impl Unsigned for usize {}
 
 impl<U: Unsigned> BitField<U> {
     /// Create a new bit field with the given index and bit flag.
+    #[inline(always)]
     fn new(index: usize, bit_flag: bool) -> Self {
         let u = U::from_usize(index).expect("index too large");
         let ret = Self(u);
@@ -246,11 +414,13 @@ impl<U: Unsigned> BitField<U> {
     }
 
     /// Create a new unset bit field
+    #[inline(always)]
     fn new_none() -> Self {
         Self(U::max_value())
     }
 
     /// Maximum allowed index.
+    #[inline(always)]
     fn max_index() -> usize {
         (U::max_value()
             .to_usize()
@@ -262,12 +432,22 @@ impl<U: Unsigned> BitField<U> {
     /// Return the index stored in the bit field as a `usize`.
     ///
     /// Return `None` if the bit field is unset.
+    #[inline(always)]
     fn index(self) -> Option<usize> {
         if self.is_none() {
             return None;
         }
-        let index = self.0 & !Self::msb_mask();
-        Some(index.to_usize().expect("index too large"))
+        Some(self.index_unchecked())
+    }
+
+    /// Return the index stored in the bit field as a `usize`.
+    ///
+    /// Panics if the bit field is unset.
+    #[inline(always)]
+    fn index_unchecked(self) -> usize {
+        (self.0 & !Self::msb_mask())
+            .to_usize()
+            .expect("index too large")
     }
 
     /// Set the index in the bit field leaving the bit flag unchanged.
@@ -275,6 +455,7 @@ impl<U: Unsigned> BitField<U> {
     /// If the bit field is unset, the index is set to the given value and the
     /// bit flag is set to false.
     #[allow(unused)]
+    #[inline(always)]
     fn set_index(self, index: usize) -> Self {
         let u = U::from_usize(index).expect("index too large");
         let msb = if self.is_none() {
@@ -286,6 +467,7 @@ impl<U: Unsigned> BitField<U> {
     }
 
     /// Return the bit flag stored in the bit field.
+    #[inline(always)]
     fn bit_flag(self) -> Option<bool> {
         if self.is_none() {
             return None;
@@ -296,6 +478,7 @@ impl<U: Unsigned> BitField<U> {
     /// Set the bit flag in the bit field leaving the index unchanged.
     ///
     /// Panics if the bit field is unset.
+    #[inline(always)]
     fn set_bit_flag(self) -> Self {
         assert!(!self.is_none(), "bit field is unset");
 
@@ -307,6 +490,7 @@ impl<U: Unsigned> BitField<U> {
     ///
     /// Panics if the bit field is unset.
     #[allow(unused)]
+    #[inline(always)]
     fn unset_bit_flag(self) -> Self {
         assert!(!self.is_none(), "bit field is unset");
 
@@ -314,16 +498,19 @@ impl<U: Unsigned> BitField<U> {
         Self(msb)
     }
 
+    #[inline(always)]
     fn flip_bit_flag(self) -> Self {
         Self(self.0 ^ Self::msb_mask())
     }
 
+    #[inline(always)]
     fn unpack(self) -> Option<(usize, bool)> {
         let ind = self.index()?;
         let flag = self.bit_flag()?;
         Some((ind, flag))
     }
 
+    #[inline(always)]
     fn pack(data: Option<(usize, bool)>) -> Self {
         match data {
             Some((ind, flag)) => Self::new(ind, flag),
@@ -331,11 +518,13 @@ impl<U: Unsigned> BitField<U> {
         }
     }
 
+    #[inline(always)]
     fn msb_mask() -> U {
         U::max_value() - (U::max_value() >> 1)
     }
 
     /// Whether the bit field is unset.
+    #[inline(always)]
     fn is_none(self) -> bool {
         self == Self::new_none()
     }

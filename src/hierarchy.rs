@@ -51,9 +51,10 @@
 use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::iter::FusedIterator;
-use std::mem::{replace, take};
+use std::mem;
 use thiserror::Error;
 
+use crate::index::MaybeNodeIndex;
 use crate::unmanaged::UnmanagedDenseMap;
 use crate::{NodeIndex, SecondaryMap};
 
@@ -128,18 +129,19 @@ impl Hierarchy {
         }
 
         let node_data = self.get_mut(node);
-        node_data.parent = Some(parent);
+        node_data.parent = parent.into();
 
         let parent_data = self.get_mut(parent);
         parent_data.children_count += 1;
         match &mut parent_data.children {
-            Some([_, prev]) => {
-                let prev = replace(prev, node);
-                self.get_mut(node).siblings[0] = Some(prev);
-                self.get_mut(prev).siblings[1] = Some(node);
+            [_, prev] if prev.is_some() => {
+                let prev = prev.replace(node);
+                self.get_mut(node).siblings[0] = prev;
+                self.get_mut(prev.unwrap()).siblings[1] = node.into();
             }
-            None => {
-                parent_data.children = Some([node, node]);
+            _ => {
+                let node = MaybeNodeIndex::from(node);
+                parent_data.children = [node, node];
             }
         }
 
@@ -168,18 +170,19 @@ impl Hierarchy {
         }
 
         let node_data = self.get_mut(node);
-        node_data.parent = Some(parent);
+        node_data.parent = parent.into();
 
         let parent_data = self.get_mut(parent);
         parent_data.children_count += 1;
         match &mut parent_data.children {
-            Some([next, _]) => {
-                let next = replace(next, node);
-                self.get_mut(node).siblings[1] = Some(next);
-                self.get_mut(next).siblings[0] = Some(node);
+            [next, _] if next.is_some() => {
+                let next = next.replace(node);
+                self.get_mut(node).siblings[1] = next;
+                self.get_mut(next.unwrap()).siblings[0] = node.into();
             }
-            None => {
-                parent_data.children = Some([node, node]);
+            _ => {
+                let node = MaybeNodeIndex::from(node);
+                parent_data.children = [node, node];
             }
         }
 
@@ -202,7 +205,7 @@ impl Hierarchy {
             return Err(AttachError::AlreadyAttached { node });
         }
 
-        let Some(parent) = self.get(before).parent else {
+        let Some(parent) = self.get(before).parent.to_option() else {
             return Err(AttachError::RootSibling { root: before });
         };
 
@@ -215,13 +218,13 @@ impl Hierarchy {
 
         {
             let node_data = self.get_mut(node);
-            node_data.parent = Some(parent);
-            node_data.siblings = [before_prev, Some(before)];
+            node_data.parent = parent.into();
+            node_data.siblings = [before_prev, before.into()];
         }
 
-        match before_prev {
-            Some(prev) => self.get_mut(prev).siblings[1] = Some(node),
-            None => self.get_mut(parent).children.as_mut().unwrap()[0] = node,
+        match before_prev.to_option() {
+            Some(prev) => self.get_mut(prev).siblings[1] = node.into(),
+            None => self.get_mut(parent).children[0] = node.into(),
         }
 
         Ok(())
@@ -243,7 +246,7 @@ impl Hierarchy {
             return Err(AttachError::AlreadyAttached { node });
         }
 
-        let Some(parent) = self.get(after).parent else {
+        let Some(parent) = self.get(after).parent.to_option() else {
             return Err(AttachError::RootSibling { root: after });
         };
 
@@ -256,13 +259,13 @@ impl Hierarchy {
 
         {
             let node_data = self.get_mut(node);
-            node_data.parent = Some(parent);
-            node_data.siblings = [Some(after), after_next];
+            node_data.parent = parent.into();
+            node_data.siblings = [after.into(), after_next];
         }
 
-        match after_next {
-            Some(next) => self.get_mut(next).siblings[0] = Some(node),
-            None => self.get_mut(parent).children.as_mut().unwrap()[1] = node,
+        match after_next.to_option() {
+            Some(next) => self.get_mut(next).siblings[0] = node.into(),
+            None => self.get_mut(parent).children[1] = node.into(),
         }
 
         Ok(())
@@ -271,14 +274,15 @@ impl Hierarchy {
     /// Ensures that making `node` a child of `parent` would not introduce a cycle.
     fn cycle_check(&self, node: NodeIndex, mut parent: NodeIndex) -> bool {
         // When `node` does not have any children it can't contain `parent`.
-        if self.get(node).children.is_none() {
+        if self.get(node).children[0].is_none() {
+            debug_assert!(self.get(node).children[1].is_none());
             return true;
         }
 
         loop {
             if parent == node {
                 return false;
-            } else if let Some(next) = self.get(parent).parent {
+            } else if let Some(next) = self.get(parent).parent.to_option() {
                 parent = next;
             } else {
                 return true;
@@ -291,28 +295,28 @@ impl Hierarchy {
     /// Does nothing and returns `None` when the node is a root.
     pub fn detach(&mut self, node: NodeIndex) -> Option<NodeIndex> {
         let node_data = self.try_get_mut(node)?;
-        let parent = take(&mut node_data.parent);
-        let siblings = take(&mut node_data.siblings);
+        let parent = node_data.parent.take();
+        let siblings = mem::take(&mut node_data.siblings);
 
-        if let Some(parent) = parent {
+        if let Some(parent) = parent.to_option() {
             self.get_mut(parent).children_count -= 1;
 
-            if let Some(prev) = siblings[0] {
+            if let Some(prev) = siblings[0].to_option() {
                 self.get_mut(prev).siblings[1] = siblings[1];
             }
-            if let Some(next) = siblings[1] {
+            if let Some(next) = siblings[1].to_option() {
                 self.get_mut(next).siblings[0] = siblings[0];
             }
 
-            match siblings {
-                [None, None] => self.get_mut(parent).children = None,
-                [Some(prev), None] => self.get_mut(parent).children.as_mut().unwrap()[1] = prev,
-                [None, Some(next)] => self.get_mut(parent).children.as_mut().unwrap()[0] = next,
+            match siblings.map(|s| s.to_option()) {
+                [None, None] => self.get_mut(parent).children = siblings,
+                [Some(_), None] => self.get_mut(parent).children[1] = siblings[0],
+                [None, Some(_)] => self.get_mut(parent).children[0] = siblings[1],
                 _ => {}
             }
         }
 
-        parent
+        parent.to_option()
     }
 
     /// Detaches all children from a node.
@@ -322,13 +326,13 @@ impl Hierarchy {
         };
 
         node_data.children_count = 0;
-        let mut child_next = node_data.children.map(|c| c[0]);
-        node_data.children = None;
+        let mut child_next = node_data.children[0];
+        node_data.children = [None.into(), None.into()];
 
-        while let Some(child) = child_next {
+        while let Some(child) = child_next.to_option() {
             let child_data = self.get_mut(child);
-            child_data.parent = None;
-            let siblings = take(&mut child_data.siblings);
+            child_data.parent = None.into();
+            let siblings = mem::take(&mut child_data.siblings);
             child_next = siblings[1];
         }
     }
@@ -343,7 +347,7 @@ impl Hierarchy {
     /// Returns a node's parent or `None` if it is a root.
     #[inline]
     pub fn parent(&self, node: NodeIndex) -> Option<NodeIndex> {
-        self.get(node).parent
+        self.get(node).parent.to_option()
     }
 
     /// Returns whether a node is a root.
@@ -355,13 +359,13 @@ impl Hierarchy {
     /// Returns a node's first child, if any.
     #[inline]
     pub fn first(&self, parent: NodeIndex) -> Option<NodeIndex> {
-        self.get(parent).children.map(|c| c[0])
+        self.get(parent).children[0].to_option()
     }
 
     /// Returns a node's last child, if any.
     #[inline]
     pub fn last(&self, parent: NodeIndex) -> Option<NodeIndex> {
-        self.get(parent).children.map(|c| c[1])
+        self.get(parent).children[1].to_option()
     }
 
     /// Returns the next sibling in the node's parent, if any.
@@ -369,7 +373,7 @@ impl Hierarchy {
     /// Also returns `None` if the node is a root.
     #[inline]
     pub fn next(&self, node: NodeIndex) -> Option<NodeIndex> {
-        self.get(node).siblings[1]
+        self.get(node).siblings[1].to_option()
     }
 
     /// Returns the previous sibling in the node's parent, if any.
@@ -377,17 +381,18 @@ impl Hierarchy {
     /// Also returns `None` if the node is a root.
     #[inline]
     pub fn prev(&self, node: NodeIndex) -> Option<NodeIndex> {
-        self.get(node).siblings[0]
+        self.get(node).siblings[0].to_option()
     }
 
     /// Iterates over the node's children.
     #[inline]
     pub fn children(&self, node: NodeIndex) -> Children<'_> {
-        let node_data = &self.get(node);
+        let node_data = self.get(node);
+        let [next, prev] = node_data.children;
         Children {
             layout: self,
-            next: node_data.children.map(|c| c[0]),
-            prev: node_data.children.map(|c| c[1]),
+            next,
+            prev,
             len: node_data.children_count as usize,
         }
     }
@@ -445,8 +450,8 @@ impl Hierarchy {
             };
         let rekey_in_data = |data: &mut NodeData, old: NodeIndex, new: NodeIndex| {
             rekey_in_value(data.parent.as_mut(), old, new);
-            rekey_in_value(data.children.as_mut().map(|c| &mut c[0]), old, new);
-            rekey_in_value(data.children.as_mut().map(|c| &mut c[1]), old, new);
+            rekey_in_value(data.children[0].as_mut(), old, new);
+            rekey_in_value(data.children[1].as_mut(), old, new);
             rekey_in_value(data.siblings[0].as_mut(), old, new);
             rekey_in_value(data.siblings[1].as_mut(), old, new);
         };
@@ -469,7 +474,7 @@ impl Hierarchy {
         if old == new {
             return;
         }
-        let node_data = take(self.get_mut(old));
+        let node_data = mem::take(self.get_mut(old));
 
         self.rekey_in_children(node_data, new);
         self.rekey_in_parent(node_data, new);
@@ -481,12 +486,12 @@ impl Hierarchy {
     /// Update a node's key in its parent's children list.
     #[inline]
     fn rekey_in_parent(&mut self, data: NodeData, new_node: NodeIndex) {
-        if let Some(parent) = data.parent {
+        if let Some(parent) = data.parent.to_option() {
             if data.siblings[0].is_none() {
-                self.get_mut(parent).children.as_mut().unwrap()[0] = new_node;
+                self.get_mut(parent).children.as_mut()[0] = new_node.into();
             }
             if data.siblings[1].is_none() {
-                self.get_mut(parent).children.as_mut().unwrap()[1] = new_node;
+                self.get_mut(parent).children.as_mut()[1] = new_node.into();
             }
         }
     }
@@ -494,21 +499,21 @@ impl Hierarchy {
     /// Update a node's key in its immediate siblings data.
     #[inline]
     fn rekey_in_siblings(&mut self, data: NodeData, new: NodeIndex) {
-        if let Some(prev) = data.siblings[0] {
-            self.get_mut(prev).siblings[1] = Some(new);
+        if let Some(prev) = data.siblings[0].to_option() {
+            self.get_mut(prev).siblings[1] = new.into();
         }
-        if let Some(next) = data.siblings[1] {
-            self.get_mut(next).siblings[0] = Some(new);
+        if let Some(next) = data.siblings[1].to_option() {
+            self.get_mut(next).siblings[0] = new.into();
         }
     }
 
     /// Update a node's key in it's children data.
     #[inline]
     fn rekey_in_children(&mut self, data: NodeData, new: NodeIndex) {
-        let mut next_child = data.children.map(|c| c[0]);
-        while let Some(child) = next_child {
+        let mut next_child = data.children[0];
+        while let Some(child) = next_child.to_option() {
             let child_data = self.get_mut(child);
-            child_data.parent = Some(new);
+            child_data.parent = new.into();
             next_child = child_data.siblings[1];
         }
     }
@@ -547,22 +552,24 @@ impl From<Hierarchy> for Cow<'_, Hierarchy> {
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 struct NodeData {
     /// The first and last child of the node, if any.
-    children: Option<[NodeIndex; 2]>,
+    ///
+    /// Either both have a value or none of them do.
+    children: [MaybeNodeIndex<u32>; 2],
     /// The number of children
     children_count: u32,
     /// The parent of a node, if any.
-    parent: Option<NodeIndex>,
+    parent: MaybeNodeIndex<u32>,
     /// The siblings of a node, if any.
-    siblings: [Option<NodeIndex>; 2],
+    siblings: [MaybeNodeIndex<u32>; 2],
 }
 
 impl NodeData {
     pub const fn new() -> Self {
         Self {
-            children: None,
+            children: [MaybeNodeIndex::NONE; 2],
             children_count: 0u32,
-            parent: None,
-            siblings: [None; 2],
+            parent: MaybeNodeIndex::NONE,
+            siblings: [MaybeNodeIndex::NONE; 2],
         }
     }
 }
@@ -577,8 +584,8 @@ impl Default for NodeData {
 #[derive(Clone, Debug)]
 pub struct Children<'a> {
     layout: &'a Hierarchy,
-    next: Option<NodeIndex>,
-    prev: Option<NodeIndex>,
+    next: MaybeNodeIndex<u32>,
+    prev: MaybeNodeIndex<u32>,
     len: usize,
 }
 
@@ -587,8 +594,8 @@ impl Default for Children<'static> {
         static HIERARCHY: Hierarchy = Hierarchy::new();
         Self {
             layout: &HIERARCHY,
-            next: None,
-            prev: None,
+            next: MaybeNodeIndex::NONE,
+            prev: MaybeNodeIndex::NONE,
             len: 0,
         }
     }
@@ -604,7 +611,7 @@ impl Iterator for Children<'_> {
 
         self.len -= 1;
         let current = self.next.unwrap();
-        self.next = self.layout.next(current);
+        self.next = self.layout.next(current).into();
         Some(current)
     }
 
@@ -622,7 +629,7 @@ impl DoubleEndedIterator for Children<'_> {
 
         self.len -= 1;
         let current = self.prev.unwrap();
-        self.prev = self.layout.prev(current);
+        self.prev = self.layout.prev(current).into();
         Some(current)
     }
 }

@@ -1,4 +1,5 @@
 use super::postorder_filtered;
+use crate::index::MaybeNodeIndex;
 use crate::unmanaged::UnmanagedDenseMap;
 use crate::{Direction, LinkView, NodeIndex, PortGraph, PortIndex, PortView, SecondaryMap};
 use std::cmp::Ordering;
@@ -46,7 +47,7 @@ pub fn dominators<Map>(
     direction: Direction,
 ) -> DominatorTree<Map>
 where
-    Map: SecondaryMap<NodeIndex, Option<NodeIndex>>,
+    Map: SecondaryMap<NodeIndex, MaybeNodeIndex<u32>>,
 {
     DominatorTree::new(graph, entry, direction, |_| true, |_, _| true)
 }
@@ -109,7 +110,7 @@ pub fn dominators_filtered<Map>(
     port_filter: impl FnMut(NodeIndex, PortIndex) -> bool,
 ) -> DominatorTree<Map>
 where
-    Map: SecondaryMap<NodeIndex, Option<NodeIndex>>,
+    Map: SecondaryMap<NodeIndex, MaybeNodeIndex<u32>>,
 {
     DominatorTree::new(graph, entry, direction, node_filter, port_filter)
 }
@@ -117,7 +118,7 @@ where
 /// A dominator tree for a [`PortGraph`].
 ///
 /// See [`dominators`] for more information.
-pub struct DominatorTree<Map = UnmanagedDenseMap<NodeIndex, Option<NodeIndex>>> {
+pub struct DominatorTree<Map = UnmanagedDenseMap<NodeIndex, MaybeNodeIndex<u32>>> {
     root: NodeIndex,
     /// The immediate dominator of each node.
     idom: Map,
@@ -125,7 +126,7 @@ pub struct DominatorTree<Map = UnmanagedDenseMap<NodeIndex, Option<NodeIndex>>> 
 
 impl<Map> DominatorTree<Map>
 where
-    Map: SecondaryMap<NodeIndex, Option<NodeIndex>>,
+    Map: SecondaryMap<NodeIndex, MaybeNodeIndex<u32>>,
 {
     fn new(
         graph: &PortGraph,
@@ -203,7 +204,7 @@ where
 
         for (index, dominator) in dominators.into_iter().take(num_nodes - 1).enumerate() {
             debug_assert_ne!(dominator, usize::MAX);
-            idom.set(index_to_node[index], Some(index_to_node[dominator]));
+            idom.set(index_to_node[index], index_to_node[dominator].into());
         }
 
         Self { root: entry, idom }
@@ -218,7 +219,7 @@ where
     #[inline]
     /// Returns the immediate dominator of a node.
     pub fn immediate_dominator(&self, node: NodeIndex) -> Option<NodeIndex> {
-        *self.idom.get(node)
+        self.idom.get(node).to_option()
     }
 }
 

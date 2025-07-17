@@ -430,16 +430,16 @@ pub fn encode_label(id: &str, label: &str) -> String {
 pub fn encode_presentation_attrs(attrs: &PresentationStyle) -> String {
     let mut result = Vec::new();
     if let Some(color) = &attrs.color {
-        result.push(format!("color:{}", color));
+        result.push(format!("color:{color}"));
     }
     if let Some(fill) = &attrs.fill {
-        result.push(format!("fill:{}", fill));
+        result.push(format!("fill:{fill}"));
     }
     if let Some(stroke) = &attrs.stroke {
-        result.push(format!("stroke:{}", stroke));
+        result.push(format!("stroke:{stroke}"));
     }
     if let Some(stroke_width) = &attrs.stroke_width {
-        result.push(format!("stroke-width:{}", stroke_width));
+        result.push(format!("stroke-width:{stroke_width}"));
     }
     result.into_iter().join(",")
 }

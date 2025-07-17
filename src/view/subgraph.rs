@@ -391,7 +391,7 @@ impl<G: LinkMut> Subgraph<G> {
                                     internal: node_p.into(),
                                 });
                             }
-                            Err(e) => panic!("Unexpected error copying boundary edge: {}", e),
+                            Err(e) => panic!("Unexpected error copying boundary edge: {e}"),
                             Ok(_) => (),
                         }
                     }

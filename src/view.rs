@@ -12,7 +12,10 @@ pub mod petgraph;
 
 use std::collections::HashMap;
 
-use crate::{portgraph::PortOperation, Direction, LinkError, NodeIndex, PortIndex, PortOffset};
+use crate::{
+    index::Unsigned, portgraph::PortOperation, Direction, LinkError, NodeIndex, PortIndex,
+    PortOffset,
+};
 
 pub use filter::{FilteredGraph, LinkFilter, NodeFilter, NodeFiltered};
 pub use flat_region::FlatRegion;
@@ -21,6 +24,9 @@ pub use subgraph::{CopySubgraphError, Subgraph};
 
 /// Core capabilities for querying a graph containing nodes and ports.
 pub trait PortView {
+    /// The base unsigned integer type for port offsets.
+    type PortOffsetBase: Unsigned;
+
     /// Returns the direction of the `port`.
     #[must_use]
     fn port_direction(&self, port: impl Into<PortIndex>) -> Option<Direction>;
@@ -31,11 +37,15 @@ pub trait PortView {
 
     /// Returns the index of a `port` within its node's port list.
     #[must_use]
-    fn port_offset(&self, port: impl Into<PortIndex>) -> Option<PortOffset>;
+    fn port_offset(&self, port: impl Into<PortIndex>) -> Option<PortOffset<Self::PortOffsetBase>>;
 
     /// Returns the port index for a given node and offset.
     #[must_use]
-    fn port_index(&self, node: NodeIndex, offset: PortOffset) -> Option<PortIndex>;
+    fn port_index(
+        &self,
+        node: NodeIndex,
+        offset: PortOffset<Self::PortOffsetBase>,
+    ) -> Option<PortIndex>;
 
     /// Iterates over all the ports of the `node` in the given `direction`.
     #[must_use]
@@ -107,7 +117,7 @@ pub trait PortView {
     ///
     /// ```
     /// # use ::portgraph::*;
-    /// let mut graph = PortGraph::new();
+    /// let mut graph: PortGraph = PortGraph::new();
     /// let node = graph.add_node(0, 2);
     ///
     /// assert!(graph.links(node, Direction::Incoming).eq([]));
@@ -118,18 +128,24 @@ pub trait PortView {
         &self,
         node: NodeIndex,
         direction: Direction,
-    ) -> impl Iterator<Item = PortOffset> + Clone;
+    ) -> impl Iterator<Item = PortOffset<Self::PortOffsetBase>> + Clone;
 
     /// Iterates over the input and output port offsets of the `node` in sequence.
     #[must_use]
-    fn all_port_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset> + Clone;
+    fn all_port_offsets(
+        &self,
+        node: NodeIndex,
+    ) -> impl Iterator<Item = PortOffset<Self::PortOffsetBase>> + Clone;
 
     /// Iterates over all the input port offsets of the `node`.
     ///
     /// Shorthand for [`PortView::port_offsets`]`(`[`Direction::Incoming`]`)`.
     #[must_use]
     #[inline]
-    fn input_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset> + Clone {
+    fn input_offsets(
+        &self,
+        node: NodeIndex,
+    ) -> impl Iterator<Item = PortOffset<Self::PortOffsetBase>> + Clone {
         self.port_offsets(node, Direction::Incoming)
     }
 
@@ -138,7 +154,10 @@ pub trait PortView {
     /// Shorthand for [`PortView::port_offsets`]`(`[`Direction::Outgoing`]`)`.
     #[must_use]
     #[inline]
-    fn output_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset> + Clone {
+    fn output_offsets(
+        &self,
+        node: NodeIndex,
+    ) -> impl Iterator<Item = PortOffset<Self::PortOffsetBase>> + Clone {
         self.port_offsets(node, Direction::Outgoing)
     }
 
@@ -198,7 +217,7 @@ pub trait PortMut: PortView {
     ///
     /// ```
     /// # use ::portgraph::*;
-    /// let mut g = PortGraph::new();
+    /// let mut g: PortGraph = PortGraph::new();
     /// let node = g.add_node(4, 3);
     /// assert_eq!(g.inputs(node).count(), 4);
     /// assert_eq!(g.outputs(node).count(), 3);
@@ -213,7 +232,7 @@ pub trait PortMut: PortView {
     ///
     /// ```
     /// # use ::portgraph::*;
-    /// let mut g = PortGraph::new();
+    /// let mut g: PortGraph = PortGraph::new();
     /// let node0 = g.add_node(1, 1);
     /// let node1 = g.add_node(1, 1);
     /// let out0 = g.outputs(node0).nth(0).unwrap();
@@ -288,7 +307,7 @@ pub trait LinkView: PortView {
     /// # Example
     /// ```
     /// # use ::portgraph::*;
-    /// let mut g = PortGraph::new();
+    /// let mut g: PortGraph = PortGraph::new();
     /// let a = g.add_node(0, 2);
     /// let b = g.add_node(2, 0);
     ///
@@ -313,7 +332,7 @@ pub trait LinkView: PortView {
     /// # Example
     /// ```
     /// # use ::portgraph::*;
-    /// let mut g = PortGraph::new();
+    /// let mut g: PortGraph = PortGraph::new();
     /// let a = g.add_node(0, 2);
     /// let b = g.add_node(2, 0);
     ///
@@ -336,7 +355,7 @@ pub trait LinkView: PortView {
     /// # Example
     /// ```
     /// # use ::portgraph::*;
-    /// let mut g = PortGraph::new();
+    /// let mut g: PortGraph = PortGraph::new();
     /// let a = g.add_node(0, 2);
     /// let b = g.add_node(2, 0);
     ///
@@ -373,7 +392,7 @@ pub trait LinkView: PortView {
     /// ```
     /// # use ::portgraph::*;
     ///
-    /// let mut graph = PortGraph::new();
+    /// let mut graph: PortGraph = PortGraph::new();
     ///
     /// let node_a = graph.add_node(0, 2);
     /// let node_b = graph.add_node(1, 0);
@@ -430,7 +449,7 @@ pub trait LinkView: PortView {
     /// ```
     /// # use ::portgraph::*;
     ///
-    /// let mut graph = PortGraph::new();
+    /// let mut graph: PortGraph = PortGraph::new();
     ///
     /// let a = graph.add_node(0, 1);
     /// let b = graph.add_node(2, 1);
@@ -483,7 +502,7 @@ pub trait LinkMut: LinkView + PortMut {
     ///
     /// ```
     /// # use ::portgraph::*;
-    /// let mut g = PortGraph::new();
+    /// let mut g: PortGraph = PortGraph::new();
     /// let node0 = g.add_node(0, 1);
     /// let node1 = g.add_node(1, 0);
     /// let node0_output = g.output(node0, 0).unwrap();
@@ -497,24 +516,26 @@ pub trait LinkMut: LinkView + PortMut {
     ///
     ///  - If `port_a` or `port_b` does not exist.
     ///  - If `port_a` and `port_b` have the same direction.
+    #[allow(clippy::type_complexity)]
     fn link_ports(
         &mut self,
         port_a: PortIndex,
         port_b: PortIndex,
-    ) -> Result<(Self::LinkEndpoint, Self::LinkEndpoint), LinkError>;
+    ) -> Result<(Self::LinkEndpoint, Self::LinkEndpoint), LinkError<Self::PortOffsetBase>>;
 
     /// Links two nodes at an input and output port offsets.
     ///
     /// # Errors
     ///
     ///  - If the ports and nodes do not exist.
+    #[allow(clippy::type_complexity)]
     fn link_nodes(
         &mut self,
         from: NodeIndex,
         from_output: usize,
         to: NodeIndex,
         to_input: usize,
-    ) -> Result<(Self::LinkEndpoint, Self::LinkEndpoint), LinkError> {
+    ) -> Result<(Self::LinkEndpoint, Self::LinkEndpoint), LinkError<Self::PortOffsetBase>> {
         self.link_offsets(
             from,
             PortOffset::new_outgoing(from_output),
@@ -529,13 +550,14 @@ pub trait LinkMut: LinkView + PortMut {
     ///
     ///  - If the ports and nodes do not exist.
     ///  - If the ports have the same direction.
+    #[allow(clippy::type_complexity)]
     fn link_offsets(
         &mut self,
         node_a: NodeIndex,
-        offset_a: PortOffset,
+        offset_a: PortOffset<Self::PortOffsetBase>,
         node_b: NodeIndex,
-        offset_b: PortOffset,
-    ) -> Result<(Self::LinkEndpoint, Self::LinkEndpoint), LinkError> {
+        offset_b: PortOffset<Self::PortOffsetBase>,
+    ) -> Result<(Self::LinkEndpoint, Self::LinkEndpoint), LinkError<Self::PortOffsetBase>> {
         let from_port = self
             .port_index(node_a, offset_a)
             .ok_or(LinkError::UnknownOffset {
@@ -560,8 +582,8 @@ pub trait LinkMut: LinkView + PortMut {
     /// Returns a map from the old node indices to the new node indices.
     fn insert_graph(
         &mut self,
-        other: &impl LinkView,
-    ) -> Result<HashMap<NodeIndex, NodeIndex>, LinkError> {
+        other: &impl LinkView<PortOffsetBase = Self::PortOffsetBase>,
+    ) -> Result<HashMap<NodeIndex, NodeIndex>, LinkError<Self::PortOffsetBase>> {
         let nodes = other.nodes_iter();
 
         // If we can cheaply compute the number of nodes and ports, we can
@@ -643,7 +665,7 @@ pub trait MultiMut: MultiView + LinkMut {
         &mut self,
         subport_from: Self::LinkEndpoint,
         subport_to: Self::LinkEndpoint,
-    ) -> Result<(), LinkError>;
+    ) -> Result<(), LinkError<Self::PortOffsetBase>>;
 
     /// Unlinks the `port` and returns the subport it was linked to. Returns `None`
     /// when the port was not linked.

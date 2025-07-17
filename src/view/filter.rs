@@ -107,6 +107,8 @@ impl<G, Ctx> PortView for FilteredGraph<G, NodeFilter<Ctx>, LinkFilter<Ctx>, Ctx
 where
     G: PortView + Clone,
 {
+    type PortOffsetBase = G::PortOffsetBase;
+
     #[inline]
     fn contains_node(&'_ self, node: NodeIndex) -> bool {
         self.graph.contains_node(node) && (self.node_filter)(node, &self.context)
@@ -151,15 +153,15 @@ where
         to self.graph {
             fn port_direction(&self, port: impl Into<PortIndex>) -> Option<Direction>;
             fn port_node(&self, port: impl Into<PortIndex>) -> Option<NodeIndex>;
-            fn port_offset(&self, port: impl Into<PortIndex>) -> Option<crate::PortOffset>;
-            fn port_index(&self, node: NodeIndex, offset: crate::PortOffset) -> Option<PortIndex>;
+            fn port_offset(&self, port: impl Into<PortIndex>) -> Option<crate::PortOffset<Self::PortOffsetBase>>;
+            fn port_index(&self, node: NodeIndex, offset: crate::PortOffset<Self::PortOffsetBase>) -> Option<PortIndex>;
             fn ports(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortIndex> + Clone;
             fn all_ports(&self, node: NodeIndex) -> impl Iterator<Item = PortIndex> + Clone;
             fn input(&self, node: NodeIndex, offset: usize) -> Option<PortIndex>;
             fn output(&self, node: NodeIndex, offset: usize) -> Option<PortIndex>;
             fn num_ports(&self, node: NodeIndex, direction: Direction) -> usize;
-            fn port_offsets(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortOffset> + Clone;
-            fn all_port_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset> + Clone;
+            fn port_offsets(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortOffset<Self::PortOffsetBase>> + Clone;
+            fn all_port_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset<Self::PortOffsetBase>> + Clone;
             fn node_capacity(&self) -> usize;
             fn port_capacity(&self) -> usize;
             fn node_port_capacity(&self, node: NodeIndex) -> usize;

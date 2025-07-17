@@ -17,7 +17,7 @@
 //! ```
 //! # use ::portgraph::*;
 //!
-//! let mut graph = PortGraph::new();
+//! let mut graph: PortGraph = PortGraph::new();
 //! let mut node_weights = UnmanagedDenseMap::<NodeIndex, usize>::new();
 //! let mut port_weights = UnmanagedDenseMap::<PortIndex, isize>::new();
 //!

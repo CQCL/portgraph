@@ -5,6 +5,7 @@ mod iter;
 pub use self::iter::{
     Neighbours, NodeConnections, NodeLinks, NodeSubports, Nodes, PortLinks, Ports,
 };
+use crate::index::Unsigned;
 use crate::portgraph::PortOperation;
 use crate::view::{LinkMut, MultiMut, MultiView, PortMut};
 use crate::{
@@ -28,10 +29,10 @@ use serde::{Deserialize, Serialize};
 /// When a node and its associated ports are removed their indices will be reused on a best effort basis
 /// when a new node is added.
 /// The indices of unaffected nodes and ports remain stable.
-#[derive(Clone, PartialEq, Default, Debug)]
+#[derive(Clone, PartialEq, Default)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct MultiPortGraph {
-    graph: PortGraph,
+pub struct MultiPortGraph<N: Unsigned = u32, P: Unsigned = u32, PO: Unsigned = u16> {
+    graph: PortGraph<N, P, PO>,
     /// Flags marking the internal ports of a multiport. That is, the ports connecting the main node and the copy nodes.
     multiport: BitVec,
     /// Flags marking the implicit copy nodes.
@@ -40,6 +41,19 @@ pub struct MultiPortGraph {
     copy_node_count: usize,
     /// Number of subports in the copy nodes of the graph.
     subport_count: usize,
+}
+
+// TODO: manual Debug impl for now, because the PortGraph debug impl is not generic
+impl<PO: Unsigned> std::fmt::Debug for MultiPortGraph<u32, u32, PO> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MultiPortGraph")
+            .field("graph", &self.graph)
+            .field("multiport", &self.multiport)
+            .field("copy_node", &self.copy_node)
+            .field("copy_node_count", &self.copy_node_count)
+            .field("subport_count", &self.subport_count)
+            .finish()
+    }
 }
 
 /// Index of a multi port within a `MultiPortGraph`.
@@ -54,7 +68,7 @@ pub struct SubportIndex {
     subport_offset: u16,
 }
 
-impl MultiPortGraph {
+impl<PO: Unsigned> MultiPortGraph<u32, u32, PO> {
     /// Create a new empty [`MultiPortGraph`].
     pub fn new() -> Self {
         Self {
@@ -80,7 +94,7 @@ impl MultiPortGraph {
     /// Returns a reference to the internal plain portgraph.
     ///
     /// This graph exposes the copy nodes as well as the main nodes.
-    pub fn as_portgraph(&self) -> &PortGraph {
+    pub fn as_portgraph(&self) -> &PortGraph<u32, u32, PO> {
         // Return the internal graph, exposing the copy nodes
         &self.graph
     }
@@ -97,7 +111,9 @@ impl MultiPortGraph {
     }
 }
 
-impl PortView for MultiPortGraph {
+impl<PO: Unsigned> PortView for MultiPortGraph<u32, u32, PO> {
+    type PortOffsetBase = PO;
+
     #[inline]
     fn contains_node(&self, node: NodeIndex) -> bool {
         self.graph.contains_node(node) && !self.copy_node.get(node)
@@ -157,21 +173,21 @@ impl PortView for MultiPortGraph {
         to (self.graph) {
             fn port_direction(&self, port: impl Into<PortIndex>) -> Option<Direction>;
             fn port_node(&self, port: impl Into<PortIndex>) -> Option<NodeIndex>;
-            fn port_offset(&self, port: impl Into<PortIndex>) -> Option<PortOffset>;
-            fn port_index(&self, node: NodeIndex, offset: PortOffset) -> Option<PortIndex>;
+            fn port_offset(&self, port: impl Into<PortIndex>) -> Option<PortOffset<PO>>;
+            fn port_index(&self, node: NodeIndex, offset: PortOffset<PO>) -> Option<PortIndex>;
             fn ports(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortIndex> + Clone;
             fn all_ports(&self, node: NodeIndex) -> impl Iterator<Item = PortIndex> + Clone;
             fn input(&self, node: NodeIndex, offset: usize) -> Option<PortIndex>;
             fn output(&self, node: NodeIndex, offset: usize) -> Option<PortIndex>;
             fn num_ports(&self, node: NodeIndex, direction: Direction) -> usize;
-            fn port_offsets(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortOffset> + Clone;
-            fn all_port_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset> + Clone;
+            fn port_offsets(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortOffset<PO>> + Clone;
+            fn all_port_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset<PO>> + Clone;
             fn node_port_capacity(&self, node: NodeIndex) -> usize;
         }
     }
 }
 
-impl PortMut for MultiPortGraph {
+impl<PO: Unsigned> PortMut for MultiPortGraph<u32, u32, PO> {
     #[inline]
     fn add_node(&mut self, incoming: usize, outgoing: usize) -> NodeIndex {
         self.graph.add_node(incoming, outgoing)
@@ -257,7 +273,7 @@ impl PortMut for MultiPortGraph {
     }
 }
 
-impl LinkView for MultiPortGraph {
+impl<PO: Unsigned> LinkView for MultiPortGraph<u32, u32, PO> {
     type LinkEndpoint = SubportIndex;
 
     #[inline]
@@ -284,12 +300,12 @@ impl LinkView for MultiPortGraph {
     }
 }
 
-impl LinkMut for MultiPortGraph {
+impl<PO: Unsigned> LinkMut for MultiPortGraph<u32, u32, PO> {
     fn link_ports(
         &mut self,
         port_a: PortIndex,
         port_b: PortIndex,
-    ) -> Result<(SubportIndex, SubportIndex), LinkError> {
+    ) -> Result<(SubportIndex, SubportIndex), LinkError<PO>> {
         let (multiport_a, index_a) = self.get_free_multiport(port_a)?;
         let (multiport_b, index_b) = self.get_free_multiport(port_b)?;
         self.graph.link_ports(index_a, index_b)?;
@@ -309,7 +325,7 @@ impl LinkMut for MultiPortGraph {
     }
 }
 
-impl MultiView for MultiPortGraph {
+impl<PO: Unsigned> MultiView for MultiPortGraph<u32, u32, PO> {
     fn subport_link(&self, subport: SubportIndex) -> Option<SubportIndex> {
         let subport_index = self.get_subport_index(subport)?;
         let link = self.graph.port_link(subport_index)?;
@@ -326,12 +342,12 @@ impl MultiView for MultiPortGraph {
     }
 }
 
-impl MultiMut for MultiPortGraph {
+impl<PO: Unsigned> MultiMut for MultiPortGraph<u32, u32, PO> {
     fn link_subports(
         &mut self,
         subport_from: SubportIndex,
         subport_to: SubportIndex,
-    ) -> Result<(), LinkError> {
+    ) -> Result<(), LinkError<PO>> {
         // TODO: Custom errors
         let from_index = self
             .get_subport_index(subport_from)
@@ -352,7 +368,7 @@ impl MultiMut for MultiPortGraph {
 }
 
 /// Internal helper methods
-impl MultiPortGraph {
+impl<PO: Unsigned> MultiPortGraph<u32, u32, PO> {
     /// Remove an internal copy node.
     ///
     /// Returns one of the links, if the node was connected
@@ -386,7 +402,7 @@ impl MultiPortGraph {
     fn get_free_multiport(
         &mut self,
         port: PortIndex,
-    ) -> Result<(SubportIndex, PortIndex), LinkError> {
+    ) -> Result<(SubportIndex, PortIndex), LinkError<PO>> {
         let Some(dir) = self.graph.port_direction(port) else {
             return Err(LinkError::UnknownPort { port });
         };
@@ -481,7 +497,7 @@ impl MultiPortGraph {
         port1: PortIndex,
         port2: PortIndex,
         dir: Direction,
-    ) -> Result<(), LinkError> {
+    ) -> Result<(), LinkError<PO>> {
         match dir {
             Direction::Incoming => self.graph.link_ports(port2, port1)?,
             Direction::Outgoing => self.graph.link_ports(port1, port2)?,
@@ -658,7 +674,7 @@ pub(crate) mod test {
 
     #[test]
     fn create_graph() {
-        let graph = MultiPortGraph::new();
+        let graph: MultiPortGraph = MultiPortGraph::new();
 
         assert_eq!(graph.node_count(), 0);
         assert_eq!(graph.port_count(), 0);
@@ -669,7 +685,7 @@ pub(crate) mod test {
 
     #[test]
     fn link_ports() {
-        let mut g = MultiPortGraph::new();
+        let mut g: MultiPortGraph = MultiPortGraph::new();
         let node0 = g.add_node(2, 1);
         let node1 = g.add_node(1, 2);
         let node0_output = g.output(node0, 0).unwrap();
@@ -718,7 +734,7 @@ pub(crate) mod test {
 
     #[test]
     fn link_iterators() {
-        let mut g = MultiPortGraph::new();
+        let mut g: MultiPortGraph = MultiPortGraph::new();
         let node0 = g.add_node(1, 2);
         let node1 = g.add_node(2, 1);
         let node0_input0 = g.input(node0, 0).unwrap();
@@ -836,7 +852,7 @@ pub(crate) mod test {
 
     #[test]
     fn insert_graph() -> Result<(), Box<dyn std::error::Error>> {
-        let mut g = crate::MultiPortGraph::new();
+        let mut g: MultiPortGraph = crate::MultiPortGraph::new();
         // Add dummy nodes to produce different node ids than in the other graph.
         g.add_node(0, 0);
         g.add_node(0, 0);
@@ -877,7 +893,7 @@ pub(crate) mod test {
     #[test]
     /// <https://github.com/CQCL/portgraph/pull/191>
     fn remove_ports() {
-        let mut g = MultiPortGraph::new();
+        let mut g: MultiPortGraph = MultiPortGraph::new();
         let n = g.add_node(2, 2);
         let i1 = g.add_node(0, 1);
         g.link_nodes(i1, 0, n, 0).unwrap();

@@ -310,19 +310,21 @@ where
 
 /// Implement PortView for DynamicTopoConvexChecker
 impl<G: PortView> PortView for DynamicTopoConvexChecker<G> {
+    type PortOffsetBase = G::PortOffsetBase;
+
     delegate! {
         to self.graph {
             fn port_direction(&self, port: impl Into<PortIndex>) -> Option<Direction>;
             fn port_node(&self, port: impl Into<PortIndex>) -> Option<NodeIndex>;
-            fn port_offset(&self, port: impl Into<PortIndex>) -> Option<PortOffset>;
-            fn port_index(&self, node: NodeIndex, offset: PortOffset) -> Option<PortIndex>;
+            fn port_offset(&self, port: impl Into<PortIndex>) -> Option<PortOffset<G::PortOffsetBase>>;
+            fn port_index(&self, node: NodeIndex, offset: PortOffset<G::PortOffsetBase>) -> Option<PortIndex>;
             fn ports(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortIndex> + Clone;
             fn all_ports(&self, node: NodeIndex) -> impl Iterator<Item = PortIndex> + Clone;
             fn input(&self, node: NodeIndex, offset: usize) -> Option<PortIndex>;
             fn output(&self, node: NodeIndex, offset: usize) -> Option<PortIndex>;
             fn num_ports(&self, node: NodeIndex, direction: Direction) -> usize;
-            fn port_offsets(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortOffset> + Clone;
-            fn all_port_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset> + Clone;
+            fn port_offsets(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortOffset<G::PortOffsetBase>> + Clone;
+            fn all_port_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset<G::PortOffsetBase>> + Clone;
             fn contains_node(&self, node: NodeIndex) -> bool;
             fn contains_port(&self, port: PortIndex) -> bool;
             fn is_empty(&self) -> bool;
@@ -386,7 +388,7 @@ impl<G: LinkMut> LinkMut for DynamicTopoConvexChecker<G> {
         &mut self,
         from: PortIndex,
         to: PortIndex,
-    ) -> Result<(G::LinkEndpoint, G::LinkEndpoint), LinkError> {
+    ) -> Result<(G::LinkEndpoint, G::LinkEndpoint), LinkError<G::PortOffsetBase>> {
         let from_node = self
             .graph
             .port_node(from)
@@ -521,7 +523,7 @@ mod tests {
     #[test]
     fn test_convex_with_ports() {
         // Create a graph: n0 -> n1 -> n2
-        let mut graph = PortGraph::new();
+        let mut graph: PortGraph = PortGraph::new();
         let n0 = graph.add_node(0, 1); // Input node: 0 in, 1 out
         let n1 = graph.add_node(1, 1); // Middle node: 1 in, 1 out
         let n2 = graph.add_node(1, 0); // Output node: 1 in, 0 out
@@ -566,7 +568,7 @@ mod tests {
     #[test]
     fn test_basic_linear_order() {
         // Create a PortGraph and add nodes with ports
-        let mut graph = PortGraph::new();
+        let mut graph: PortGraph = PortGraph::new();
         let n0 = graph.add_node(0, 1); // Node with 1 output port
         let n1 = graph.add_node(1, 1); // Node with 1 input and 1 output port
         let n2 = graph.add_node(1, 0); // Node with 1 input port
@@ -586,7 +588,7 @@ mod tests {
     #[test]
     fn test_reordering() {
         // Create a PortGraph with nodes n0, n1, n2
-        let mut graph = PortGraph::new();
+        let mut graph: PortGraph = PortGraph::new();
         let n0 = graph.add_node(1, 0); // n0 has 1 input (from n1)
         let n1 = graph.add_node(0, 1); // n1 has 1 output (to n0)
         let n2 = graph.add_node(0, 0); // n2 has no ports
@@ -606,7 +608,7 @@ mod tests {
 
     #[test]
     fn test_indirect_cycle() {
-        let mut graph = PortGraph::new();
+        let mut graph: PortGraph = PortGraph::new();
         let n0 = graph.add_node(0, 1); // n0: 1 output
         let n1 = graph.add_node(1, 1); // n1: 1 input, 1 output
         let n2 = graph.add_node(1, 1); // n2: 1 input, 1 output
@@ -629,7 +631,7 @@ mod tests {
 
     #[test]
     fn test_multiple_paths() {
-        let mut graph = PortGraph::new();
+        let mut graph: PortGraph = PortGraph::new();
         let n0 = graph.add_node(0, 2); // 0 inputs, 2 outputs
         let n1 = graph.add_node(1, 1); // 1 input, 1 output
         let n2 = graph.add_node(1, 1); // 1 input, 1 output
@@ -652,7 +654,7 @@ mod tests {
     #[test]
     fn test_add_existing_node() {
         // Create a new PortGraph and add a node
-        let mut graph = PortGraph::new();
+        let mut graph: PortGraph = PortGraph::new();
         let n0 = graph.add_node(0, 0); // Node with 0 inputs and 0 outputs
 
         // Initialize DynamicTopoSort with the graph
@@ -669,7 +671,7 @@ mod tests {
 
     #[test]
     fn test_connect_nodes_nonexistent_node() {
-        let graph = PortGraph::new();
+        let graph: PortGraph = PortGraph::new();
         let mut topo = DynamicTopoSort::with_graph(&graph);
         let n0 = NodeIndex::new(0);
         let n1 = NodeIndex::new(1);
@@ -681,7 +683,7 @@ mod tests {
 
     #[test]
     fn test_no_edges() {
-        let mut graph = PortGraph::new();
+        let mut graph: PortGraph = PortGraph::new();
         let n0 = graph.add_node(0, 0);
         let n1 = graph.add_node(0, 0);
         let n2 = graph.add_node(0, 0);
@@ -697,7 +699,7 @@ mod tests {
 
     #[test]
     fn test_disconnected_graph() {
-        let mut graph = PortGraph::new();
+        let mut graph: PortGraph = PortGraph::new();
         let n0 = graph.add_node(0, 1); // 0 in, 1 out
         let n1 = graph.add_node(1, 0); // 1 in, 0 out
         let n2 = graph.add_node(0, 1); // 0 in, 1 out
@@ -717,7 +719,7 @@ mod tests {
 
     #[test]
     fn test_connecting_components() {
-        let mut graph = PortGraph::new();
+        let mut graph: PortGraph = PortGraph::new();
         let n0 = graph.add_node(1, 1); // 0 in, 1 out
         let n1 = graph.add_node(1, 0); // 1 in, 0 out
         let n2 = graph.add_node(0, 1); // 0 in, 1 out
@@ -742,7 +744,7 @@ mod tests {
 
     #[test]
     fn test_reorder_middle() {
-        let mut graph = PortGraph::new();
+        let mut graph: PortGraph = PortGraph::new();
         let n0 = graph.add_node(0, 1);
         let n1 = graph.add_node(1, 1);
         let n2 = graph.add_node(1, 1);
@@ -762,7 +764,7 @@ mod tests {
 
     #[test]
     fn test_remove_node() {
-        let mut graph = PortGraph::new();
+        let mut graph: PortGraph = PortGraph::new();
         let n0 = graph.add_node(0, 1);
         let n1 = graph.add_node(1, 1);
         let n2 = graph.add_node(1, 0);
@@ -786,7 +788,7 @@ mod tests {
 
     #[test]
     fn test_disconnect_nodes() {
-        let mut graph = PortGraph::new();
+        let mut graph: PortGraph = PortGraph::new();
         let n0 = graph.add_node(0, 1);
         let n1 = graph.add_node(1, 1);
         let n2 = graph.add_node(1, 0);
@@ -807,7 +809,7 @@ mod tests {
 
     #[test]
     fn test_remove_isolated_node() {
-        let mut graph = PortGraph::new();
+        let mut graph: PortGraph = PortGraph::new();
         let n0 = graph.add_node(0, 0);
         let n1 = graph.add_node(0, 0);
         let n2 = graph.add_node(0, 0);
@@ -823,7 +825,7 @@ mod tests {
 
     #[test]
     fn test_remove_node_in_chain() {
-        let mut graph = PortGraph::new();
+        let mut graph: PortGraph = PortGraph::new();
         let n0 = graph.add_node(0, 1); // 0 in, 1 out
         let n1 = graph.add_node(1, 1); // 1 in, 1 out
         let n2 = graph.add_node(1, 0); // 1 in, 0 out
@@ -841,7 +843,7 @@ mod tests {
 
     #[test]
     fn test_remove_node_with_multiple_edges() {
-        let mut graph = PortGraph::new();
+        let mut graph: PortGraph = PortGraph::new();
         let n0 = graph.add_node(0, 1);
         let n1 = graph.add_node(1, 2); // 1 in, 2 out
         let n2 = graph.add_node(1, 1);
@@ -861,7 +863,7 @@ mod tests {
 
     #[test]
     fn test_disconnect_edge_in_complex_graph() {
-        let mut graph = PortGraph::new();
+        let mut graph: PortGraph = PortGraph::new();
         let n0 = graph.add_node(0, 2); // 0 in, 2 out
         let n1 = graph.add_node(1, 1); // 1 in, 1 out
         let n2 = graph.add_node(2, 0); // 2 in, 0 out
@@ -883,7 +885,7 @@ mod tests {
 
     #[test]
     fn test_sequence_of_operations() {
-        let mut graph = PortGraph::new();
+        let mut graph: PortGraph = PortGraph::new();
         let n0 = graph.add_node(0, 1);
         let n1 = graph.add_node(1, 1);
         let n2 = graph.add_node(1, 0);
@@ -907,7 +909,7 @@ mod tests {
 
     #[test]
     fn test_operations_on_empty_graph() {
-        let graph = PortGraph::new();
+        let graph: PortGraph = PortGraph::new();
         let mut checker = DynamicTopoConvexChecker::new(graph.clone());
         let n0 = NodeIndex::new(0);
         let n1 = NodeIndex::new(1);
@@ -925,7 +927,7 @@ mod tests {
 
     #[test]
     fn test_convex_subgraph() {
-        let mut graph = PortGraph::new();
+        let mut graph: PortGraph = PortGraph::new();
         let n0 = graph.add_node(0, 2); // 0 in, 2 out
         let n1 = graph.add_node(1, 1); // 1 in, 1 out
         let n2 = graph.add_node(1, 1); // 1 in, 1 out
@@ -957,7 +959,7 @@ mod tests {
 
     #[test]
     fn test_empty_or_invalid_subgraph() {
-        let graph = PortGraph::new();
+        let graph: PortGraph = PortGraph::new();
         let checker = DynamicTopoConvexChecker::new(graph);
         let empty_subgraph: HashSet<NodeIndex> = HashSet::new();
         assert!(
@@ -965,7 +967,7 @@ mod tests {
             "Empty subgraph should be convex"
         );
 
-        let mut graph = PortGraph::new();
+        let mut graph: PortGraph = PortGraph::new();
         let _n0 = graph.add_node(0, 0);
         let checker = DynamicTopoConvexChecker::new(graph);
         let invalid_subgraph = HashSet::from([NodeIndex::new(1)]);

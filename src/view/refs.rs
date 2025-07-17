@@ -10,19 +10,21 @@ use delegate::delegate;
 use super::{LinkMut, LinkView, MultiMut, MultiView, PortMut, PortView};
 
 impl<G: PortView> PortView for &G {
+    type PortOffsetBase = G::PortOffsetBase;
+
     delegate! {
         to (*self) {
             fn port_direction(&self, port: impl Into<PortIndex>) -> Option<Direction>;
             fn port_node(&self, port: impl Into<PortIndex>) -> Option<NodeIndex>;
-            fn port_offset(&self, port: impl Into<PortIndex>) -> Option<PortOffset>;
-            fn port_index(&self, node: NodeIndex, offset: PortOffset) -> Option<PortIndex>;
+            fn port_offset(&self, port: impl Into<PortIndex>) -> Option<PortOffset<Self::PortOffsetBase>>;
+            fn port_index(&self, node: NodeIndex, offset: PortOffset<Self::PortOffsetBase>) -> Option<PortIndex>;
             fn ports(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortIndex> + Clone;
             fn all_ports(&self, node: NodeIndex) -> impl Iterator<Item = PortIndex> + Clone;
             fn input(&self, node: NodeIndex, offset: usize) -> Option<PortIndex>;
             fn output(&self, node: NodeIndex, offset: usize) -> Option<PortIndex>;
             fn num_ports(&self, node: NodeIndex, direction: Direction) -> usize;
-            fn port_offsets(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortOffset> + Clone;
-            fn all_port_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset> + Clone;
+            fn port_offsets(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortOffset<Self::PortOffsetBase>> + Clone;
+            fn all_port_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset<Self::PortOffsetBase>> + Clone;
             fn contains_node(&self, node: NodeIndex) -> bool;
             fn contains_port(&self, port: PortIndex) -> bool;
             fn is_empty(&self) -> bool;
@@ -38,19 +40,21 @@ impl<G: PortView> PortView for &G {
 }
 
 impl<G: PortView> PortView for &mut G {
+    type PortOffsetBase = G::PortOffsetBase;
+
     delegate! {
         to (&**self) {
             fn port_direction(&self, port: impl Into<PortIndex>) -> Option<Direction>;
             fn port_node(&self, port: impl Into<PortIndex>) -> Option<NodeIndex>;
-            fn port_offset(&self, port: impl Into<PortIndex>) -> Option<PortOffset>;
-            fn port_index(&self, node: NodeIndex, offset: PortOffset) -> Option<PortIndex>;
+            fn port_offset(&self, port: impl Into<PortIndex>) -> Option<PortOffset<Self::PortOffsetBase>>;
+            fn port_index(&self, node: NodeIndex, offset: PortOffset<Self::PortOffsetBase>) -> Option<PortIndex>;
             fn ports(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortIndex> + Clone;
             fn all_ports(&self, node: NodeIndex) -> impl Iterator<Item = PortIndex> + Clone;
             fn input(&self, node: NodeIndex, offset: usize) -> Option<PortIndex>;
             fn output(&self, node: NodeIndex, offset: usize) -> Option<PortIndex>;
             fn num_ports(&self, node: NodeIndex, direction: Direction) -> usize;
-            fn port_offsets(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortOffset> + Clone;
-            fn all_port_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset> + Clone;
+            fn port_offsets(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortOffset<Self::PortOffsetBase>> + Clone;
+            fn all_port_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset<Self::PortOffsetBase>> + Clone;
             fn contains_node(&self, node: NodeIndex) -> bool;
             fn contains_port(&self, port: PortIndex) -> bool;
             fn is_empty(&self) -> bool;
@@ -136,7 +140,11 @@ impl<G: PortMut> PortMut for &mut G {
 impl<G: LinkMut> LinkMut for &mut G {
     delegate! {
         to (*self) {
-            fn link_ports(&mut self, port_a: PortIndex, port_b: PortIndex) -> Result<(Self::LinkEndpoint, Self::LinkEndpoint), LinkError>;
+            fn link_ports(
+                &mut self,
+                port_a: PortIndex,
+                port_b: PortIndex,
+            ) -> Result<(Self::LinkEndpoint, Self::LinkEndpoint), LinkError<G::PortOffsetBase>>;
             fn unlink_port(&mut self, port: PortIndex) -> Option<Self::LinkEndpoint>;
         }
     }
@@ -145,7 +153,11 @@ impl<G: LinkMut> LinkMut for &mut G {
 impl<G: MultiMut> MultiMut for &mut G {
     delegate! {
         to (*self) {
-            fn link_subports(&mut self, subport_from: Self::LinkEndpoint, subport_to: Self::LinkEndpoint) -> Result<(), LinkError>;
+            fn link_subports(
+                &mut self,
+                subport_from: Self::LinkEndpoint,
+                subport_to: Self::LinkEndpoint,
+            ) -> Result<(), LinkError<G::PortOffsetBase>>;
             fn unlink_subport(&mut self, subport: Self::LinkEndpoint) -> Option<Self::LinkEndpoint>;
         }
     }

@@ -12,7 +12,7 @@
 //!
 //! ```
 //! # use ::portgraph::*;
-//! let mut graph = PortGraph::new();
+//! let mut graph: PortGraph = PortGraph::new();
 //! let mut weights = Weights::<usize, isize>::new();
 //!
 //! // The weights must be set manually.

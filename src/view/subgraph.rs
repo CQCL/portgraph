@@ -170,6 +170,8 @@ fn collect_boundary_ports<G: LinkView>(
 }
 
 impl<G: PortView> PortView for Subgraph<G> {
+    type PortOffsetBase = G::PortOffsetBase;
+
     #[inline(always)]
     fn contains_node(&'_ self, node: NodeIndex) -> bool {
         self.nodes.contains(&node)
@@ -222,15 +224,15 @@ impl<G: PortView> PortView for Subgraph<G> {
         to self.graph {
             fn port_direction(&self, port: impl Into<PortIndex>) -> Option<Direction>;
             fn port_node(&self, port: impl Into<PortIndex>) -> Option<NodeIndex>;
-            fn port_offset(&self, port: impl Into<PortIndex>) -> Option<PortOffset>;
-            fn port_index(&self, node: NodeIndex, offset: PortOffset) -> Option<PortIndex>;
+            fn port_offset(&self, port: impl Into<PortIndex>) -> Option<PortOffset<Self::PortOffsetBase>>;
+            fn port_index(&self, node: NodeIndex, offset: PortOffset<Self::PortOffsetBase>) -> Option<PortIndex>;
             fn ports(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortIndex> + Clone;
             fn all_ports(&self, node: NodeIndex) -> impl Iterator<Item = PortIndex> + Clone;
             fn input(&self, node: NodeIndex, offset: usize) -> Option<PortIndex>;
             fn output(&self, node: NodeIndex, offset: usize) -> Option<PortIndex>;
             fn num_ports(&self, node: NodeIndex, direction: Direction) -> usize;
-            fn port_offsets(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortOffset> + Clone;
-            fn all_port_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset> + Clone;
+            fn port_offsets(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortOffset<Self::PortOffsetBase>> + Clone;
+            fn all_port_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset<Self::PortOffsetBase>> + Clone;
             fn node_port_capacity(&self, node: NodeIndex) -> usize;
         }
     }
@@ -701,7 +703,7 @@ mod tests {
 
     #[test]
     fn test_is_convex_line() {
-        let mut graph = PortGraph::new();
+        let mut graph: PortGraph = PortGraph::new();
         let n0 = graph.add_node(0, 1);
         let n1 = graph.add_node(1, 1);
         let n2 = graph.add_node(1, 0);
@@ -719,7 +721,7 @@ mod tests {
 
     #[test]
     fn test_disconnected_components() {
-        let mut graph = PortGraph::new();
+        let mut graph: PortGraph = PortGraph::new();
         let n0 = graph.add_node(0, 1);
         let n1 = graph.add_node(1, 0);
         graph.link_nodes(n0, 0, n1, 0).unwrap();
@@ -765,7 +767,7 @@ mod tests {
 
     #[test]
     fn test_copy_in_parent() {
-        let mut graph = PortGraph::new();
+        let mut graph: PortGraph = PortGraph::new();
         // First component: n0 -> n1 + cycle
         let n0 = graph.add_node(0, 1);
         let n1 = graph.add_node(2, 1);
@@ -821,7 +823,7 @@ mod tests {
     #[case(Direction::Incoming)]
     #[case(Direction::Outgoing)]
     fn test_copy_in_parent_bad_boundary(#[case] edge: Direction) {
-        let mut graph = PortGraph::new();
+        let mut graph: PortGraph = PortGraph::new();
         let n0 = graph.add_node(0, 1);
         let n1 = graph.add_node(1, 1);
         let n2 = graph.add_node(1, 0);
@@ -858,7 +860,7 @@ mod tests {
 
     #[test]
     fn test_copy_in_parent_multi_input() {
-        let mut graph = MultiPortGraph::new();
+        let mut graph: MultiPortGraph = MultiPortGraph::new();
         let n0 = graph.add_node(0, 1);
         let n1 = graph.add_node(1, 1);
         let n2 = graph.add_node(1, 0);
@@ -896,7 +898,7 @@ mod tests {
 
     #[test]
     fn test_copy_in_parent_multi_output() {
-        let mut graph = MultiPortGraph::new();
+        let mut graph: MultiPortGraph = MultiPortGraph::new();
         let n0 = graph.add_node(0, 1);
         let n1 = graph.add_node(1, 1);
         let n2 = graph.add_node(1, 0);

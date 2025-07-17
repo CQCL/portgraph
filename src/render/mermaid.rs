@@ -24,7 +24,7 @@ const INDENTATION_SEPARATOR: &str = "    ";
 /// ```rust
 /// # use portgraph::{LinkMut, PortGraph, PortMut, PortView, Hierarchy};
 /// # use portgraph::render::MermaidFormat;
-/// let mut graph = PortGraph::new();
+/// let mut graph: PortGraph = PortGraph::new();
 /// let n1 = graph.add_node(3, 2);
 /// let n2 = graph.add_node(0, 1);
 /// let n3 = graph.add_node(1, 0);
@@ -213,7 +213,7 @@ pub trait MermaidFormat: LinkView + Sized {
     /// ```rust
     /// # use portgraph::{LinkMut, PortGraph, PortMut, PortView, Hierarchy};
     /// # use portgraph::render::MermaidFormat;
-    /// let mut graph = PortGraph::new();
+    /// let mut graph: PortGraph = PortGraph::new();
     /// let n1 = graph.add_node(3, 2);
     /// let n2 = graph.add_node(0, 1);
     /// let n3 = graph.add_node(1, 0);

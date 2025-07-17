@@ -30,7 +30,7 @@
 //! use ::portgraph::algorithms::{toposort, TopoSort};
 //!
 //! // Create a graph with two nodes, each with two input and two output ports
-//! let mut graph = PortGraph::new();
+//! let mut graph: PortGraph = PortGraph::new();
 //! let node_a = graph.add_node(2, 2);
 //! let node_b = graph.add_node(2, 2);
 //!
@@ -53,18 +53,17 @@
 //!   graph component structures.
 //! - `pyo3` enables Python bindings.
 //!
-use std::num::NonZeroU32;
-use thiserror::Error;
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 
 #[cfg(feature = "serde")]
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 
 pub mod algorithms;
 pub mod boundary;
 pub mod hierarchy;
+pub mod index;
 pub mod multiportgraph;
 pub mod portgraph;
 pub mod render;
@@ -78,6 +77,8 @@ pub mod proptest;
 
 #[doc(inline)]
 pub use crate::hierarchy::Hierarchy;
+#[doc(inline)]
+pub use crate::index::{IndexError, NodeIndex, PortIndex, PortOffset};
 #[doc(inline)]
 pub use crate::multiportgraph::MultiPortGraph;
 #[doc(inline)]
@@ -134,274 +135,5 @@ impl TryFrom<usize> for Direction {
             1 => Ok(Direction::Outgoing),
             index => Err(IndexError { index }),
         }
-    }
-}
-
-/// Index of a node within a `PortGraph`.
-///
-/// Restricted to be at most `2^31 - 1` to allow more efficient encodings of the port graph structure.
-/// This type admits the *null pointer optimization* so that `Option<NodeIndex>` takes as much space
-/// as a `NodeIndex` by itself.
-#[repr(transparent)]
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "pyo3", derive(IntoPyObject))]
-pub struct NodeIndex(NonZeroU32);
-
-#[cfg(feature = "serde")]
-impl Serialize for NodeIndex {
-    #[inline]
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        self.index().serialize(serializer)
-    }
-}
-
-#[cfg(feature = "serde")]
-impl<'de> Deserialize<'de> for NodeIndex {
-    #[inline]
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        usize::deserialize(deserializer).map(NodeIndex::new)
-    }
-}
-
-impl NodeIndex {
-    /// Maximum allowed index. The higher bit is reserved for efficient encoding of the port graph.
-    const MAX: usize = (u32::MAX / 2) as usize - 1;
-
-    /// Creates a new node index from a `usize`.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the index is greater than `2^31 - 2`.
-    #[inline]
-    pub fn new(index: usize) -> Self {
-        index.try_into().unwrap()
-    }
-
-    /// Returns the index as a `usize`.
-    #[inline]
-    pub fn index(self) -> usize {
-        self.into()
-    }
-}
-
-impl From<NodeIndex> for usize {
-    #[inline]
-    fn from(index: NodeIndex) -> Self {
-        u32::from(index.0) as usize - 1
-    }
-}
-
-impl TryFrom<usize> for NodeIndex {
-    type Error = IndexError;
-
-    #[inline]
-    fn try_from(index: usize) -> Result<Self, Self::Error> {
-        if index > Self::MAX {
-            Err(IndexError { index })
-        } else {
-            // SAFETY: The value cannot be zero
-            Ok(Self(unsafe { NonZeroU32::new_unchecked(1 + index as u32) }))
-        }
-    }
-}
-
-impl std::fmt::Debug for NodeIndex {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // avoid unnecessary newlines in alternate mode
-        write!(f, "NodeIndex({})", self.index())
-    }
-}
-
-/// Index of a port within a `PortGraph`.
-///
-/// Restricted to be at most `2^31 - 1` to allow more efficient encodings of the port graph structure.
-/// This type admits the *null pointer optimization* so that `Option<PortIndex>` takes as much space
-/// as a `PortIndex` by itself.
-#[repr(transparent)]
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "pyo3", derive(IntoPyObject))]
-pub struct PortIndex(NonZeroU32);
-
-#[cfg(feature = "serde")]
-impl Serialize for PortIndex {
-    #[inline]
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        self.index().serialize(serializer)
-    }
-}
-
-#[cfg(feature = "serde")]
-impl<'de> Deserialize<'de> for PortIndex {
-    #[inline]
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        usize::deserialize(deserializer).map(PortIndex::new)
-    }
-}
-
-impl PortIndex {
-    /// Maximum allowed index. The higher bit is reserved for efficient encoding of the port graph.
-    const MAX: usize = (u32::MAX / 2) as usize - 1;
-
-    /// Creates a new port index from a `usize`.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the index is greater than `2^31 - 2`.
-    #[inline]
-    pub fn new(index: usize) -> Self {
-        index.try_into().unwrap()
-    }
-
-    /// Returns the index as a `usize`.
-    #[inline]
-    pub fn index(self) -> usize {
-        self.into()
-    }
-}
-
-impl From<PortIndex> for usize {
-    #[inline]
-    fn from(index: PortIndex) -> Self {
-        u32::from(index.0) as usize - 1
-    }
-}
-
-impl TryFrom<usize> for PortIndex {
-    type Error = IndexError;
-
-    #[inline]
-    fn try_from(index: usize) -> Result<Self, Self::Error> {
-        if index > Self::MAX {
-            Err(IndexError { index })
-        } else {
-            // SAFETY: The value cannot be zero
-            Ok(Self(unsafe { NonZeroU32::new_unchecked(1 + index as u32) }))
-        }
-    }
-}
-
-impl std::fmt::Debug for PortIndex {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // avoid unnecessary newlines in alternate mode
-        write!(f, "PortIndex({})", self.index())
-    }
-}
-
-impl Default for PortIndex {
-    fn default() -> Self {
-        PortIndex::new(0)
-    }
-}
-
-/// Error indicating a `NodeIndex`, `PortIndex`, or `Direction` is too large.
-#[derive(Debug, Clone, Error, PartialEq, Eq)]
-#[error("the index {index} is too large.")]
-pub struct IndexError {
-    index: usize,
-}
-
-/// Port offset in a node
-#[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
-#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct PortOffset {
-    index: u16,
-    direction: Direction,
-}
-
-impl PortOffset {
-    /// Creates a new port offset.
-    #[inline(always)]
-    pub fn new(direction: Direction, offset: usize) -> Self {
-        match direction {
-            Direction::Incoming => Self::new_incoming(offset),
-            Direction::Outgoing => Self::new_outgoing(offset),
-        }
-    }
-
-    /// Creates a new incoming port offset.
-    #[inline(always)]
-    pub fn new_incoming(offset: usize) -> Self {
-        Self {
-            index: offset
-                .try_into()
-                .expect("The offset must be less than 2^16."),
-            direction: Direction::Incoming,
-        }
-    }
-
-    /// Creates a new outgoing port offset.
-    #[inline(always)]
-    pub fn new_outgoing(offset: usize) -> Self {
-        Self {
-            index: offset
-                .try_into()
-                .expect("The offset must be less than 2^16."),
-            direction: Direction::Outgoing,
-        }
-    }
-
-    /// Returns the direction of the port.
-    #[inline(always)]
-    pub fn direction(self) -> Direction {
-        self.direction
-    }
-
-    /// Returns the offset of the port.
-    #[inline(always)]
-    pub fn index(self) -> usize {
-        self.index as usize
-    }
-
-    /// Returns the opposite port offset.
-    ///
-    /// This maps `PortOffset::Incoming(x)` to `PortOffset::Outgoing(x)` and
-    /// vice versa.
-    #[inline(always)]
-    pub fn opposite(&self) -> Self {
-        Self {
-            index: self.index,
-            direction: self.direction.reverse(),
-        }
-    }
-}
-
-impl Default for PortOffset {
-    fn default() -> Self {
-        PortOffset::new_outgoing(0)
-    }
-}
-
-impl std::fmt::Debug for PortOffset {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.direction {
-            Direction::Incoming => write!(f, "Incoming({})", self.index),
-            Direction::Outgoing => write!(f, "Outgoing({})", self.index),
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_opposite() {
-        let incoming = PortOffset::new_incoming(5);
-        let outgoing = PortOffset::new_outgoing(5);
-
-        assert_eq!(incoming.opposite(), outgoing);
-        assert_eq!(outgoing.opposite(), incoming);
     }
 }

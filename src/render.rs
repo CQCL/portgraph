@@ -219,9 +219,9 @@ impl EdgeStyle {
             Self::Labelled(lbl, e) => {
                 let lbl = encode_label("", lbl);
                 match e.strip_label() {
-                    Self::Solid => format!("--{}-->", lbl).into(),
-                    Self::Dotted => format!("-.{}.->", lbl).into(),
-                    Self::Dashed => format!("-.{}.->", lbl).into(),
+                    Self::Solid => format!("--{lbl}-->").into(),
+                    Self::Dotted => format!("-.{lbl}.->").into(),
+                    Self::Dashed => format!("-.{lbl}.->").into(),
                     Self::Custom(s) => s.into(),
                     Self::Labelled(_, _) => {
                         unreachable!("`strip_label` cannot return a `Labelled`")
@@ -422,7 +422,7 @@ mod test {
         };
         let mermaid = fmt.finish();
 
-        let name = format!("{}__mermaid", name);
+        let name = format!("{name}__mermaid");
         insta::assert_snapshot!(name, mermaid);
     }
 
@@ -458,7 +458,7 @@ mod test {
         };
         let dot = fmt.finish();
 
-        let name = format!("{}__dot", name);
+        let name = format!("{name}__dot");
         insta::assert_snapshot!(name, dot);
     }
 }

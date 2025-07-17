@@ -173,8 +173,8 @@ where
         let make_label = |offset: usize, show_offset: bool, label: &str| match (show_offset, label)
         {
             (false, label) => label.to_string(),
-            (true, "") => format!("{}", offset),
-            (true, label) => format!("{}: {}", offset, label),
+            (true, "") => format!("{offset}"),
+            (true, label) => format!("{offset}: {label}"),
         };
         self.graph
             .ports(node, direction)
@@ -182,12 +182,12 @@ where
             .filter_map(|(offset, port)| match self.port_style(port) {
                 PortStyle::Hidden => None,
                 PortStyle::Plain(label, show_offset) => Some(PortCellStrings {
-                    id: format!("{}{}", dir, offset),
+                    id: format!("{dir}{offset}"),
                     style: "border=\"0\"".to_string(),
                     label: make_label(offset, show_offset, &label),
                 }),
                 PortStyle::Boxed(label, show_offset) => Some(PortCellStrings {
-                    id: format!("{}{}", dir, offset),
+                    id: format!("{dir}{offset}"),
                     style: String::new(),
                     label: make_label(offset, show_offset, &label),
                 }),

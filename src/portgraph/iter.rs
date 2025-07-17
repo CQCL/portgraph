@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    index::Unsigned,
+    index::{MaybePortIndex, Unsigned},
     portgraph::{NodeEntry, PortEntry, PortGraph},
     Direction, PortView,
 };
@@ -377,7 +377,7 @@ impl<PO: Unsigned> DoubleEndedIterator for NodePortOffsets<PO> {
 /// [`LinkView::links`]: crate::LinkView::links
 #[derive(Clone, Debug)]
 pub struct NodeLinks<'a> {
-    links: Zip<NodePorts, std::slice::Iter<'a, Option<PortIndex>>>,
+    links: Zip<NodePorts, std::slice::Iter<'a, MaybePortIndex<u32>>>,
     /// Ignore links with target ports in the given range.
     /// This is used to filter out duplicated self-links.
     ignore_target_ports: Range<usize>,
@@ -387,7 +387,7 @@ impl<'a> NodeLinks<'a> {
     /// Returns a new iterator
     pub(super) fn new(
         ports: NodePorts,
-        links: &'a [Option<PortIndex>],
+        links: &'a [MaybePortIndex<u32>],
         ignore_target_ports: Range<usize>,
     ) -> Self {
         Self {
@@ -404,13 +404,13 @@ impl Iterator for NodeLinks<'_> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let (port, link) = self.links.next()?;
-            let Some(link) = link else {
+            let Some(link) = link.to_option() else {
                 continue;
             };
             if self.ignore_target_ports.contains(&link.index()) {
                 continue;
             }
-            return Some((port, *link));
+            return Some((port, link));
         }
     }
 
@@ -425,8 +425,8 @@ impl DoubleEndedIterator for NodeLinks<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
         loop {
             let (port, link) = self.links.next_back()?;
-            if let Some(link) = link {
-                return Some((port, *link));
+            if let Some(link) = link.to_option() {
+                return Some((port, link));
             }
         }
     }

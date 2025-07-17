@@ -5,7 +5,7 @@ use std::iter::{Enumerate, FusedIterator};
 use std::ops::Range;
 
 use super::{MultiPortGraph, SubportIndex};
-use crate::index::Unsigned;
+use crate::index::{MaybeNodeIndex, Unsigned};
 use crate::portgraph::{self, NodePorts};
 use crate::{Direction, LinkView, NodeIndex, PortIndex, PortOffset, PortView};
 
@@ -196,7 +196,7 @@ impl<PO: Unsigned> FusedIterator for NodeSubports<'_, PO> {}
 pub struct Neighbours<'a, PO: Unsigned> {
     multigraph: &'a MultiPortGraph<u32, u32, PO>,
     subports: NodeSubports<'a, PO>,
-    current_copy_node: Option<NodeIndex>,
+    current_copy_node: MaybeNodeIndex<u32>,
     /// The node for which the neighbours are being iterated.
     node: NodeIndex,
     /// Whether to ignore self-loops in the input -> output direction.
@@ -215,7 +215,7 @@ impl<'a, PO: Unsigned> Neighbours<'a, PO> {
         Self {
             multigraph,
             subports,
-            current_copy_node: None,
+            current_copy_node: None.into(),
             node,
             ignore_dupped_self_loops,
         }
@@ -234,7 +234,7 @@ impl<PO: Unsigned> Iterator for Neighbours<'_, PO> {
                 } else {
                     // There is a copy node
                     if subport.offset() == 0 {
-                        self.current_copy_node = self.multigraph.get_copy_node(port_index);
+                        self.current_copy_node = self.multigraph.get_copy_node(port_index).into();
                     }
                     let copy_node = self
                         .current_copy_node

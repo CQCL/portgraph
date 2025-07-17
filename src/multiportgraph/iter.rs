@@ -5,36 +5,37 @@ use std::iter::{Enumerate, FusedIterator};
 use std::ops::Range;
 
 use super::{MultiPortGraph, SubportIndex};
+use crate::index::Unsigned;
 use crate::portgraph::{self, NodePorts};
 use crate::{Direction, LinkView, NodeIndex, PortIndex, PortOffset, PortView};
 
 /// Iterator methods for [`MultiPortGraph`] with concrete return types.
 ///
 /// Used internally by other iterator implementations to avoid the generic RPITIT return types.
-impl MultiPortGraph {
+impl<PO: Unsigned> MultiPortGraph<u32, u32, PO> {
     #[inline]
     /// Returns an iterator over every pair of matching ports connecting `from`
     /// with `to`.
-    pub(crate) fn _get_connections(&self, from: NodeIndex, to: NodeIndex) -> NodeConnections {
+    pub(crate) fn _get_connections(&self, from: NodeIndex, to: NodeIndex) -> NodeConnections<PO> {
         NodeConnections::new(self, to, self._output_links(from))
     }
 
     /// Returns the port that the given `port` is linked to.
     #[inline]
-    pub(crate) fn _port_links(&self, port: PortIndex) -> PortLinks {
+    pub(crate) fn _port_links(&self, port: PortIndex) -> PortLinks<PO> {
         PortLinks::new(self, port)
     }
 
     /// Iterates over the connected links of the `node` in the given
     /// `direction`.
     #[inline]
-    pub(crate) fn _links(&self, node: NodeIndex, direction: Direction) -> NodeLinks {
+    pub(crate) fn _links(&self, node: NodeIndex, direction: Direction) -> NodeLinks<PO> {
         NodeLinks::new(self, self.graph._ports(node, direction), 0..0)
     }
 
     /// Iterates over the connected input and output links of the `node` in sequence.
     #[inline]
-    pub(crate) fn _all_links(&self, node: NodeIndex) -> NodeLinks {
+    pub(crate) fn _all_links(&self, node: NodeIndex) -> NodeLinks<PO> {
         let output_ports = self.graph.node_outgoing_ports(node);
         NodeLinks::new(self, self.graph._all_ports(node), output_ports)
     }
@@ -43,46 +44,46 @@ impl MultiPortGraph {
     /// [`LinkView::links`].
     #[must_use]
     #[inline]
-    pub(crate) fn _output_links(&self, node: NodeIndex) -> NodeLinks {
+    pub(crate) fn _output_links(&self, node: NodeIndex) -> NodeLinks<PO> {
         self._links(node, Direction::Outgoing)
     }
 
     /// Iterates over neighbour nodes in the given `direction`.
     /// May contain duplicates if the graph has multiple links between nodes.
     #[inline]
-    pub(crate) fn _neighbours(&self, node: NodeIndex, direction: Direction) -> Neighbours {
+    pub(crate) fn _neighbours(&self, node: NodeIndex, direction: Direction) -> Neighbours<PO> {
         Neighbours::new(self, self._subports(node, direction), node, false)
     }
 
     /// Iterates over the input and output neighbours of the `node` in sequence.
     #[inline]
-    pub(crate) fn _all_neighbours(&self, node: NodeIndex) -> Neighbours {
+    pub(crate) fn _all_neighbours(&self, node: NodeIndex) -> Neighbours<PO> {
         Neighbours::new(self, self._all_subports(node), node, true)
     }
 
     /// Iterates over all the subports of the `node` in the given `direction`.
     #[inline]
-    pub(crate) fn _subports(&self, node: NodeIndex, direction: Direction) -> NodeSubports {
+    pub(crate) fn _subports(&self, node: NodeIndex, direction: Direction) -> NodeSubports<PO> {
         NodeSubports::new(self, self.graph._ports(node, direction))
     }
 
     /// Iterates over the input and output subports of the `node` in sequence.
     #[inline]
-    pub(crate) fn _all_subports(&self, node: NodeIndex) -> NodeSubports {
+    pub(crate) fn _all_subports(&self, node: NodeIndex) -> NodeSubports<PO> {
         NodeSubports::new(self, self.graph._all_ports(node))
     }
 }
 
 /// Iterator over the nodes of a graph.
 #[derive(Clone)]
-pub struct Nodes<'a> {
+pub struct Nodes<'a, PO: Unsigned> {
     // We use portgraph's iterator, but filter out the copy nodes.
-    pub(super) multigraph: &'a MultiPortGraph,
+    pub(super) multigraph: &'a MultiPortGraph<u32, u32, PO>,
     pub(super) iter: portgraph::Nodes<'a>,
     pub(super) len: usize,
 }
 
-impl Iterator for Nodes<'_> {
+impl<PO: Unsigned> Iterator for Nodes<'_, PO> {
     type Item = NodeIndex;
 
     #[inline]
@@ -105,13 +106,13 @@ impl Iterator for Nodes<'_> {
     }
 }
 
-impl ExactSizeIterator for Nodes<'_> {
+impl<PO: Unsigned> ExactSizeIterator for Nodes<'_, PO> {
     fn len(&self) -> usize {
         self.len
     }
 }
 
-impl DoubleEndedIterator for Nodes<'_> {
+impl<PO: Unsigned> DoubleEndedIterator for Nodes<'_, PO> {
     fn next_back(&mut self) -> Option<Self::Item> {
         loop {
             let node = self.iter.next_back()?;
@@ -123,19 +124,22 @@ impl DoubleEndedIterator for Nodes<'_> {
     }
 }
 
-impl FusedIterator for Nodes<'_> {}
+impl<PO: Unsigned> FusedIterator for Nodes<'_, PO> {}
 
 /// Iterator over the ports of a node.
 #[derive(Debug, Clone)]
-pub struct NodeSubports<'a> {
-    multigraph: &'a MultiPortGraph,
+pub struct NodeSubports<'a, PO: Unsigned> {
+    multigraph: &'a MultiPortGraph<u32, u32, PO>,
     ports: portgraph::NodePorts,
     current_port: Option<PortIndex>,
     current_subports: Range<usize>,
 }
 
-impl<'a> NodeSubports<'a> {
-    pub(super) fn new(multigraph: &'a MultiPortGraph, ports: portgraph::NodePorts) -> Self {
+impl<'a, PO: Unsigned> NodeSubports<'a, PO> {
+    pub(super) fn new(
+        multigraph: &'a MultiPortGraph<u32, u32, PO>,
+        ports: portgraph::NodePorts,
+    ) -> Self {
         Self {
             multigraph,
             ports,
@@ -145,7 +149,7 @@ impl<'a> NodeSubports<'a> {
     }
 }
 
-impl Iterator for NodeSubports<'_> {
+impl<PO: Unsigned> Iterator for NodeSubports<'_, PO> {
     type Item = SubportIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -171,7 +175,8 @@ impl Iterator for NodeSubports<'_> {
                     .multigraph
                     .graph
                     ._port_offsets(copy_node, dir)
-                    .as_range(dir);
+                    .as_range(dir)
+                    .clone();
             } else {
                 // The port is not a multiport, return the single subport.
                 return Some(SubportIndex::new_unique(port));
@@ -184,13 +189,13 @@ impl Iterator for NodeSubports<'_> {
     }
 }
 
-impl FusedIterator for NodeSubports<'_> {}
+impl<PO: Unsigned> FusedIterator for NodeSubports<'_, PO> {}
 
 /// Iterator over the ports of a node.
 #[derive(Debug, Clone)]
-pub struct Neighbours<'a> {
-    multigraph: &'a MultiPortGraph,
-    subports: NodeSubports<'a>,
+pub struct Neighbours<'a, PO: Unsigned> {
+    multigraph: &'a MultiPortGraph<u32, u32, PO>,
+    subports: NodeSubports<'a, PO>,
     current_copy_node: Option<NodeIndex>,
     /// The node for which the neighbours are being iterated.
     node: NodeIndex,
@@ -200,10 +205,10 @@ pub struct Neighbours<'a> {
     ignore_dupped_self_loops: bool,
 }
 
-impl<'a> Neighbours<'a> {
+impl<'a, PO: Unsigned> Neighbours<'a, PO> {
     pub(super) fn new(
-        multigraph: &'a MultiPortGraph,
-        subports: NodeSubports<'a>,
+        multigraph: &'a MultiPortGraph<u32, u32, PO>,
+        subports: NodeSubports<'a, PO>,
         node: NodeIndex,
         ignore_dupped_self_loops: bool,
     ) -> Self {
@@ -217,7 +222,7 @@ impl<'a> Neighbours<'a> {
     }
 }
 
-impl Iterator for Neighbours<'_> {
+impl<PO: Unsigned> Iterator for Neighbours<'_, PO> {
     type Item = NodeIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -260,7 +265,7 @@ impl Iterator for Neighbours<'_> {
     }
 }
 
-impl FusedIterator for Neighbours<'_> {}
+impl<PO: Unsigned> FusedIterator for Neighbours<'_, PO> {}
 
 /// Iterator over the links from a node, created by
 /// [`MultiPortGraph::links`].
@@ -268,18 +273,18 @@ impl FusedIterator for Neighbours<'_> {}
 /// In contrast to [`portgraph::NodeLinks`], this iterator
 /// only returns linked subports, and includes the source subport.
 #[derive(Debug, Clone)]
-pub struct NodeLinks<'a> {
-    multigraph: &'a MultiPortGraph,
+pub struct NodeLinks<'a, PO: Unsigned> {
+    multigraph: &'a MultiPortGraph<u32, u32, PO>,
     ports: NodePorts,
-    current_links: Option<PortLinks<'a>>,
+    current_links: Option<PortLinks<'a, PO>>,
     /// Ignore links to the given target ports.
     /// This is used to avoid counting self-loops twice.
     ignore_target_ports: Range<usize>,
 }
 
-impl<'a> NodeLinks<'a> {
+impl<'a, PO: Unsigned> NodeLinks<'a, PO> {
     pub(super) fn new(
-        multigraph: &'a MultiPortGraph,
+        multigraph: &'a MultiPortGraph<u32, u32, PO>,
         ports: NodePorts,
         ignore_target_ports: Range<usize>,
     ) -> Self {
@@ -292,7 +297,7 @@ impl<'a> NodeLinks<'a> {
     }
 }
 
-impl Iterator for NodeLinks<'_> {
+impl<PO: Unsigned> Iterator for NodeLinks<'_, PO> {
     /// A link from one of the node's subports to another subport.
     type Item = (SubportIndex, SubportIndex);
 
@@ -316,22 +321,22 @@ impl Iterator for NodeLinks<'_> {
     }
 }
 
-impl FusedIterator for NodeLinks<'_> {}
+impl<PO: Unsigned> FusedIterator for NodeLinks<'_, PO> {}
 
 /// Iterator over the links between two nodes, created by
 /// [`MultiPortGraph::get_connections`].
 #[derive(Debug, Clone)]
-pub struct NodeConnections<'a> {
-    multigraph: &'a MultiPortGraph,
+pub struct NodeConnections<'a, PO: Unsigned> {
+    multigraph: &'a MultiPortGraph<u32, u32, PO>,
     target: NodeIndex,
-    links: NodeLinks<'a>,
+    links: NodeLinks<'a, PO>,
 }
 
-impl<'a> NodeConnections<'a> {
+impl<'a, PO: Unsigned> NodeConnections<'a, PO> {
     pub(super) fn new(
-        multigraph: &'a MultiPortGraph,
+        multigraph: &'a MultiPortGraph<u32, u32, PO>,
         target: NodeIndex,
-        links: NodeLinks<'a>,
+        links: NodeLinks<'a, PO>,
     ) -> Self {
         Self {
             multigraph,
@@ -341,7 +346,7 @@ impl<'a> NodeConnections<'a> {
     }
 }
 
-impl Iterator for NodeConnections<'_> {
+impl<PO: Unsigned> Iterator for NodeConnections<'_, PO> {
     /// A link from one of the node's subports to another subport.
     type Item = (SubportIndex, SubportIndex);
 
@@ -356,28 +361,28 @@ impl Iterator for NodeConnections<'_> {
     }
 }
 
-impl FusedIterator for NodeConnections<'_> {}
+impl<PO: Unsigned> FusedIterator for NodeConnections<'_, PO> {}
 
 /// Iterator over the links of a port
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
-pub enum PortLinks<'a> {
+pub enum PortLinks<'a, PO: Unsigned> {
     /// The port is not a multiport. The iterator returns exactly one link.
     SinglePort {
-        multigraph: &'a MultiPortGraph,
+        multigraph: &'a MultiPortGraph<u32, u32, PO>,
         port: PortIndex,
         empty: bool,
     },
     /// The port is a multiport. The iterator may return any number of links.
     Multiport {
-        multigraph: &'a MultiPortGraph,
+        multigraph: &'a MultiPortGraph<u32, u32, PO>,
         port: PortIndex,
         subports: Enumerate<portgraph::NodePorts>,
     },
 }
 
-impl<'a> PortLinks<'a> {
-    pub(super) fn new(multigraph: &'a MultiPortGraph, port: PortIndex) -> Self {
+impl<'a, PO: Unsigned> PortLinks<'a, PO> {
+    pub(super) fn new(multigraph: &'a MultiPortGraph<u32, u32, PO>, port: PortIndex) -> Self {
         if multigraph.is_multiport(port) {
             let copy_node = multigraph.get_copy_node(port).unwrap();
             let dir = multigraph.graph.port_direction(port).unwrap();
@@ -399,8 +404,8 @@ impl<'a> PortLinks<'a> {
 
 /// Returns the link of a single port for a `PortLinks` iterator.
 #[inline(always)]
-fn port_links_single(
-    multigraph: &MultiPortGraph,
+fn port_links_single<PO: Unsigned>(
+    multigraph: &MultiPortGraph<u32, u32, PO>,
     port: PortIndex,
 ) -> Option<(SubportIndex, SubportIndex)> {
     let link = multigraph.graph.port_link(port)?;
@@ -410,8 +415,8 @@ fn port_links_single(
 
 /// Try to get the next link of a multiport for a `PortLinks` iterator.
 #[inline(always)]
-fn port_links_multiport(
-    multigraph: &MultiPortGraph,
+fn port_links_multiport<PO: Unsigned>(
+    multigraph: &MultiPortGraph<u32, u32, PO>,
     port: PortIndex,
     subport_offset: usize,
     copy_port_index: PortIndex,
@@ -421,7 +426,7 @@ fn port_links_multiport(
     Some((SubportIndex::new_multi(port, subport_offset), link))
 }
 
-impl Iterator for PortLinks<'_> {
+impl<PO: Unsigned> Iterator for PortLinks<'_, PO> {
     type Item = (SubportIndex, SubportIndex);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -459,7 +464,7 @@ impl Iterator for PortLinks<'_> {
     }
 }
 
-impl DoubleEndedIterator for PortLinks<'_> {
+impl<PO: Unsigned> DoubleEndedIterator for PortLinks<'_, PO> {
     fn next_back(&mut self) -> Option<Self::Item> {
         match self {
             PortLinks::SinglePort {
@@ -486,26 +491,29 @@ impl DoubleEndedIterator for PortLinks<'_> {
     }
 }
 
-impl FusedIterator for PortLinks<'_> {}
+impl<PO: Unsigned> FusedIterator for PortLinks<'_, PO> {}
 
 /// Iterator over all the ports of the multiport graph.
 #[derive(Clone)]
-pub struct Ports<'a> {
+pub struct Ports<'a, PO: Unsigned> {
     /// The multiport graph.
-    multigraph: &'a MultiPortGraph,
+    multigraph: &'a MultiPortGraph<u32, u32, PO>,
     /// The wrapped ports iterator.
     ///
     /// We filter out the copy nodes from here.
     ports: portgraph::Ports<'a>,
 }
 
-impl<'a> Ports<'a> {
-    pub(super) fn new(multigraph: &'a MultiPortGraph, ports: portgraph::Ports<'a>) -> Self {
+impl<'a, PO: Unsigned> Ports<'a, PO> {
+    pub(super) fn new(
+        multigraph: &'a MultiPortGraph<u32, u32, PO>,
+        ports: portgraph::Ports<'a>,
+    ) -> Self {
         Self { multigraph, ports }
     }
 }
 
-impl Iterator for Ports<'_> {
+impl<PO: Unsigned> Iterator for Ports<'_, PO> {
     type Item = PortIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -520,7 +528,7 @@ impl Iterator for Ports<'_> {
     }
 }
 
-impl DoubleEndedIterator for Ports<'_> {
+impl<PO: Unsigned> DoubleEndedIterator for Ports<'_, PO> {
     fn next_back(&mut self) -> Option<Self::Item> {
         loop {
             let port = self.ports.next_back()?;
@@ -532,4 +540,4 @@ impl DoubleEndedIterator for Ports<'_> {
     }
 }
 
-impl FusedIterator for Ports<'_> {}
+impl<PO: Unsigned> FusedIterator for Ports<'_, PO> {}

@@ -261,7 +261,7 @@ mod tests {
 
     #[test]
     fn dangling_input() {
-        let mut g = PortGraph::new();
+        let mut g: PortGraph = PortGraph::new();
         let n = g.add_node(1, 1);
         let checker = TopoConvexChecker::new(&g);
         assert!(checker.is_node_convex([n]));
@@ -269,7 +269,7 @@ mod tests {
 
     #[test]
     fn disconnected_graph() {
-        let mut g = PortGraph::new();
+        let mut g: PortGraph = PortGraph::new();
         let n = g.add_node(1, 1);
         g.add_node(1, 1);
         let checker = TopoConvexChecker::new(&g);

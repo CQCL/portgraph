@@ -108,11 +108,11 @@ where
     })
 }
 
-fn graph_from_edges<G: PortMut + LinkMut + Default>(edges: &[Edge]) -> G {
+fn graph_from_edges<G: PortMut<PortOffsetBase = u16> + LinkMut + Default>(edges: &[Edge]) -> G {
     let mut map_vertices = BTreeMap::new();
     let mut in_port_counts = BTreeMap::new();
     let mut out_port_counts = BTreeMap::new();
-    let mut add_port = |v, p: PortOffset| {
+    let mut add_port = |v, p: PortOffset<G::PortOffsetBase>| {
         let (max, port) = match p.direction() {
             Direction::Incoming => (in_port_counts.entry(v).or_insert(0), p.index()),
             Direction::Outgoing => (out_port_counts.entry(v).or_insert(0), p.index()),

@@ -13,11 +13,13 @@
 mod iter;
 
 use delegate::delegate;
+use std::marker::PhantomData;
 use std::mem::take;
 use std::num::{NonZeroU16, NonZeroU32};
 use std::ops::Range;
 use thiserror::Error;
 
+use crate::index::Unsigned;
 use crate::view::{LinkMut, PortMut};
 use crate::{Direction, LinkView, NodeIndex, PortIndex, PortOffset, PortView};
 
@@ -39,34 +41,39 @@ pub use crate::portgraph::iter::*;
 /// when a new node is added.
 /// The indices of unaffected nodes and ports remain stable.
 /// [`PortGraph::compact_nodes`] and [`PortGraph::compact_ports`] to eliminate fragmentation in the index space.
-#[cfg_attr(feature = "pyo3", pyclass)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[derive(Clone, PartialEq)]
-pub struct PortGraph {
+pub struct PortGraph<N: Unsigned = u32, P: Unsigned = u32, PO: Unsigned = u16> {
     /// Metadata for each node. Free slots form a linked list.
     node_meta: Vec<NodeEntry>,
     /// Links from ports to other ports. Free ports slabs (fixed-length lists of
     /// ports) form a linked list, with the next slab index stored in the first
     /// port.
-    port_link: Vec<Option<PortIndex>>,
+    port_link: Vec<Option<PortIndex<P>>>,
     /// Metadata for each port. Ports of a node are stored contiguously, with
     /// incoming ports first.
     port_meta: Vec<PortEntry>,
     /// Index of the first free node slot in the free-node linked list embedded
     /// in `node_meta`.
-    node_free: Option<NodeIndex>,
+    node_free: Option<NodeIndex<N>>,
     /// List of free slabs of ports. Each i-th item is the index of the first
     /// slab of size `i+1` in the free-port linked list embedded in `port_link`.
-    port_free: Vec<Option<PortIndex>>,
+    port_free: Vec<Option<PortIndex<P>>>,
     /// Number of nodes in the graph.
     node_count: usize,
     /// Number of ports in the graph.
     port_count: usize,
     /// Number of links in the graph.
     link_count: usize,
+    /// Marker type for the port offset base type.
+    _marker: PhantomData<PO>,
 }
 
-impl PortGraph {
+#[doc(hidden)]
+#[cfg_attr(feature = "pyo3", pyclass(name = "PortGraph"))]
+pub struct PyPortGraph(pub PortGraph);
+
+impl<N: Unsigned, P: Unsigned, PO: Unsigned> PortGraph<N, P, PO> {
     /// Create a new empty [`PortGraph`].
     pub fn new() -> Self {
         Self {
@@ -78,6 +85,7 @@ impl PortGraph {
             node_count: 0,
             port_count: 0,
             link_count: 0,
+            _marker: PhantomData,
         }
     }
 
@@ -92,9 +100,12 @@ impl PortGraph {
             node_count: 0,
             port_count: 0,
             link_count: 0,
+            _marker: PhantomData,
         }
     }
+}
 
+impl<PO: Unsigned> PortGraph<u32, u32, PO> {
     #[inline]
     fn alloc_node(&mut self) -> NodeIndex {
         match self.node_free {
@@ -315,7 +326,9 @@ impl PortGraph {
     }
 }
 
-impl PortView for PortGraph {
+impl<PO: Unsigned> PortView for PortGraph<u32, u32, PO> {
+    type PortOffsetBase = PO;
+
     #[inline]
     fn port_direction(&self, port: impl Into<PortIndex>) -> Option<Direction> {
         Some(self.port_meta_valid(port.into())?.direction())
@@ -326,7 +339,7 @@ impl PortView for PortGraph {
         Some(self.port_meta_valid(port.into())?.node())
     }
 
-    fn port_offset(&self, port: impl Into<PortIndex>) -> Option<PortOffset> {
+    fn port_offset(&self, port: impl Into<PortIndex>) -> Option<PortOffset<PO>> {
         let port = port.into();
         let port_meta = self.port_meta_valid(port)?;
         let node = port_meta.node();
@@ -346,7 +359,7 @@ impl PortView for PortGraph {
         }
     }
 
-    fn port_index(&self, node: NodeIndex, offset: PortOffset) -> Option<PortIndex> {
+    fn port_index(&self, node: NodeIndex, offset: PortOffset<PO>) -> Option<PortIndex> {
         let node_meta = self.node_meta_valid(node)?;
         let direction = offset.direction();
         let offset = offset.index();
@@ -421,9 +434,9 @@ impl PortView for PortGraph {
             #[call(_all_ports)]
             fn all_ports(&self, node: NodeIndex) -> impl Iterator<Item = PortIndex> + Clone;
             #[call(_port_offsets)]
-            fn port_offsets(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortOffset> + Clone;
+            fn port_offsets(&self, node: NodeIndex, direction: Direction) -> impl Iterator<Item = PortOffset<PO>> + Clone;
             #[call(_all_port_offsets)]
-            fn all_port_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset> + Clone;
+            fn all_port_offsets(&self, node: NodeIndex) -> impl Iterator<Item = PortOffset<PO>> + Clone;
             #[call(_nodes_iter)]
             fn nodes_iter(&self) -> impl Iterator<Item = NodeIndex> + Clone;
             #[call(_ports_iter)]
@@ -432,7 +445,7 @@ impl PortView for PortGraph {
     }
 }
 
-impl PortMut for PortGraph {
+impl<PO: Unsigned> PortMut for PortGraph<u32, u32, PO> {
     fn add_node(&mut self, incoming: usize, outgoing: usize) -> NodeIndex {
         assert!(
             incoming <= NodeMeta::MAX_INCOMING,
@@ -707,7 +720,7 @@ impl PortMut for PortGraph {
     }
 }
 
-impl LinkView for PortGraph {
+impl<PO: Unsigned> LinkView for PortGraph<u32, u32, PO> {
     type LinkEndpoint = PortIndex;
 
     fn port_links(&self, port: PortIndex) -> impl Iterator<Item = (PortIndex, PortIndex)> + Clone {
@@ -738,12 +751,12 @@ impl LinkView for PortGraph {
     }
 }
 
-impl LinkMut for PortGraph {
+impl<PO: Unsigned> LinkMut for PortGraph<u32, u32, PO> {
     fn link_ports(
         &mut self,
         port_a: PortIndex,
         port_b: PortIndex,
-    ) -> Result<(Self::LinkEndpoint, Self::LinkEndpoint), LinkError> {
+    ) -> Result<(Self::LinkEndpoint, Self::LinkEndpoint), LinkError<PO>> {
         let Some(meta_a) = self.port_meta_valid(port_a) else {
             return Err(LinkError::UnknownPort { port: port_a });
         };
@@ -781,7 +794,7 @@ impl LinkMut for PortGraph {
     }
 }
 
-impl Default for PortGraph {
+impl<N: Unsigned, P: Unsigned, PO: Unsigned> Default for PortGraph<N, P, PO> {
     fn default() -> Self {
         Self::new()
     }
@@ -965,7 +978,7 @@ struct FreeNodeEntry {
     next: Option<NodeIndex>,
 }
 
-impl std::fmt::Debug for PortGraph {
+impl<PO: Unsigned> std::fmt::Debug for PortGraph<u32, u32, PO> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PortGraph")
             .field("nodes", &debug::NodesDebug(self))
@@ -976,9 +989,9 @@ impl std::fmt::Debug for PortGraph {
 
 mod debug {
     use super::*;
-    pub struct NodesDebug<'a>(pub &'a PortGraph);
+    pub struct NodesDebug<'a, PO: Unsigned>(pub &'a PortGraph<u32, u32, PO>);
 
-    impl std::fmt::Debug for NodesDebug<'_> {
+    impl<PO: Unsigned> std::fmt::Debug for NodesDebug<'_, PO> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             f.debug_map()
                 .entries(
@@ -990,9 +1003,9 @@ mod debug {
         }
     }
 
-    pub struct NodeDebug<'a>(pub &'a PortGraph, pub NodeIndex);
+    pub struct NodeDebug<'a, PO: Unsigned>(pub &'a PortGraph<u32, u32, PO>, pub NodeIndex);
 
-    impl std::fmt::Debug for NodeDebug<'_> {
+    impl<PO: Unsigned> std::fmt::Debug for NodeDebug<'_, PO> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let inputs = PortRangeDebug(self.0._inputs(self.1).as_range());
             let outputs = PortRangeDebug(self.0._outputs(self.1).as_range());
@@ -1012,20 +1025,20 @@ mod debug {
                 write!(fmt, "[]")?;
             } else if self.0.len() == 1 {
                 write!(fmt, "[")?;
-                PortIndex::new(self.0.start).fmt(fmt)?;
+                PortIndex::<u32>::new(self.0.start).fmt(fmt)?;
                 write!(fmt, "]")?;
             } else {
-                PortIndex::new(self.0.start).fmt(fmt)?;
+                PortIndex::<u32>::new(self.0.start).fmt(fmt)?;
                 write!(fmt, "..")?;
-                PortIndex::new(self.0.end).fmt(fmt)?;
+                PortIndex::<u32>::new(self.0.end).fmt(fmt)?;
             }
             Ok(())
         }
     }
 
-    pub struct PortsDebug<'a>(pub &'a PortGraph);
+    pub struct PortsDebug<'a, PO: Unsigned>(pub &'a PortGraph<u32, u32, PO>);
 
-    impl std::fmt::Debug for PortsDebug<'_> {
+    impl<PO: Unsigned> std::fmt::Debug for PortsDebug<'_, PO> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             f.debug_map()
                 .entries(
@@ -1037,9 +1050,9 @@ mod debug {
         }
     }
 
-    pub struct PortDebug<'a>(pub &'a PortGraph, pub PortIndex);
+    pub struct PortDebug<'a, PO: Unsigned>(pub &'a PortGraph<u32, u32, PO>, pub PortIndex);
 
-    impl std::fmt::Debug for PortDebug<'_> {
+    impl<PO: Unsigned> std::fmt::Debug for PortDebug<'_, PO> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let direction = self.0.port_direction(self.1).unwrap();
             let link = self.0.port_link(self.1);
@@ -1108,7 +1121,7 @@ enum PortEntry {
 /// Error generated when linking ports.
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 #[allow(missing_docs)]
-pub enum LinkError {
+pub enum LinkError<PO: Unsigned> {
     /// The port is already linked.
     #[error("port {port:?} is already linked")]
     AlreadyLinked { port: PortIndex },
@@ -1117,7 +1130,10 @@ pub enum LinkError {
     UnknownPort { port: PortIndex },
     /// The port offset is invalid.
     #[error("unknown port offset {} in node {node:?} in direction {:?}", offset.index(), offset.direction())]
-    UnknownOffset { node: NodeIndex, offset: PortOffset },
+    UnknownOffset {
+        node: NodeIndex,
+        offset: PortOffset<PO>,
+    },
     /// The ports have the same direction so they cannot be linked.
     #[error("Cannot link two ports with direction {dir:?}. In ports {port_a:?} and {port_b:?}")]
     IncompatibleDirections {
@@ -1128,8 +1144,8 @@ pub enum LinkError {
 }
 
 #[cfg(feature = "pyo3")]
-impl From<LinkError> for PyErr {
-    fn from(s: LinkError) -> Self {
+impl<PO: Unsigned> From<LinkError<PO>> for PyErr {
+    fn from(s: LinkError<PO>) -> Self {
         pyo3::exceptions::PyRuntimeError::new_err(s.to_string())
     }
 }
@@ -1174,7 +1190,7 @@ pub(crate) mod test {
 
     #[test]
     fn create_graph() {
-        let graph = PortGraph::new();
+        let graph: PortGraph = PortGraph::new();
 
         assert_eq!(graph.node_count(), 0);
         assert_eq!(graph.port_count(), 0);
@@ -1185,7 +1201,7 @@ pub(crate) mod test {
 
     #[test]
     fn add_nodes() {
-        let mut graph = PortGraph::with_capacity(5, 10);
+        let mut graph: PortGraph = PortGraph::with_capacity(5, 10);
         assert_eq!(graph.node_count(), 0);
         assert_eq!(graph.node_capacity(), 5);
         assert_eq!(graph.port_count(), 0);
@@ -1248,7 +1264,7 @@ pub(crate) mod test {
 
     #[test]
     fn link_ports() {
-        let mut g = PortGraph::new();
+        let mut g: PortGraph = PortGraph::new();
         let node0 = g.add_node(2, 1);
         let node1 = g.add_node(1, 2);
         let node0_input = g.input(node0, 0).unwrap();
@@ -1303,7 +1319,7 @@ pub(crate) mod test {
 
     #[test]
     fn link_ports_errors() {
-        let mut g = PortGraph::new();
+        let mut g: PortGraph = PortGraph::new();
         let node0 = g.add_node(1, 1);
         let node1 = g.add_node(1, 1);
         let node0_input = g.input(node0, 0).unwrap();
@@ -1321,7 +1337,7 @@ pub(crate) mod test {
 
     #[test]
     fn link_iterators() {
-        let mut g = PortGraph::new();
+        let mut g: PortGraph = PortGraph::new();
         let node0 = g.add_node(1, 3);
         let node1 = g.add_node(2, 1);
         let node0_input0 = g.input(node0, 0).unwrap();
@@ -1382,7 +1398,7 @@ pub(crate) mod test {
 
     #[test]
     fn compact_operations() {
-        let mut g = PortGraph::new();
+        let mut g: PortGraph = PortGraph::new();
         let x = g.add_node(3, 2);
         let a = g.add_node(1, 1);
         let b = g.add_node(2, 2);
@@ -1457,7 +1473,7 @@ pub(crate) mod test {
 
     #[test]
     fn resize_ports() {
-        let mut g = PortGraph::new();
+        let mut g: PortGraph = PortGraph::new();
         let x = g.add_node(3, 2);
         let a = g.add_node(1, 1);
         let b = g.add_node(2, 2);
@@ -1553,7 +1569,7 @@ pub(crate) mod test {
 
     #[test]
     fn insert_graph() -> Result<(), Box<dyn std::error::Error>> {
-        let mut g = PortGraph::new();
+        let mut g: PortGraph = PortGraph::new();
         // Add dummy nodes to produce different node ids than in the other graph.
         g.add_node(0, 0);
         g.add_node(0, 0);
@@ -1561,7 +1577,7 @@ pub(crate) mod test {
         let node1g = g.add_node(1, 1);
         g.link_nodes(node0g, 0, node1g, 0)?;
 
-        let mut h = PortGraph::new();
+        let mut h: PortGraph = PortGraph::new();
         let node0h = h.add_node(2, 2);
         let node1h = h.add_node(1, 1);
         h.link_nodes(node0h, 0, node1h, 0)?;
@@ -1608,7 +1624,7 @@ pub(crate) mod test {
     #[cfg(feature = "serde")]
     #[test]
     fn empty_portgraph_serialize() {
-        let g = PortGraph::new();
+        let g: PortGraph = PortGraph::new();
         assert_eq!(ser_roundtrip(&g), g);
     }
 }

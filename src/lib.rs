@@ -30,7 +30,7 @@
 //! use ::portgraph::algorithms::{toposort, TopoSort};
 //!
 //! // Create a graph with two nodes, each with two input and two output ports
-//! let mut graph = PortGraph::new();
+//! let mut graph: PortGraph = PortGraph::new();
 //! let node_a = graph.add_node(2, 2);
 //! let node_b = graph.add_node(2, 2);
 //!

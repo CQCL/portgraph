@@ -14,7 +14,7 @@
 //!
 //! ```
 //! # use ::portgraph::*;
-//! let mut graph = PortGraph::new();
+//! let mut graph: PortGraph = PortGraph::new();
 //! let mut hierarchy = Hierarchy::new();
 //!
 //! let parent = graph.add_node(0, 0);
@@ -967,7 +967,7 @@ mod test {
 
     #[test]
     fn test_graph_compact() {
-        let mut graph = PortGraph::new();
+        let mut graph: PortGraph = PortGraph::new();
         let mut hierarchy = Hierarchy::new();
 
         let parent = graph.add_node(0, 0);

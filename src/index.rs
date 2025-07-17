@@ -1,6 +1,7 @@
 //! Index types for nodes and ports.
 
-use delegate::delegate;
+use std::ops;
+
 use thiserror::Error;
 
 #[cfg(feature = "pyo3")]
@@ -11,87 +12,25 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::Direction;
 
-/// Index type that can be used to index nodes and ports.
-///
-/// Currently, implementations are provided for `usize`, `u64`, `u32`, `u16`,
-/// and `u8`. Choose the bit width that suits your needs.
-pub trait Index: Copy {
-    const MAX: usize;
-
-    fn try_from_usize(index: usize) -> Result<Self, IndexError>;
-
-    fn to_usize(self) -> usize;
-
-    fn set_msb(self) -> Self;
-
-    fn unset_msb(self) -> Self;
-
-    fn msb(self) -> bool;
-
-    fn flip_msb(self) -> Self {
-        if self.msb() {
-            self.unset_msb()
-        } else {
-            self.set_msb()
-        }
-    }
-}
-
-macro_rules! impl_index_for {
-    ($ty:ty) => {
-        impl Index for $ty {
-            const MAX: usize = <$ty>::MAX as usize;
-
-            fn try_from_usize(index: usize) -> Result<Self, IndexError> {
-                if index > <Self as Index>::MAX {
-                    Err(IndexError { index })
-                } else {
-                    Ok(index as Self)
-                }
-            }
-
-            fn to_usize(self) -> usize {
-                self as usize
-            }
-
-            fn set_msb(self) -> Self {
-                self | (1 << (<$ty>::BITS - 1))
-            }
-
-            fn unset_msb(self) -> Self {
-                self & !(1 << (<$ty>::BITS - 1))
-            }
-
-            fn msb(self) -> bool {
-                self & (1 << (<$ty>::BITS - 1)) != 0
-            }
-        }
-    };
-}
-
-impl_index_for!(usize);
-impl_index_for!(u64);
-impl_index_for!(u32);
-impl_index_for!(u16);
-impl_index_for!(u8);
-
 /// Index of a node within a `PortGraph`.
 ///
-/// For an index type with n bits, the index value will be restricted to at
+/// For a bit field with n bits, the index value will be restricted to at
 /// most `2^n - 1` . The all null value is reserved for null-pointer optimisation.
+///
+/// Use with one of `usize`, `u64`, `u32`, `u16` and `u8`. Choose the bit width
+/// that suits your needs.
 #[repr(transparent)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-#[cfg_attr(feature = "serde", serde(transparent))]
 #[cfg_attr(
     feature = "serde",
     serde(bound(
-        serialize = "T: Serialize + Index",
-        deserialize = "T: Deserialize<'de> + Index"
+        serialize = "U: Serialize + Unsigned",
+        deserialize = "U: Deserialize<'de> + Unsigned"
     ))
 )]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "pyo3", derive(IntoPyObject))]
-pub struct NodeIndex<T>(ShiftedIndex<T>);
+pub struct NodeIndex<U = u32>(BitField<U>);
 
 /// Index of a port within a `PortGraph`.
 ///
@@ -100,23 +39,24 @@ pub struct NodeIndex<T>(ShiftedIndex<T>);
 #[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-#[cfg_attr(feature = "serde", serde(transparent))]
 #[cfg_attr(
     feature = "serde",
     serde(bound(
-        serialize = "T: Serialize + Index",
-        deserialize = "T: Deserialize<'de> + Index"
+        serialize = "U: Serialize + Unsigned",
+        deserialize = "U: Deserialize<'de> + Unsigned"
     ))
 )]
 #[cfg_attr(feature = "pyo3", derive(IntoPyObject))]
-pub struct PortIndex<T>(ShiftedIndex<T>);
+pub struct PortIndex<U = u32>(BitField<U>);
 
 // Wraps the ShiftedIndex API for NodeIndex and PortIndex.
 macro_rules! index_impls {
     ($name:ident) => {
-        impl<T: Index> $name<T> {
+        impl<U: Unsigned> $name<U> {
             /// Maximum allowed index.
-            const MAX: usize = ShiftedIndex::<T>::MAX;
+            pub fn max_index() -> usize {
+                BitField::<U>::max_index()
+            }
 
             /// Creates a new index from a `usize`.
             ///
@@ -125,34 +65,32 @@ macro_rules! index_impls {
             /// Panics if the index is greater than `Self::MAX`.
             #[inline]
             pub fn new(index: usize) -> Self {
-                Self(ShiftedIndex::new(index))
+                Self(BitField::new(index, false))
             }
 
-            delegate! {
-                to self.0 {
-                    /// Returns the index as a `T`.
-                    pub fn index(&self) -> usize;
-                }
+            /// Returns the index as a `T`.
+            pub fn index(&self) -> usize {
+                self.0.index().expect("invalid index")
             }
         }
 
-        impl<T: Index> TryFrom<usize> for $name<T> {
+        impl<U: Unsigned> TryFrom<usize> for $name<U> {
             type Error = IndexError;
 
             #[inline]
             fn try_from(index: usize) -> Result<Self, Self::Error> {
-                ShiftedIndex::try_from(index).map(Self)
+                BitField::try_from(index).map(Self)
             }
         }
 
-        impl<T: Index> From<$name<T>> for usize {
+        impl<U: Unsigned> From<$name<U>> for usize {
             #[inline]
-            fn from(index: $name<T>) -> Self {
+            fn from(index: $name<U>) -> Self {
                 Self::from(index.0)
             }
         }
 
-        impl<T: Index> std::fmt::Debug for $name<T> {
+        impl<U: Unsigned> std::fmt::Debug for $name<U> {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 // avoid unnecessary newlines in alternate mode
                 write!(f, concat!(stringify!($name), "({})"), self.index())
@@ -164,7 +102,7 @@ macro_rules! index_impls {
 index_impls!(NodeIndex);
 index_impls!(PortIndex);
 
-impl<T: Index> Default for PortIndex<T> {
+impl<U: Unsigned> Default for PortIndex<U> {
     fn default() -> Self {
         PortIndex::new(0)
     }
@@ -175,48 +113,46 @@ impl<T: Index> Default for PortIndex<T> {
 /// For an index type with n bits, the index value will be restricted to at
 /// most `2^(n-1)` . The most significant bit is reserved to store the direction
 /// of the offset, see [`PortOffset::direction`].
+#[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct PortOffset<T>(T);
+#[cfg_attr(
+    feature = "serde",
+    serde(bound(
+        serialize = "U: Serialize + Unsigned",
+        deserialize = "U: Deserialize<'de> + Unsigned"
+    ))
+)]
+pub struct PortOffset<U = u16>(BitField<U>);
 
-impl<T: Index> PortOffset<T> {
+impl<U: Unsigned> PortOffset<U> {
     /// Maximum allowed offset. One bit is reserved for the direction.
-    const MAX: usize = T::MAX >> 1;
+    pub fn max_offset() -> usize {
+        BitField::<U>::max_index()
+    }
 
     /// Creates a new port offset.
     #[inline(always)]
     pub fn new(direction: Direction, offset: usize) -> Self {
-        match direction {
-            Direction::Incoming => Self::new_incoming(offset),
-            Direction::Outgoing => Self::new_outgoing(offset),
-        }
+        Self(BitField::new(offset, direction == Direction::Outgoing))
     }
 
     /// Creates a new incoming port offset.
     #[inline(always)]
     pub fn new_incoming(offset: usize) -> Self {
-        if offset > Self::MAX {
-            panic!("the offset is too large.")
-        }
-        let offset = T::try_from_usize(offset).expect("smaller than allowed MAX value");
-        Self(offset)
+        Self::new(Direction::Incoming, offset)
     }
 
     /// Creates a new outgoing port offset.
     #[inline(always)]
     pub fn new_outgoing(offset: usize) -> Self {
-        if offset > Self::MAX {
-            panic!("the offset is too large.")
-        }
-        let offset = T::try_from_usize(offset).expect("smaller than allowed MAX value");
-        offset.set_msb(); // mark that this is an outgoing port
-        Self(offset)
+        Self::new(Direction::Outgoing, offset)
     }
 
     /// Returns the direction of the port.
     #[inline(always)]
     pub fn direction(self) -> Direction {
-        if self.0.msb() {
+        if self.0.bit_flag().expect("invalid port offset") {
             Direction::Outgoing
         } else {
             Direction::Incoming
@@ -226,8 +162,7 @@ impl<T: Index> PortOffset<T> {
     /// Returns the offset of the port.
     #[inline(always)]
     pub fn index(self) -> usize {
-        let offset = self.0;
-        offset.unset_msb().to_usize()
+        self.0.index().expect("invalid port offset")
     }
 
     /// Returns the opposite port offset.
@@ -236,17 +171,17 @@ impl<T: Index> PortOffset<T> {
     /// vice versa.
     #[inline(always)]
     pub fn opposite(&self) -> Self {
-        Self(self.0.flip_msb())
+        Self(self.0.flip_bit_flag())
     }
 }
 
-impl<T: Index> Default for PortOffset<T> {
+impl<U: Unsigned> Default for PortOffset<U> {
     fn default() -> Self {
         PortOffset::new_outgoing(0)
     }
 }
 
-impl<T: Index> std::fmt::Debug for PortOffset<T> {
+impl<U: Unsigned> std::fmt::Debug for PortOffset<U> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.direction() {
             Direction::Incoming => write!(f, "Incoming({})", self.index()),
@@ -255,81 +190,196 @@ impl<T: Index> std::fmt::Debug for PortOffset<T> {
     }
 }
 
-/// An index, stored as shifted by one.
+/// Fields of bits that can be used for node and port indices. Stores an index
+/// and a bit flag.
 ///
-/// The range of the index is [0, MAX - 1], but is represented internally by the
-/// interval [1, MAX]. This allows the *null pointer optimization* so that the
-/// compiler can represent `Option<ShiftedIndex<T>>` in as much space as `T` by
-/// itself.
+/// For a field of n bits, the range of the index is [0, 2^(n-1) - 1]. This
+/// saves one value (U::MAX) to flag an invalid/unset index and one bit for
+/// extra information, e.g. Direction.
+///
+/// Use with one of `usize`, `u64`, `u32`, `u16` and `u8`. Choose the bit width
+/// that suits your needs.
 #[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "pyo3", derive(IntoPyObject))]
-struct ShiftedIndex<T>(T);
+pub struct BitField<U>(U);
 
-impl<T: Index> ShiftedIndex<T> {
-    /// Maximum allowed index.
-    const MAX: usize = T::MAX - 1;
+/// Trait for unsigned integer types.
+///
+/// This is a wrapper around the `num_traits::Unsigned`, along with additional
+/// bit logic traits that are typically implemented for unsigned integer types.
+///
+/// Implementations are provided for `u8`, `u16`, `u32`, `u64`, and `usize`.
+pub trait Unsigned:
+    Copy
+    + std::fmt::Debug
+    + Ord
+    + num_traits::Unsigned
+    + num_traits::Bounded
+    + num_traits::ToPrimitive
+    + num_traits::FromPrimitive
+    + ops::Shr<u8, Output = Self>
+    + ops::Not<Output = Self>
+    + ops::BitAnd<Output = Self>
+    + ops::BitOr<Output = Self>
+    + ops::BitXor<Output = Self>
+{
+}
 
-    /// Returns the index as a `T`.
-    pub fn index(&self) -> usize {
-        self.0.to_usize() - 1
+impl Unsigned for u8 {}
+impl Unsigned for u16 {}
+impl Unsigned for u32 {}
+impl Unsigned for u64 {}
+impl Unsigned for usize {}
+// leave out u128 on purpose (casts to usize will panic)
+
+impl<U: Unsigned> BitField<U> {
+    /// Create a new bit field with the given index and bit flag.
+    fn new(index: usize, bit_flag: bool) -> Self {
+        let u = U::from_usize(index).expect("index too large");
+        let ret = Self(u);
+        if bit_flag {
+            ret.set_bit_flag()
+        } else {
+            ret
+        }
     }
 
-    /// Creates a new node index from a `usize`.
+    /// Create a new unset bit field
+    fn new_none() -> Self {
+        Self(U::max_value())
+    }
+
+    /// Maximum allowed index.
+    fn max_index() -> usize {
+        (U::max_value()
+            .to_usize()
+            .expect("max value larger than usize")
+            >> 1)
+            - 1
+    }
+
+    /// Return the index stored in the bit field as a `usize`.
     ///
-    /// # Panics
-    ///
-    /// Panics if the index is greater than `Self::MAX`.
-    #[inline]
-    pub fn new(index: usize) -> Self {
-        if index > Self::MAX {
-            panic!("the index is too large.")
+    /// Return `None` if the bit field is unset.
+    fn index(self) -> Option<usize> {
+        if self.is_none() {
+            return None;
         }
-        debug_assert!(index + 1 <= T::MAX);
-        let index = T::try_from_usize(index + 1).expect("smaller than allowed MAX value");
-        Self(index)
+        let index = self.0 & !Self::msb_mask();
+        Some(index.to_usize().expect("index too large"))
+    }
+
+    /// Set the index in the bit field leaving the bit flag unchanged.
+    ///
+    /// If the bit field is unset, the index is set to the given value and the
+    /// bit flag is set to false.
+    #[allow(unused)]
+    fn set_index(self, index: usize) -> Self {
+        let u = U::from_usize(index).expect("index too large");
+        let msb = if self.is_none() {
+            U::zero()
+        } else {
+            self.0 & Self::msb_mask()
+        };
+        Self(u | msb)
+    }
+
+    /// Return the bit flag stored in the bit field.
+    fn bit_flag(self) -> Option<bool> {
+        if self.is_none() {
+            return None;
+        }
+        Some(self.0 & Self::msb_mask() != U::zero())
+    }
+
+    /// Set the bit flag in the bit field leaving the index unchanged.
+    ///
+    /// Panics if the bit field is unset.
+    fn set_bit_flag(self) -> Self {
+        assert!(!self.is_none(), "bit field is unset");
+
+        let msb = self.0 | Self::msb_mask();
+        Self(msb)
+    }
+
+    /// Unset the bit flag in the bit field leaving the index unchanged.
+    ///
+    /// Panics if the bit field is unset.
+    #[allow(unused)]
+    fn unset_bit_flag(self) -> Self {
+        assert!(!self.is_none(), "bit field is unset");
+
+        let msb = self.0 & !Self::msb_mask();
+        Self(msb)
+    }
+
+    fn flip_bit_flag(self) -> Self {
+        Self(self.0 ^ Self::msb_mask())
+    }
+
+    fn unpack(self) -> Option<(usize, bool)> {
+        let ind = self.index()?;
+        let flag = self.bit_flag()?;
+        Some((ind, flag))
+    }
+
+    fn pack(data: Option<(usize, bool)>) -> Self {
+        match data {
+            Some((ind, flag)) => Self::new(ind, flag),
+            None => Self::new_none(),
+        }
+    }
+
+    fn msb_mask() -> U {
+        U::max_value() - (U::max_value() >> 1)
+    }
+
+    /// Whether the bit field is unset.
+    fn is_none(self) -> bool {
+        self == Self::new_none()
     }
 }
 
 #[cfg(feature = "serde")]
-impl<T: Serialize + Index> Serialize for ShiftedIndex<T> {
+impl<U: Serialize + Unsigned> Serialize for BitField<U> {
     #[inline]
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        self.index().serialize(serializer)
+        self.unpack().serialize(serializer)
     }
 }
 
 #[cfg(feature = "serde")]
-impl<'de, T: Index + Deserialize<'de>> Deserialize<'de> for ShiftedIndex<T> {
+impl<'de, U: Unsigned + Deserialize<'de>> Deserialize<'de> for BitField<U> {
     #[inline]
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        usize::deserialize(deserializer).map(ShiftedIndex::new)
+        Deserialize::deserialize(deserializer).map(BitField::pack)
     }
 }
 
-impl<T: Index> TryFrom<usize> for ShiftedIndex<T> {
+impl<U: Unsigned> TryFrom<usize> for BitField<U> {
     type Error = IndexError;
 
     #[inline]
     fn try_from(index: usize) -> Result<Self, Self::Error> {
-        if index > Self::MAX {
+        if index > Self::max_index() {
             Err(IndexError { index })
         } else {
-            Ok(Self::new(index))
+            Ok(Self::new(index, false))
         }
     }
 }
 
-impl<T: Index> From<ShiftedIndex<T>> for usize {
+impl<U: Unsigned> From<BitField<U>> for usize {
     #[inline]
-    fn from(index: ShiftedIndex<T>) -> Self {
-        index.index()
+    fn from(bit_field: BitField<U>) -> Self {
+        bit_field.index().expect("invalid index")
     }
 }
 
@@ -342,14 +392,12 @@ pub struct IndexError {
 
 #[cfg(test)]
 mod tests {
-    use std::u16;
-
     use super::*;
 
     #[test]
     fn test_opposite() {
-        let incoming = PortOffset::<u32>::new_incoming(5);
-        let outgoing = PortOffset::<u32>::new_outgoing(5);
+        let incoming = PortOffset::<u16>::new_incoming(5);
+        let outgoing = PortOffset::<u16>::new_outgoing(5);
 
         assert_eq!(incoming.opposite(), outgoing);
         assert_eq!(outgoing.opposite(), incoming);
@@ -358,19 +406,42 @@ mod tests {
     use rstest::rstest;
 
     #[rstest]
-    #[case(0u16)]
-    #[case(1u16)]
-    #[case(16u16)]
-    fn test_shifted_index_new_and_index_u16(#[case] value: u16) {
-        let idx = ShiftedIndex::<u16>::new(value as usize);
-        assert_eq!(idx.index(), value as usize);
-        assert_eq!(idx.0, value + 1);
+    #[case(0u16, false)]
+    #[case(1u16, false)]
+    #[case(16u16, true)]
+    fn test_create_bitfield(#[case] value: u16, #[case] flag: bool) {
+        let idx = BitField::<u16>::new(value as usize, flag);
+        assert_eq!(idx.index().unwrap(), value as usize);
+        assert_eq!(idx.bit_flag().unwrap(), flag);
+
+        let idx = idx.flip_bit_flag();
+        assert_eq!(idx.bit_flag().unwrap(), !flag);
+
+        let idx = idx.set_bit_flag();
+        assert!(idx.bit_flag().unwrap());
+
+        let idx = idx.unset_bit_flag();
+        assert!(!idx.bit_flag().unwrap());
+
+        let idx = idx.set_index(2 * value as usize);
+        assert_eq!(idx.index().unwrap(), 2 * value as usize);
     }
 
     #[test]
-    fn test_shifted_index_try_from_usize_error() {
-        let value = u16::MAX;
-        assert!(ShiftedIndex::<u16>::try_from(value as usize).is_err());
+    fn test_from_usize_overflow_error() {
+        let value = u16::MAX >> 1;
+        assert!(BitField::<u16>::try_from(value as usize).is_err());
+    }
+
+    #[test]
+    fn test_bitfield_none() {
+        let idx = BitField::<u16>::new_none();
+        assert_eq!(idx.index(), None);
+        assert_eq!(idx.bit_flag(), None);
+
+        let idx = idx.set_index(1);
+        assert_eq!(idx.index().unwrap(), 1);
+        assert!(!idx.bit_flag().unwrap());
     }
 
     #[test]
@@ -379,14 +450,14 @@ mod tests {
         let idx = 42;
         let incoming = PortOffset::<u16>::new_incoming(idx);
         assert_eq!(incoming.direction(), Direction::Incoming);
-        assert_eq!(incoming.index(), idx as usize);
+        assert_eq!(incoming.index(), { idx });
         assert_eq!(format!("{:?}", incoming), "Incoming(42)");
 
         // Test Outgoing direction
         let idx2 = 99;
         let outgoing = PortOffset::<u16>::new_outgoing(idx2);
         assert_eq!(outgoing.direction(), Direction::Outgoing);
-        assert_eq!(outgoing.index(), idx2 as usize);
+        assert_eq!(outgoing.index(), { idx2 });
         assert_eq!(format!("{:?}", outgoing), "Outgoing(99)");
     }
 }

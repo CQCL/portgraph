@@ -451,13 +451,13 @@ mod tests {
         let incoming = PortOffset::<u16>::new_incoming(idx);
         assert_eq!(incoming.direction(), Direction::Incoming);
         assert_eq!(incoming.index(), { idx });
-        assert_eq!(format!("{:?}", incoming), "Incoming(42)");
+        assert_eq!(format!("{incoming:?}"), "Incoming(42)");
 
         // Test Outgoing direction
         let idx2 = 99;
         let outgoing = PortOffset::<u16>::new_outgoing(idx2);
         assert_eq!(outgoing.direction(), Direction::Outgoing);
         assert_eq!(outgoing.index(), { idx2 });
-        assert_eq!(format!("{:?}", outgoing), "Outgoing(99)");
+        assert_eq!(format!("{outgoing:?}"), "Outgoing(99)");
     }
 }

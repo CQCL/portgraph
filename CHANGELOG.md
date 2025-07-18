@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.15.0](https://github.com/CQCL/portgraph/compare/v0.14.1...v0.15.0) - 2025-07-18
+
+### New Features
+
+- added DynamicTopoConvexChecker ([#212](https://github.com/CQCL/portgraph/pull/212))
+- [**breaking**] convert `PortOffset` in to struct with private fields ([#218](https://github.com/CQCL/portgraph/pull/218))
+- [**breaking**] Make PortGraph generic on node and port types ([#230](https://github.com/CQCL/portgraph/pull/230))
+
+### Performance
+
+- Avoid double graph traversals in insert_graph ([#206](https://github.com/CQCL/portgraph/pull/206))
+
+### Refactor
+
+- [**breaking**] Add MaybeNodeIndex/PortIndex for performance ([#232](https://github.com/CQCL/portgraph/pull/232))
+
 ## [0.14.1](https://github.com/CQCL/portgraph/compare/v0.14.0...v0.14.1) - 2025-04-28
 
 ### New Features

@@ -16,6 +16,10 @@
 
 - [**breaking**] Add MaybeNodeIndex/PortIndex for performance ([#232](https://github.com/CQCL/portgraph/pull/232))
 
+### New contributors
+
+- @gluonhiggs
+
 ## [0.14.1](https://github.com/CQCL/portgraph/compare/v0.14.0...v0.14.1) - 2025-04-28
 
 ### New Features

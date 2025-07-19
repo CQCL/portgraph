@@ -1,0 +1,160 @@
+---
+source: src/index.rs
+expression: "serde_json::to_string_pretty(&graph).unwrap()"
+---
+{
+  "graph": {
+    "node_meta": [
+      {
+        "n": {
+          "first_port": 0,
+          "incoming": 5,
+          "outgoing": 4,
+          "capacity": 8
+        }
+      },
+      {
+        "n": {
+          "first_port": 8,
+          "incoming": 5,
+          "outgoing": 4,
+          "capacity": 8
+        }
+      },
+      {
+        "n": {
+          "first_port": 16,
+          "incoming": 5,
+          "outgoing": 4,
+          "capacity": 8
+        }
+      },
+      {
+        "n": {
+          "first_port": 24,
+          "incoming": 5,
+          "outgoing": 4,
+          "capacity": 8
+        }
+      },
+      {
+        "n": {
+          "first_port": 32,
+          "incoming": 5,
+          "outgoing": 4,
+          "capacity": 8
+        }
+      }
+    ],
+    "port_link": [
+      null,
+      null,
+      null,
+      null,
+      8,
+      null,
+      null,
+      null,
+      4,
+      null,
+      null,
+      null,
+      16,
+      null,
+      null,
+      null,
+      12,
+      null,
+      null,
+      null,
+      24,
+      null,
+      null,
+      null,
+      20,
+      null,
+      null,
+      null,
+      32,
+      null,
+      null,
+      null,
+      28,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "port_meta": [
+      1,
+      1,
+      1,
+      1,
+      2147483649,
+      2147483649,
+      2147483649,
+      2147483649,
+      2,
+      2,
+      2,
+      2,
+      2147483650,
+      2147483650,
+      2147483650,
+      2147483650,
+      3,
+      3,
+      3,
+      3,
+      2147483651,
+      2147483651,
+      2147483651,
+      2147483651,
+      4,
+      4,
+      4,
+      4,
+      2147483652,
+      2147483652,
+      2147483652,
+      2147483652,
+      5,
+      5,
+      5,
+      5,
+      2147483653,
+      2147483653,
+      2147483653,
+      2147483653
+    ],
+    "node_free": null,
+    "port_free": [],
+    "node_count": 5,
+    "port_count": 40,
+    "link_count": 4,
+    "_marker": null
+  },
+  "multiport": {
+    "order": "bitvec::order::Lsb0",
+    "head": {
+      "width": 64,
+      "index": 0
+    },
+    "bits": 0,
+    "data": []
+  },
+  "copy_node": {
+    "order": "bitvec::order::Lsb0",
+    "head": {
+      "width": 64,
+      "index": 0
+    },
+    "bits": 0,
+    "data": []
+  },
+  "copy_node_count": 0,
+  "subport_count": 0
+}

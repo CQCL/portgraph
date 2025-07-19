@@ -447,7 +447,7 @@ impl PortOrdering {
 }
 
 #[cfg(test)]
-mod test {
+pub(crate) mod test {
     use std::collections::BTreeSet;
 
     use crate::view::Subgraph;
@@ -495,7 +495,7 @@ mod test {
     /// 4 -> 5 -> 6 -> 7
     /// ```
     #[fixture]
-    fn graph() -> MultiPortGraph {
+    pub(crate) fn graph() -> MultiPortGraph {
         let mut graph = MultiPortGraph::new();
         let nodes: Vec<NodeIndex> = (0..8).map(|_| graph.add_node(4, 4)).collect();
         // Horizontal links between from port 0 to port 0
@@ -519,7 +519,7 @@ mod test {
     /// 0 -> 1 -> 2 -> 3 -> ..
     /// ```
     #[fixture]
-    fn line_graph<const N: usize>() -> (MultiPortGraph, [NodeIndex; N]) {
+    pub(crate) fn line_graph<const N: usize>() -> (MultiPortGraph, [NodeIndex; N]) {
         let mut graph = MultiPortGraph::new();
         let nodes: Vec<NodeIndex> = (0..N).map(|_| graph.add_node(4, 4)).collect();
         for (u, v) in (0..N).zip(1..N) {

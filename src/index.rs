@@ -667,3 +667,16 @@ mod tests {
         assert_eq!(format!("{outgoing:?}"), "Outgoing(99)");
     }
 }
+
+#[cfg(test)]
+#[cfg(feature = "serde")]
+mod test_serde {
+    use crate::{boundary::test::line_graph, MultiPortGraph, NodeIndex};
+    use rstest::rstest;
+
+    #[rstest]
+    fn test_serde_node_index(line_graph: (MultiPortGraph, [NodeIndex; 5])) {
+        let (graph, _) = line_graph;
+        insta::assert_snapshot!(serde_json::to_string_pretty(&graph).unwrap(),)
+    }
+}

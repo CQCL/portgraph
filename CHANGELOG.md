@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.15.1](https://github.com/CQCL/portgraph/compare/v0.15.0...v0.15.1) - 2025-07-19
+
+### Bug Fixes
+
+- Serialise/Deserialise for indices is backwards compatible ([#234](https://github.com/CQCL/portgraph/pull/234))
+
 ## [0.15.0](https://github.com/CQCL/portgraph/compare/v0.14.1...v0.15.0) - 2025-07-18
 
 ### New Features

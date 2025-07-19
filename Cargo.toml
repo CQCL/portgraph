@@ -48,6 +48,7 @@ rmp-serde = "1.1.1"
 rstest = "0.25.0"
 itertools = "0.14.0"
 insta = "1.43.0"
+serde_json = "1.0.141"
 
 [[bench]]
 name = "criterion_benches"

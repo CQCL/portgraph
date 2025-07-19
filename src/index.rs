@@ -7,9 +7,6 @@ use thiserror::Error;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
 use crate::Direction;
 
 /// Index of a node within a `PortGraph`.
@@ -20,14 +17,6 @@ use crate::Direction;
 /// Use with one of `usize`, `u64`, `u32`, `u16` and `u8`. Choose the bit width
 /// that suits your needs.
 #[repr(transparent)]
-#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-#[cfg_attr(
-    feature = "serde",
-    serde(bound(
-        serialize = "U: Serialize + Unsigned",
-        deserialize = "U: Deserialize<'de> + Unsigned"
-    ))
-)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "pyo3", derive(IntoPyObject))]
 pub struct NodeIndex<U = u32>(BitField<U>);
@@ -38,14 +27,6 @@ pub struct NodeIndex<U = u32>(BitField<U>);
 /// most `2^(n-1) - 1` . The all null value is reserved for null-pointer optimisation.
 #[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-#[cfg_attr(
-    feature = "serde",
-    serde(bound(
-        serialize = "U: Serialize + Unsigned",
-        deserialize = "U: Deserialize<'de> + Unsigned"
-    ))
-)]
 #[cfg_attr(feature = "pyo3", derive(IntoPyObject))]
 pub struct PortIndex<U = u32>(BitField<U>);
 
@@ -104,6 +85,28 @@ macro_rules! index_impls {
                 unsafe { &mut *(self as *mut BitField<U> as *mut $name<U>) }
             }
         }
+
+        #[cfg(feature = "serde")]
+        impl<U: serde::Serialize + Unsigned> serde::Serialize for $name<U> {
+            #[inline]
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                self.index().serialize(serializer)
+            }
+        }
+
+        #[cfg(feature = "serde")]
+        impl<'de, U: Unsigned + serde::Deserialize<'de>> serde::Deserialize<'de> for $name<U> {
+            #[inline]
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                Ok($name::new(serde::Deserialize::deserialize(deserializer)?))
+            }
+        }
     };
 }
 
@@ -121,14 +124,6 @@ impl<U: Unsigned> Default for PortIndex<U> {
 /// Uses the spare bit flag of the NodeIndex to store the `None` case.
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
-#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-#[cfg_attr(
-    feature = "serde",
-    serde(bound(
-        serialize = "U: Serialize + Unsigned",
-        deserialize = "U: Deserialize<'de> + Unsigned"
-    ))
-)]
 pub struct MaybeNodeIndex<U>(BitField<U>);
 
 /// Equivalent to `Option<PortIndex<U>>` but stored within the size of `U`.
@@ -136,14 +131,6 @@ pub struct MaybeNodeIndex<U>(BitField<U>);
 /// Uses the spare bit flag of the PortIndex to store the `None` case.
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
-#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-#[cfg_attr(
-    feature = "serde",
-    serde(bound(
-        serialize = "U: Serialize + Unsigned",
-        deserialize = "U: Deserialize<'de> + Unsigned"
-    ))
-)]
 pub struct MaybePortIndex<U>(BitField<U>);
 
 macro_rules! maybe_index_impls {
@@ -263,6 +250,32 @@ macro_rules! maybe_index_impls {
                 self.to_option().into_iter()
             }
         }
+
+        #[cfg(feature = "serde")]
+        impl<U: serde::Serialize + Unsigned> serde::Serialize for $maybe_index<U> {
+            #[inline]
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                self.to_option().serialize(serializer)
+            }
+        }
+
+        #[cfg(feature = "serde")]
+        impl<'de, U: Unsigned + serde::Deserialize<'de>> serde::Deserialize<'de>
+            for $maybe_index<U>
+        {
+            #[inline]
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                Ok($maybe_index::new(serde::Deserialize::deserialize(
+                    deserializer,
+                )?))
+            }
+        }
     };
 }
 
@@ -282,14 +295,6 @@ impl MaybeNodeIndex<u32> {
 /// of the offset, see [`PortOffset::direction`].
 #[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
-#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-#[cfg_attr(
-    feature = "serde",
-    serde(bound(
-        serialize = "U: Serialize + Unsigned",
-        deserialize = "U: Deserialize<'de> + Unsigned"
-    ))
-)]
 pub struct PortOffset<U = u16>(BitField<U>);
 
 impl<U: Unsigned> PortOffset<U> {
@@ -353,6 +358,55 @@ impl<U: Unsigned> std::fmt::Debug for PortOffset<U> {
         match self.direction() {
             Direction::Incoming => write!(f, "Incoming({})", self.index()),
             Direction::Outgoing => write!(f, "Outgoing({})", self.index()),
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+mod serde_port_offset_impl {
+    use super::*;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    #[derive(Serialize, Deserialize)]
+    struct PortOffsetSer {
+        index: usize,
+        direction: Direction,
+    }
+
+    impl<U: Unsigned> From<PortOffset<U>> for PortOffsetSer {
+        fn from(port_offset: PortOffset<U>) -> Self {
+            Self {
+                index: port_offset.index(),
+                direction: port_offset.direction(),
+            }
+        }
+    }
+
+    impl<U: Unsigned> From<PortOffsetSer> for PortOffset<U> {
+        fn from(port_offset: PortOffsetSer) -> Self {
+            Self::new(port_offset.direction, port_offset.index)
+        }
+    }
+
+    impl<U: Serialize + Unsigned> Serialize for PortOffset<U> {
+        #[inline]
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            let port_offset: PortOffsetSer = (*self).into();
+            port_offset.serialize(serializer)
+        }
+    }
+
+    impl<'de, U: Unsigned + Deserialize<'de>> Deserialize<'de> for PortOffset<U> {
+        #[inline]
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            let port_offset: PortOffsetSer = Deserialize::deserialize(deserializer)?;
+            Ok(port_offset.into())
         }
     }
 }
@@ -504,21 +558,6 @@ impl<U: Unsigned> BitField<U> {
     }
 
     #[inline(always)]
-    fn unpack(self) -> Option<(usize, bool)> {
-        let ind = self.index()?;
-        let flag = self.bit_flag()?;
-        Some((ind, flag))
-    }
-
-    #[inline(always)]
-    fn pack(data: Option<(usize, bool)>) -> Self {
-        match data {
-            Some((ind, flag)) => Self::new(ind, flag),
-            None => Self::new_none(),
-        }
-    }
-
-    #[inline(always)]
     fn msb_mask() -> U {
         U::max_value() - (U::max_value() >> 1)
     }
@@ -527,28 +566,6 @@ impl<U: Unsigned> BitField<U> {
     #[inline(always)]
     fn is_none(self) -> bool {
         self == Self::new_none()
-    }
-}
-
-#[cfg(feature = "serde")]
-impl<U: Serialize + Unsigned> Serialize for BitField<U> {
-    #[inline]
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        self.unpack().serialize(serializer)
-    }
-}
-
-#[cfg(feature = "serde")]
-impl<'de, U: Unsigned + Deserialize<'de>> Deserialize<'de> for BitField<U> {
-    #[inline]
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        Deserialize::deserialize(deserializer).map(BitField::pack)
     }
 }
 
@@ -648,5 +665,18 @@ mod tests {
         assert_eq!(outgoing.direction(), Direction::Outgoing);
         assert_eq!(outgoing.index(), { idx2 });
         assert_eq!(format!("{outgoing:?}"), "Outgoing(99)");
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "serde")]
+mod test_serde {
+    use crate::{boundary::test::line_graph, MultiPortGraph, NodeIndex};
+    use rstest::rstest;
+
+    #[rstest]
+    fn test_serde_node_index(line_graph: (MultiPortGraph, [NodeIndex; 5])) {
+        let (graph, _) = line_graph;
+        insta::assert_snapshot!(serde_json::to_string_pretty(&graph).unwrap(),)
     }
 }

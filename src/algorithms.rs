@@ -7,7 +7,7 @@ mod lca;
 mod post_order;
 mod toposort;
 
-pub use convex::{ConvexChecker, TopoConvexChecker};
+pub use convex::{ConvexChecker, LineConvexChecker, TopoConvexChecker};
 pub use dominators::{dominators, dominators_filtered, DominatorTree};
 pub use dynamic::DynamicTopoConvexChecker;
 pub use lca::{lca, LCA};

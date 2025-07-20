@@ -279,7 +279,8 @@ where
                 continue;
             }
 
-            if let Some(link) = self.graph.port_link(port) {
+            let links = self.graph.port_links(port).collect::<Vec<_>>();
+            for (_, link) in links {
                 let target = self.graph.port_node(link).unwrap();
 
                 if self.becomes_ready(target, link) {
@@ -326,9 +327,11 @@ where
 }
 #[cfg(test)]
 mod test {
+    use std::collections::BTreeSet;
+
     use super::*;
 
-    use crate::{Direction, LinkMut, PortGraph, PortMut, PortView};
+    use crate::{Direction, LinkMut, MultiPortGraph, PortGraph, PortMut, PortView};
 
     #[test]
     fn small_toposort() {
@@ -361,5 +364,21 @@ mod test {
             |_, p| Some(p) != graph.output(node_b, 0),
         );
         assert_eq!(topo_filtered.collect::<Vec<_>>(), [node_a, node_b]);
+    }
+
+    #[test]
+    fn test_toposort_multi_port() {
+        let mut graph: MultiPortGraph = MultiPortGraph::new();
+        let node_a = graph.add_node(0, 1);
+        let node_b = graph.add_node(1, 0);
+        let node_c = graph.add_node(1, 0);
+        graph.link_nodes(node_a, 0, node_b, 0).unwrap();
+        graph.link_nodes(node_a, 0, node_c, 0).unwrap();
+
+        let topo: TopoSort<_> = toposort(&graph, [node_a], Direction::Outgoing);
+        assert_eq!(
+            topo.collect::<BTreeSet<_>>(),
+            BTreeSet::from_iter([node_a, node_b, node_c])
+        );
     }
 }

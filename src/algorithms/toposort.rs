@@ -1,5 +1,6 @@
 use crate::{Direction, LinkView, NodeIndex, PortIndex, SecondaryMap};
 use bitvec::prelude::BitVec;
+use smallvec::SmallVec;
 use std::{collections::VecDeque, fmt::Debug, iter::FusedIterator};
 
 /// Returns an iterator over a [`LinkView`] in topological order.
@@ -279,14 +280,18 @@ where
                 continue;
             }
 
-            let links = self.graph.port_links(port).collect::<Vec<_>>();
-            for (_, link) in links {
-                let target = self.graph.port_node(link).unwrap();
+            let linked_ports: SmallVec<[PortIndex; 2]> = self
+                .graph
+                .port_links(port)
+                .map(|(_, next_port)| next_port.into())
+                .collect();
+            for port in linked_ports {
+                let target = self.graph.port_node(port).unwrap();
 
-                if self.becomes_ready(target, link) {
+                if self.becomes_ready(target, port) {
                     self.candidate_nodes.push_back(target);
                 }
-                self.visited_ports.set(link.into(), true);
+                self.visited_ports.set(port, true);
             }
         }
 

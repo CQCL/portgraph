@@ -22,7 +22,9 @@ pub use topo_convex_checker::TopoConvexChecker;
 
 mod line_convex_checker;
 #[doc(inline)]
-pub use line_convex_checker::LineConvexChecker;
+pub use line_convex_checker::{
+    LineConvexChecker, LineIndex, LineInterval, LineIntervals, Position,
+};
 
 use crate::{NodeIndex, PortIndex};
 

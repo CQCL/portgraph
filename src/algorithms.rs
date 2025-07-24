@@ -1,6 +1,6 @@
 //! Algorithm implementations for portgraphs.
 
-mod convex;
+pub mod convex;
 mod dominators;
 mod dynamic;
 mod lca;

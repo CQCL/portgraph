@@ -10,10 +10,11 @@
 //! - [`LineConvexChecker`] uses a pre-computed line partition, i.e. a partition
 //!   of the graph into edge disjoint paths. Convexity checks can then be performed
 //!   based on the indices of the nodes in the paths. This will be faster than
-//!   [`TopoConvexChecker`] for graphs that have a lot of structure and decomposes
-//!   into a small number of paths. A good heuristic is to compute the difference
-//!   between the number of incoming vs outgoing ports at each node. If this number
-//!   is small on average, then [`LineConvexChecker`] is likely to be faster.
+//!   [`TopoConvexChecker`] for convexity checking of small subgraphs (say, up to
+//!   ~100 nodes), in graphs for which most nodes have few incoming and outgoing
+//!   ports. Note that initializing the [`LineConvexChecker`] is up to 4x slower
+//!   than initializing the [`TopoConvexChecker`], so must be amortized over
+//!   many convexity checks.
 
 mod topo_convex_checker;
 #[doc(inline)]

@@ -20,7 +20,7 @@ const MAX_LINES: usize = 8;
 ///
 /// This is the maximum expected number of lines that any node in the graph
 /// will belong to.
-const MAX_LINES_ON_NODE: usize = 2;
+const MAX_LINES_ON_NODE: usize = 4;
 
 /// Convexity checking using a pre-computed line partition of the graph.
 ///
@@ -42,11 +42,14 @@ pub struct LineConvexChecker<G> {
     /// contiguous, however they will always be strictly increasing according
     /// to the direction of the edges on the lines.
     lines: Vec<Vec<NodeIndex>>,
-    /// Memory allocated once and reused in the `get_line_intervals` method.
+    /// Memory allocated once and reused in the `get_intervals` method.
     #[allow(clippy::type_complexity)]
     get_intervals_scratch_space: RefCell<SmallVec<[(Option<LineIndex>, Vec<Position>); MAX_LINES]>>,
 }
 
+/// Position of a node on all lines it belongs to.
+///
+/// The position is the same on all lines, hence a single integer is enough.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
 struct LinePositions {
     /// The index of the lines in the partition.
@@ -186,7 +189,7 @@ where
     /// line as the inputs of the subgraph, the subgraph is convex.
     #[inline(always)]
     pub fn is_node_convex(&self, nodes: impl IntoIterator<Item = NodeIndex>) -> bool {
-        let Some(intervals) = self.get_line_intervals(nodes) else {
+        let Some(intervals) = self.get_intervals(nodes) else {
             return false;
         };
 
@@ -298,7 +301,7 @@ where
     /// Get the intervals of positions on each line that are occupied by the nodes.
     ///
     /// Return `None` if the nodes do not form contiguous intervals on lines
-    pub fn get_line_intervals(
+    pub fn get_intervals(
         &self,
         nodes: impl IntoIterator<Item = NodeIndex>,
     ) -> Option<LineIntervals> {
@@ -335,6 +338,20 @@ where
         }
 
         Some(intervals)
+    }
+
+    /// Shrink the memory allocated to scratch space for the
+    /// [`LineConvexChecker::get_intervals`] method to the amount used during
+    /// the last call to the method.
+    pub fn shrink_to_fit(&mut self) {
+        let mut line_to_pos = self.get_intervals_scratch_space.borrow_mut();
+        line_to_pos.retain(|(l, vec)| {
+            if l.is_none() || vec.is_empty() {
+                return false;
+            }
+            vec.shrink_to_fit();
+            true
+        });
     }
 
     /// Get all positions starting from `start_pos` on the given line.
@@ -688,7 +705,7 @@ mod tests {
         let checker = LineConvexChecker::new(graph);
 
         let subgraph = (1..=4).map(|i| nodes[i]);
-        let intervals = checker.get_line_intervals(subgraph.clone()).unwrap();
+        let intervals = checker.get_intervals(subgraph.clone()).unwrap();
 
         let mut extended_intervals = LineIntervals::default();
         for node in subgraph {
@@ -702,7 +719,7 @@ mod tests {
         let (g, [i1, i2, i3, n1, n2, o1, o2]) = super::super::tests::graph();
         let checker = LineConvexChecker::new(g);
 
-        dbg!(checker.get_line_intervals([i1, n2, o1, n1]));
+        dbg!(checker.get_intervals([i1, n2, o1, n1]));
 
         assert!(checker.is_node_convex([i1, i2, i3]));
         assert!(checker.is_node_convex([i1, n2]));

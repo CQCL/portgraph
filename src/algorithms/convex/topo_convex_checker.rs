@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use crate::algorithms::{toposort, TopoSort};
 use crate::{Direction, LinkView, NodeIndex, PortIndex, SecondaryMap, UnmanagedDenseMap};
 
-use super::ConvexChecker;
+use super::{ConvexChecker, CreateConvexChecker};
 
 /// Convexity checking using a pre-computed topological node order.
 pub struct TopoConvexChecker<G> {
@@ -14,16 +14,13 @@ pub struct TopoConvexChecker<G> {
     topsort_ind: UnmanagedDenseMap<NodeIndex, usize>,
 }
 
-impl<G> TopoConvexChecker<G>
-where
-    G: LinkView + Clone,
-{
+impl<G: LinkView> TopoConvexChecker<G> {
     /// Create a new ConvexChecker.
     pub fn new(graph: G) -> Self {
         let inputs = graph
             .nodes_iter()
             .filter(|&n| graph.input_neighbours(n).count() == 0);
-        let topsort: TopoSort<_> = toposort(graph.clone(), inputs, Direction::Outgoing);
+        let topsort: TopoSort<_> = toposort(&graph, inputs, Direction::Outgoing);
         let topsort_nodes: Vec<_> = topsort.collect();
         let mut topsort_ind = UnmanagedDenseMap::with_capacity(graph.node_count());
         for (i, &n) in topsort_nodes.iter().enumerate() {
@@ -37,7 +34,11 @@ where
     }
 
     /// The graph on which convexity queries can be made.
-    pub fn graph(&self) -> G {
+    #[deprecated(note = "will return a reference to the graph in the future")]
+    pub fn graph(&self) -> G
+    where
+        G: Clone,
+    {
         self.graph.clone()
     }
 
@@ -119,10 +120,7 @@ where
     }
 }
 
-impl<G> ConvexChecker for TopoConvexChecker<G>
-where
-    G: LinkView + Clone,
-{
+impl<G: LinkView> ConvexChecker for TopoConvexChecker<G> {
     fn is_convex(
         &self,
         nodes: impl IntoIterator<Item = NodeIndex>,
@@ -137,5 +135,15 @@ where
             return false;
         }
         self.is_node_convex(nodes)
+    }
+}
+
+impl<G: LinkView> CreateConvexChecker<G> for TopoConvexChecker<G> {
+    fn new_convex_checker(graph: G) -> Self {
+        Self::new(graph)
+    }
+
+    fn graph(&self) -> &G {
+        &self.graph
     }
 }

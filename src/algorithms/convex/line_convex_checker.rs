@@ -8,7 +8,7 @@ use smallvec::SmallVec;
 use crate::algorithms::{toposort, TopoSort};
 use crate::{Direction, LinkView, NodeIndex, PortIndex, SecondaryMap, UnmanagedDenseMap};
 
-use super::ConvexChecker;
+use super::{ConvexChecker, CreateConvexChecker};
 
 /// The number of lines that we preallocate space for on the stack.
 ///
@@ -129,10 +129,7 @@ pub struct LineInterval {
 
 type LineIntervalWithCount = (LineInterval, usize);
 
-impl<G> LineConvexChecker<G>
-where
-    G: LinkView + Clone,
-{
+impl<G: LinkView> LineConvexChecker<G> {
     /// Create a new [`LineConvexChecker`].
     ///
     /// Will traverse all nodes in the graph in topological order, and thus runs
@@ -141,7 +138,7 @@ where
         let inputs = graph
             .nodes_iter()
             .filter(|&n| graph.input_neighbours(n).count() == 0);
-        let topsort: TopoSort<_> = toposort(graph.clone(), inputs, Direction::Outgoing);
+        let topsort: TopoSort<_> = toposort(&graph, inputs, Direction::Outgoing);
 
         let mut extend_frontier = extend_line_ends_frontier(&graph);
         let mut node_to_pos =
@@ -449,7 +446,7 @@ fn small_map_add(
 /// required.
 fn extend_line_ends_frontier<G>(graph: &G) -> impl FnMut(NodeIndex) -> LinePositions + '_
 where
-    G: LinkView + Clone,
+    G: LinkView,
 {
     // The current ends of all lines. The keys are always outgoing ports.
     let mut frontier: BTreeMap<PortIndex, LinePositions> = BTreeMap::new();
@@ -552,10 +549,7 @@ where
     }
 }
 
-impl<G> ConvexChecker for LineConvexChecker<G>
-where
-    G: LinkView + Clone,
-{
+impl<G: LinkView> ConvexChecker for LineConvexChecker<G> {
     fn is_convex(
         &self,
         nodes: impl IntoIterator<Item = NodeIndex>,
@@ -570,6 +564,16 @@ where
             return false;
         }
         self.is_node_convex(nodes)
+    }
+}
+
+impl<G: LinkView> CreateConvexChecker<G> for LineConvexChecker<G> {
+    fn new_convex_checker(graph: G) -> Self {
+        Self::new(graph)
+    }
+
+    fn graph(&self) -> &G {
+        &self.graph
     }
 }
 

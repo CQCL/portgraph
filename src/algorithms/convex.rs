@@ -58,6 +58,15 @@ pub trait ConvexChecker {
     ) -> bool;
 }
 
+/// Trait to create a [`ConvexChecker`] for a given graph.
+pub trait CreateConvexChecker<G>: ConvexChecker {
+    /// Create a [`ConvexChecker`] for the given graph.
+    fn new_convex_checker(graph: G) -> Self;
+
+    /// The graph on which the [`ConvexChecker`] is defined.
+    fn graph(&self) -> &G;
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{

@@ -43,8 +43,7 @@ pub struct LineConvexChecker<G> {
     /// to the direction of the edges on the lines.
     lines: Vec<Vec<NodeIndex>>,
     /// Memory allocated once and reused in the `get_intervals` method.
-    #[allow(clippy::type_complexity)]
-    get_intervals_scratch_space: RefCell<SmallVec<[(Option<LineIndex>, Vec<Position>); MAX_LINES]>>,
+    get_intervals_scratch_space: RefCell<SmallVec<[(LineIndex, LineIntervalWithCount); MAX_LINES]>>,
 }
 
 /// Position of a node on all lines it belongs to.
@@ -127,6 +126,8 @@ pub struct LineInterval {
     /// The maximum position on the line.
     pub max: Position,
 }
+
+type LineIntervalWithCount = (LineInterval, usize);
 
 impl<G> LineConvexChecker<G>
 where
@@ -306,35 +307,31 @@ where
         nodes: impl IntoIterator<Item = NodeIndex>,
     ) -> Option<LineIntervals> {
         let nodes = nodes.into_iter();
-        // An estimate of the number of nodes, used to pre-allocate Vecs.
-        let num_nodes = nodes.size_hint().0;
 
         // A map from line index to the positions of the nodes on that line.
         // The map is stored as a SmallVec given that the number of lines is
         // typically less than 8.
         let mut line_to_pos = self.get_intervals_scratch_space.borrow_mut();
-        small_map_clear(&mut line_to_pos);
+        line_to_pos.clear();
 
         for node in nodes {
             let pos = self.get_position(node);
             for &l in self.get_lines(node) {
-                small_map_push(&mut line_to_pos, l, pos, num_nodes);
+                small_map_add(&mut line_to_pos, l, pos);
             }
         }
 
         let mut intervals = LineIntervals::default();
 
-        for (l, positions) in small_map_iter_mut(&mut line_to_pos) {
-            positions.sort_unstable();
-            let min = positions[0];
-            let max = positions[positions.len() - 1];
-            // Make sure that the positions are contiguous (i.e. match the
-            // positions we'd expect on that line).
-            let pos_iter = self.line_positions_from(min, l);
-            if !positions.iter().zip(pos_iter).all(|(&p1, p2)| p1 == p2) {
+        for &(l, (interval, count)) in line_to_pos.iter() {
+            // Make sure all positions are in the interval are present.
+            let pos_iter = self
+                .line_positions_from(interval.min, l)
+                .take_while(|&p| p <= interval.max);
+            if pos_iter.count() != count {
                 return None;
             }
-            intervals.0.push((l, LineInterval { min, max }));
+            intervals.0.push((l, interval));
         }
 
         Some(intervals)
@@ -345,13 +342,7 @@ where
     /// the last call to the method.
     pub fn shrink_to_fit(&mut self) {
         let mut line_to_pos = self.get_intervals_scratch_space.borrow_mut();
-        line_to_pos.retain(|(l, vec)| {
-            if l.is_none() || vec.is_empty() {
-                return false;
-            }
-            vec.shrink_to_fit();
-            true
-        });
+        line_to_pos.shrink_to_fit();
     }
 
     /// Get all positions starting from `start_pos` on the given line.
@@ -416,47 +407,38 @@ where
     }
 }
 
+/// Add a position to the interval on the given line.
 #[inline(always)]
-fn small_map_iter_mut(
-    small_map: &mut SmallVec<[(Option<LineIndex>, Vec<Position>); 8]>,
-) -> impl Iterator<Item = (LineIndex, &mut Vec<Position>)> + '_ {
-    small_map.iter_mut().map_while(|(l, p)| Some(((*l)?, p)))
-}
-
-#[inline(always)]
-fn small_map_push(
-    small_map: &mut SmallVec<[(Option<LineIndex>, Vec<Position>); 8]>,
+fn small_map_add(
+    small_map: &mut SmallVec<[(LineIndex, LineIntervalWithCount); 8]>,
     key: LineIndex,
     value: Position,
-    new_vec_capacity: usize,
 ) {
-    // Find where to push `value`. In order of preference:
-    // - at the existing entry for `key` in the map, or
-    // - at the first pre-allocated but empty entry, or
-    // - at a freshly allocated entry in the map.
-    let ind = if let Some(i) = small_map
-        .iter()
-        .position(|&(ll, _)| ll == Some(key) || ll.is_none())
-    {
-        if small_map[i].0.is_none() {
-            // Reuse an existing empty entry.
-            small_map[i].0 = Some(key);
-        }
-        i
-    } else {
-        // Allocate a new entry.
-        small_map.push((Some(key), Vec::with_capacity(new_vec_capacity)));
-        small_map.len() - 1
+    // An interval [value, value] on the given line.
+    let new_interval = |line: LineIndex, value: Position| {
+        let min = value;
+        let max = value;
+        (line, (LineInterval { min, max }, 0))
     };
-    small_map[ind].1.push(value);
-}
 
-#[inline(always)]
-fn small_map_clear(small_map: &mut SmallVec<[(Option<LineIndex>, Vec<Position>); 8]>) {
-    for (l, p) in small_map {
-        *l = None;
-        p.clear();
+    // Get the index of the entry for `key` in the map (or create a new one).
+    let ind = small_map
+        .iter()
+        .position(|&(l, _)| l == key)
+        .unwrap_or_else(|| {
+            small_map.push(new_interval(key, value));
+            small_map.len() - 1
+        });
+
+    // Update the entry.
+    let (LineInterval { min, max }, count) = &mut small_map[ind].1;
+    if *min > value {
+        *min = value;
     }
+    if *max < value {
+        *max = value;
+    }
+    *count += 1;
 }
 
 /// Construct a closure that maintains a frontier of line ends as the lines

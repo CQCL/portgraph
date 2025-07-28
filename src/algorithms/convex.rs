@@ -44,9 +44,9 @@ pub trait ConvexChecker {
     ///
     /// - `nodes`: The nodes of the subgraph,
     /// - `inputs`: The input ports of the subgraph. These must
-    ///   be [`Direction::Incoming`] ports of a node in `nodes`,
+    ///   be [`crate::Direction::Incoming`] ports of a node in `nodes`,
     /// - `outputs`: The output ports of the subgraph. These
-    ///   must be [`Direction::Outgoing`] ports of a node in `nodes`.
+    ///   must be [`crate::Direction::Outgoing`] ports of a node in `nodes`.
     ///
     /// Any edge between two nodes of the subgraph that does not have an explicit
     /// input or output port is considered within the subgraph.

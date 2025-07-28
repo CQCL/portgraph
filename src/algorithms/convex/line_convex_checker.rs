@@ -191,14 +191,14 @@ impl<G: LinkView> LineConvexChecker<G> {
             return false;
         };
 
-        self.is_convex_by_intervals(intervals)
+        self.is_convex_by_intervals(&intervals)
     }
 
     /// Check whether the subgraph given by `intervals` is convex.
     ///
     /// In other words, check if there is a path in `self.graph()` from an end
     /// of one interval to the start of another.
-    pub fn is_convex_by_intervals(&self, intervals: LineIntervals) -> bool {
+    pub fn is_convex_by_intervals(&self, intervals: &LineIntervals) -> bool {
         let max_start_pos = intervals
             .values()
             .map(|LineInterval { min, .. }| min)

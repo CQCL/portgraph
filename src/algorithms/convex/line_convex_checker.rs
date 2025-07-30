@@ -2,10 +2,10 @@ use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use itertools::Itertools;
 use smallvec::SmallVec;
 
 use crate::algorithms::{toposort, TopoSort};
+use crate::boundary::Boundary;
 use crate::{Direction, LinkView, NodeIndex, PortIndex, SecondaryMap, UnmanagedDenseMap};
 
 use super::{ConvexChecker, CreateConvexChecker};
@@ -187,7 +187,7 @@ impl<G: LinkView> LineConvexChecker<G> {
     /// line as the inputs of the subgraph, the subgraph is convex.
     #[inline(always)]
     pub fn is_node_convex(&self, nodes: impl IntoIterator<Item = NodeIndex>) -> bool {
-        let Some(intervals) = self.get_intervals(nodes) else {
+        let Some(intervals) = self.get_intervals_from_nodes(nodes) else {
             return false;
         };
 
@@ -299,7 +299,7 @@ impl<G: LinkView> LineConvexChecker<G> {
     /// Get the intervals of positions on each line that are occupied by the nodes.
     ///
     /// Return `None` if the nodes do not form contiguous intervals on lines
-    pub fn get_intervals(
+    pub fn get_intervals_from_nodes(
         &self,
         nodes: impl IntoIterator<Item = NodeIndex>,
     ) -> Option<LineIntervals> {
@@ -321,11 +321,14 @@ impl<G: LinkView> LineConvexChecker<G> {
         let mut intervals = LineIntervals::default();
 
         for &(l, (interval, count)) in line_to_pos.iter() {
-            // Make sure all positions are in the interval are present.
-            let pos_iter = self
-                .line_positions_from(interval.min, l)
-                .take_while(|&p| p <= interval.max);
-            if pos_iter.count() != count {
+            // Make sure there are `count` nodes on the line between `min` and `max`.
+            // If not, then the nodes do not form a contiguous interval.
+            let min_index = self.find_index(l, interval.min).expect("min on line");
+            let max_index = min_index + count - 1;
+            let &max_node = self.lines[l.as_usize()]
+                .get(max_index)
+                .expect("count <= number of nodes in interval");
+            if self.get_position(max_node) != interval.max {
                 return None;
             }
             intervals.0.push((l, interval));
@@ -334,9 +337,32 @@ impl<G: LinkView> LineConvexChecker<G> {
         Some(intervals)
     }
 
+    /// Get the intervals of positions on each line that correspond to the
+    /// subgraph with the given boundary ports.
+    ///
+    /// Return `None` if the nodes do not form contiguous intervals on lines
+    #[inline(always)]
+    pub fn get_intervals_from_boundary_ports(
+        &self,
+        ports: impl IntoIterator<Item = PortIndex>,
+    ) -> Option<LineIntervals> {
+        let boundary = Boundary::from_ports(&self.graph, ports);
+        self.get_intervals_from_boundary(&boundary)
+    }
+
+    /// Get the intervals of positions on each line that correspond to the
+    /// subgraph with the given boundary.
+    ///
+    /// Return `None` if the nodes do not form contiguous intervals on lines
+    #[inline(always)]
+    pub fn get_intervals_from_boundary(&self, boundary: &Boundary) -> Option<LineIntervals> {
+        let nodes = boundary.internal_nodes(&self.graph);
+        self.get_intervals_from_nodes(nodes)
+    }
+
     /// Shrink the memory allocated to scratch space for the
-    /// [`LineConvexChecker::get_intervals`] method to the amount used during
-    /// the last call to the method.
+    /// [`LineConvexChecker::get_intervals_from_nodes`] method to the amount
+    /// used during the last call to the method.
     pub fn shrink_to_fit(&mut self) {
         let mut line_to_pos = self.get_intervals_scratch_space.borrow_mut();
         line_to_pos.shrink_to_fit();
@@ -441,17 +467,14 @@ fn small_map_add(
 /// Construct a closure that maintains a frontier of line ends as the lines
 /// are getting constructed.
 ///
-/// As nodes of the graph are considered in topological order, calls to the
-/// closure will extend the lines to the new node and create new lines as
-/// required.
+/// The closure must be called on the nodes of graph in topological order. This
+/// will extend the lines to the new node and create new lines as required.
 fn extend_line_ends_frontier<G>(graph: &G) -> impl FnMut(NodeIndex) -> LinePositions + '_
 where
     G: LinkView,
 {
     // The current ends of all lines. The keys are always outgoing ports.
     let mut frontier: BTreeMap<PortIndex, LinePositions> = BTreeMap::new();
-    // Total number of lines. Used to create new line indices.
-    let mut n_lines = 0;
 
     /// Get a line and position at the given port on the frontier.
     fn pop_frontier(
@@ -479,57 +502,47 @@ where
         entry.position = position;
     }
 
-    move |node: NodeIndex| {
-        // 1. Get lines to extend from the current frontier to node
-        let incoming_ports = graph.inputs(node);
-        // Map from incoming ports in `node` to lines that it will belong to
-        // (once extended).
-        let mut prev_lines: BTreeMap<_, _> = incoming_ports
-            .map(|in_port| {
-                let in_links = graph.port_links(in_port);
-                let lines = in_links
-                    .map(|(_, out_port)| {
-                        pop_frontier(&mut frontier, out_port.into()).expect("unknown frontier port")
-                    })
-                    .collect_vec();
-                (in_port, lines)
-            })
-            .collect();
+    // Track total number of lines throughout the lifetime of the closure to
+    // create new line indices.
+    let mut n_lines = 0;
+    let mut create_new_line = move || {
+        let new_line = LineIndex(n_lines);
+        n_lines += 1;
+        new_line
+    };
 
-        // 2. Compute
+    move |node: NodeIndex| {
+        // The outgoing ports linked to `node`; they are all in the frontier
+        let prev_outgoing_ports = graph.inputs(node).flat_map(|ip| graph.port_links(ip));
+
+        // 1. Compute
         //     - new position of `node` (max of all previous positions + 1, or zero)
         //     - lines that `node` will belong to (once extended). Note that we
         //       may need to add new lines to accomodate all outgoing links, see below.
-        let position = prev_lines
-            .values()
-            .flat_map(|vec| vec.iter().map(|&(_, pos)| pos))
-            .max()
-            .map(|p| p.next())
-            .unwrap_or_default();
-        let mut lines: BTreeSet<_> = prev_lines
-            .values()
-            .flat_map(|vec| vec.iter().map(|&(line_index, _)| line_index))
-            .collect();
+        let mut max_pos: Option<Position> = None;
+        let mut lines = SmallVec::with_capacity(graph.num_inputs(node));
+        for (_, out_port) in prev_outgoing_ports {
+            let (line_index, position) =
+                pop_frontier(&mut frontier, out_port.into()).expect("unknown frontier port");
+            lines.push(line_index);
+            max_pos = max_pos.map(|p| p.max(position)).or(Some(position));
+        }
+        let position = max_pos.map(|p| p.next()).unwrap_or_default();
 
-        // 3. Reuse lines on incoming ports where possible and add new lines if
-        // required, so that every outgoing port has as many lines as it is
-        // connected to ports.
+        // 2. Reuse the same set of lines from the incoming ports for the outgoing
+        // ports of `node`. If more lines are needed, create new ones.
+        let n_in_lines = lines.len();
+        let mut free_line = 0;
         for out_port in graph.outputs(node) {
             for _ in 0..graph.port_links(out_port).count() {
-                let offset = graph.port_offset(out_port).unwrap().index();
-                let in_port = graph.input(node, offset);
-                if let Some((line_index, _)) = in_port
-                    .and_then(|in_port| prev_lines.get_mut(&in_port))
-                    .and_then(|v| v.pop())
-                {
-                    // We can extend an existing line.
+                if free_line < n_in_lines {
+                    let line_index = lines[free_line];
+                    free_line += 1;
                     push_frontier(&mut frontier, out_port, line_index, position);
                 } else {
-                    // We need to start a new line.
-                    let new_line = LineIndex(n_lines);
+                    let new_line = create_new_line();
                     push_frontier(&mut frontier, out_port, new_line, position);
-                    lines.insert(new_line);
-                    n_lines += 1;
+                    lines.push(new_line);
                 }
             }
         }
@@ -537,13 +550,11 @@ where
         // Isolated nodes will not be assigned to any lines: add a new line in
         // this case.
         if lines.is_empty() {
-            let new_line = LineIndex(n_lines);
-            lines.insert(new_line);
-            n_lines += 1;
+            lines.push(create_new_line());
         }
 
         LinePositions {
-            line_indices: lines.into_iter().collect(),
+            line_indices: lines,
             position,
         }
     }
@@ -579,7 +590,7 @@ impl<G: LinkView> CreateConvexChecker<G> for LineConvexChecker<G> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{LinkMut, MultiPortGraph, PortMut};
+    use crate::{boundary::HasBoundary, view::Subgraph, LinkMut, MultiPortGraph, PortMut};
 
     use super::*;
 
@@ -691,7 +702,7 @@ mod tests {
         let checker = LineConvexChecker::new(graph);
 
         let subgraph = (1..=4).map(|i| nodes[i]);
-        let intervals = checker.get_intervals(subgraph.clone()).unwrap();
+        let intervals = checker.get_intervals_from_nodes(subgraph.clone()).unwrap();
 
         let mut extended_intervals = LineIntervals::default();
         for node in subgraph {
@@ -701,19 +712,33 @@ mod tests {
     }
 
     #[test]
-    fn test_graph_line_partition() {
+    fn test_get_intervals_convex() {
         let (g, [i1, i2, i3, n1, n2, o1, o2]) = super::super::tests::graph();
-        let checker = LineConvexChecker::new(g);
+        let checker = LineConvexChecker::new(g.clone());
 
-        dbg!(checker.get_intervals([i1, n2, o1, n1]));
+        let convex_node_sets: &[&[NodeIndex]] = &[
+            &[i1, i2, i3],
+            &[i1, n2],
+            &[i1, n2, o1, n1],
+            &[i1, n2, o2, n1],
+            &[i1, i3, n2],
+        ];
 
-        assert!(checker.is_node_convex([i1, i2, i3]));
-        assert!(checker.is_node_convex([i1, n2]));
-        assert!(!checker.is_node_convex([i1, n2, o2]));
-        assert!(!checker.is_node_convex([i1, n2, o1]));
-        assert!(checker.is_node_convex([i1, n2, o1, n1]));
-        assert!(checker.is_node_convex([i1, n2, o2, n1]));
-        assert!(checker.is_node_convex([i1, i3, n2]));
-        assert!(!checker.is_node_convex([i1, i3, o2]));
+        for nodes in convex_node_sets {
+            dbg!(&nodes);
+            let mut intervals = checker
+                .get_intervals_from_nodes(nodes.iter().copied())
+                .unwrap();
+
+            let subgraph = Subgraph::with_nodes(&g, nodes.iter().copied());
+            let boundary = subgraph.port_boundary();
+
+            let mut intervals2 = checker.get_intervals_from_boundary(&boundary).unwrap();
+
+            intervals.0.sort_by_key(|&(l, _)| l);
+            intervals2.0.sort_by_key(|&(l, _)| l);
+
+            assert_eq!(intervals, intervals2);
+        }
     }
 }

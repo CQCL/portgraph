@@ -1,6 +1,8 @@
 //! Benchmark graph generators.
 
-use portgraph::{Hierarchy, LinkMut, NodeIndex, PortGraph, PortMut, PortView, Weights};
+use std::collections::{BTreeSet, VecDeque};
+
+use portgraph::{Hierarchy, LinkMut, LinkView, NodeIndex, PortGraph, PortMut, PortView, Weights};
 
 /// Create line graph, connected with two parallel edges at each step.
 ///
@@ -53,6 +55,49 @@ pub fn make_two_track_dag(layers: usize) -> PortGraph {
     graph
 }
 
+/// Create an acyclic graph with as much depth (the number of layers) as width
+/// (the number of parallel tracks).
+///
+/// Will look as follows
+///
+/// ```text
+///    -╭───╮---------
+///    -╰───╯---╭───╮-
+/// n  -╭───╮---╰───╯-
+///    -╰───╯---╭───╮-
+/// t  -╭───╮---╰───╯-
+/// i  -╰───╯---╭───╮-
+/// m  -╭───╮---╰───╯-    etc, n times
+/// e  -╰───╯---╭───╮-
+/// s  -╭───╮---╰───╯-
+///    -╰───╯---╭───╮-
+///    -╭───╮---╰───╯-
+///    -╰───╯---------
+/// ``````
+pub fn make_square_circuit(n: usize) -> PortGraph {
+    assert!(n > 1, "n must be at least 2");
+
+    let mut graph = PortGraph::with_capacity(n * n / 2, n * n * 2);
+
+    let mut curr_ports: Vec<Option<(NodeIndex, usize)>> = vec![None; n];
+
+    for is_odd_layer in (0..n).map(|k| k % 2) {
+        for i in (is_odd_layer..(n - 1)).step_by(2) {
+            let node = graph.add_node(2, 2);
+            if let Some((node_i, offset_i)) = curr_ports[i] {
+                graph.link_nodes(node_i, offset_i, node, 0).unwrap();
+            }
+            if let Some((node_j, offset_j)) = curr_ports[i + 1] {
+                graph.link_nodes(node_j, offset_j, node, 1).unwrap();
+            }
+            curr_ports[i] = Some((node, 0));
+            curr_ports[i + 1] = Some((node, 1));
+        }
+    }
+
+    graph
+}
+
 /// Creates arbitrary weights for the nodes and ports of a graph.
 pub fn make_weights(graph: &PortGraph) -> Weights<usize, isize> {
     let mut weights = Weights::with_capacity(graph.node_count(), graph.port_count());
@@ -78,4 +123,25 @@ pub fn make_hierarchy(graph: &PortGraph) -> Hierarchy {
         hierarchy.push_child(NodeIndex::new(i), parent).unwrap();
     }
     hierarchy
+}
+
+/// Returns all nodes within a given radius of a center node. Ignores direction.
+pub fn within_radius(graph: &PortGraph, center: NodeIndex, radius: usize) -> Vec<NodeIndex> {
+    let mut nodes = Vec::new();
+    let mut nodes_queue = VecDeque::from_iter([(center, 0)]);
+    let mut visited = BTreeSet::new();
+    while let Some((node, dist)) = nodes_queue.pop_front() {
+        if !visited.insert(node) {
+            continue;
+        }
+        if dist > radius {
+            continue;
+        }
+        nodes.push(node);
+        for neighbor in graph.all_neighbours(node) {
+            nodes_queue.push_back((neighbor, dist + 1));
+        }
+    }
+
+    nodes
 }

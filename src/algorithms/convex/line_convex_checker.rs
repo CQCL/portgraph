@@ -298,6 +298,9 @@ impl<G: LinkView> LineConvexChecker<G> {
 
     /// Get the intervals of positions on each line that are occupied by the nodes.
     ///
+    /// The method assumes that all nodes in the iterator `nodes` are
+    /// unique.
+    ///
     /// Return `None` if the nodes do not form contiguous intervals on lines
     pub fn get_intervals_from_nodes(
         &self,

@@ -1,6 +1,6 @@
 //! Benchmark graph generators.
 
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
 
 use portgraph::{Hierarchy, LinkMut, LinkView, NodeIndex, PortGraph, PortMut, PortView, Weights};
 
@@ -129,7 +129,11 @@ pub fn make_hierarchy(graph: &PortGraph) -> Hierarchy {
 pub fn within_radius(graph: &PortGraph, center: NodeIndex, radius: usize) -> Vec<NodeIndex> {
     let mut nodes = Vec::new();
     let mut nodes_queue = VecDeque::from_iter([(center, 0)]);
+    let mut visited = BTreeSet::new();
     while let Some((node, dist)) = nodes_queue.pop_front() {
+        if !visited.insert(node) {
+            continue;
+        }
         if dist > radius {
             continue;
         }

@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
+use itertools::Itertools;
 use smallvec::SmallVec;
 
 use crate::algorithms::{toposort, TopoSort};
@@ -363,12 +364,53 @@ impl<G: LinkView> LineConvexChecker<G> {
         self.get_intervals_from_nodes(nodes)
     }
 
+    /// Get the nodes that are in the intervals, ordered by position.
+    pub fn nodes_in_intervals<'a>(
+        &'a self,
+        intervals: &'a LineIntervals,
+    ) -> impl Iterator<Item = NodeIndex> + 'a {
+        intervals
+            .iter()
+            .map(|(line, interval)| self.line_nodes_between(&interval, line))
+            .kmerge_by(|&n1, &n2| (self.get_position(n1), n1) < (self.get_position(n2), n2))
+            .dedup()
+    }
+
     /// Shrink the memory allocated to scratch space for the
     /// [`LineConvexChecker::get_intervals_from_nodes`] method to the amount
     /// used during the last call to the method.
     pub fn shrink_to_fit(&mut self) {
         let mut line_to_pos = self.get_intervals_scratch_space.borrow_mut();
         line_to_pos.shrink_to_fit();
+    }
+
+    /// Get all nodes starting from `start_pos` on the given line.
+    ///
+    /// Return nodes ordered by position.
+    #[inline(always)]
+    fn line_nodes_from(
+        &self,
+        start_pos: Position,
+        line_index: LineIndex,
+    ) -> impl Iterator<Item = NodeIndex> + '_ {
+        let start = self
+            .find_index(line_index, start_pos)
+            .expect("start not on line");
+        let line = &self.lines[line_index.as_usize()];
+        line[start..].iter().copied()
+    }
+
+    /// Get all nodes between `start_pos` and `end_pos` on the given line.
+    ///
+    /// Return nodes ordered by position.
+    #[inline(always)]
+    fn line_nodes_between(
+        &self,
+        &LineInterval { min, max }: &LineInterval,
+        line_index: LineIndex,
+    ) -> impl Iterator<Item = NodeIndex> + '_ {
+        self.line_nodes_from(min, line_index)
+            .take_while(move |&n| self.get_position(n) <= max)
     }
 
     /// Get all positions starting from `start_pos` on the given line.
@@ -378,12 +420,8 @@ impl<G: LinkView> LineConvexChecker<G> {
         start_pos: Position,
         line_index: LineIndex,
     ) -> impl Iterator<Item = Position> + '_ {
-        let start = self
-            .find_index(line_index, start_pos)
-            .expect("start not on line");
-        let line = &self.lines[line_index.as_usize()];
-
-        line[start..].iter().map(|&n| self.get_position(n))
+        self.line_nodes_from(start_pos, line_index)
+            .map(|n| self.get_position(n))
     }
 
     /// Binary search for the index of the first element in `line` with position
@@ -728,7 +766,6 @@ mod tests {
         ];
 
         for nodes in convex_node_sets {
-            dbg!(&nodes);
             let mut intervals = checker
                 .get_intervals_from_nodes(nodes.iter().copied())
                 .unwrap();
@@ -742,6 +779,35 @@ mod tests {
             intervals2.0.sort_by_key(|&(l, _)| l);
 
             assert_eq!(intervals, intervals2);
+        }
+    }
+
+    #[test]
+    fn test_nodes_in_intervals() {
+        let (g, [i1, i2, i3, n1, n2, o1, o2]) = super::super::tests::graph();
+        let checker = LineConvexChecker::new(g.clone());
+
+        let convex_node_sets: &[&[NodeIndex]] = &[
+            &[i1, i2, i3],
+            &[i1, n2],
+            &[i1, n2, o1, n1],
+            &[i1, n2, o2, n1],
+            &[i1, i3, n2],
+        ];
+
+        for nodes in convex_node_sets {
+            let intervals = checker
+                .get_intervals_from_nodes(nodes.iter().copied())
+                .unwrap();
+
+            let nodes_in_intervals = checker.nodes_in_intervals(&intervals);
+            let nodes_sorted = {
+                let mut nodes_sorted = nodes.to_vec();
+                nodes_sorted.sort_by_key(|&n| (checker.get_position(n), n));
+                nodes_sorted
+            };
+
+            assert_eq!(nodes_in_intervals.collect_vec(), nodes_sorted);
         }
     }
 }

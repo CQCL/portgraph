@@ -13,11 +13,12 @@ use super::{ConvexChecker, CreateConvexChecker};
 
 /// The number of lines that we preallocate space for on the stack.
 ///
-/// This is the maximum expected number of lines for any subgraph we are checking
-/// the convexity of.
+/// This is the maximum expected number of lines for any subgraph we are
+/// checking the convexity of.
 const MAX_LINES: usize = 8;
 
-/// The number of lines that we preallocate space for on the stack for each node.
+/// The number of lines that we preallocate space for on the stack for each
+/// node.
 ///
 /// This is the maximum expected number of lines that any node in the graph
 /// will belong to.
@@ -65,7 +66,7 @@ struct LinePositions {
 // u32 is enough as the number of lines is always smaller than the total
 // number of nodes.
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct LineIndex(pub u32);
 impl LineIndex {
     fn as_usize(self) -> usize {
@@ -76,7 +77,7 @@ impl LineIndex {
 /// Position of a node on a line in a [`LineConvexChecker`]' s line partition.
 // u32 is enough as it is always smaller than the total number of nodes.
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
 pub struct Position(pub u32);
 impl Position {
     fn next(self) -> Self {
@@ -114,13 +115,19 @@ impl LineIntervals {
     pub fn values(&self) -> impl Iterator<Item = LineInterval> + '_ {
         self.iter().map(|(_, interval)| interval)
     }
+
+    /// Whether the intervals are empty.
+    #[inline(always)]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 
 /// Interval of positions on a line, [min, max] inclusive.
 ///
 /// We are not using Ranges as the intervals do not correspond to contiguous
 /// range of integers (but a subsequence of it).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct LineInterval {
     /// The minimum position on the line.
     pub min: Position,
@@ -297,7 +304,8 @@ impl<G: LinkView> LineConvexChecker<G> {
         self.node_to_pos.get(node).position
     }
 
-    /// Get the intervals of positions on each line that are occupied by the nodes.
+    /// Get the intervals of positions on each line that are occupied by the
+    /// nodes.
     ///
     /// The method assumes that all nodes in the iterator `nodes` are
     /// unique.
@@ -382,6 +390,24 @@ impl<G: LinkView> LineConvexChecker<G> {
     pub fn shrink_to_fit(&mut self) {
         let mut line_to_pos = self.get_intervals_scratch_space.borrow_mut();
         line_to_pos.shrink_to_fit();
+    }
+
+    /// Get the lines passing through the given port.
+    pub fn lines_at_port(&self, port: PortIndex) -> &[LineIndex] {
+        let node = self.graph.port_node(port).expect("valid port");
+        let dir = self.graph.port_direction(port).expect("valid port");
+        let port_offset = self.graph.port_offset(port).expect("valid port").index();
+
+        let mut links_per_port = self
+            .graph
+            .ports(node, dir)
+            .map(|p| self.graph.port_links(p).count());
+
+        let start_pos = (&mut links_per_port).take(port_offset).sum::<usize>();
+        let end_pos = start_pos + links_per_port.next().expect("valid offset");
+
+        let lines = self.get_lines(node);
+        &lines[start_pos..end_pos]
     }
 
     /// Get all nodes starting from `start_pos` on the given line.
@@ -558,8 +584,8 @@ where
 
         // 1. Compute
         //     - new position of `node` (max of all previous positions + 1, or zero)
-        //     - lines that `node` will belong to (once extended). Note that we
-        //       may need to add new lines to accomodate all outgoing links, see below.
+        //     - lines that `node` will belong to (once extended). Note that we may need
+        //       to add new lines to accomodate all outgoing links, see below.
         let mut max_pos: Option<Position> = None;
         let mut lines = SmallVec::with_capacity(graph.num_inputs(node));
         for (_, out_port) in prev_outgoing_ports {
@@ -631,13 +657,16 @@ impl<G: LinkView> CreateConvexChecker<G> for LineConvexChecker<G> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{boundary::HasBoundary, view::Subgraph, LinkMut, MultiPortGraph, PortMut};
+    use crate::{
+        boundary::HasBoundary, view::Subgraph, LinkMut, MultiPortGraph, PortMut, PortView,
+    };
 
     use super::*;
 
     use rstest::{fixture, rstest};
 
-    /// Test DAG with always one input one output, but output may be connected to multiple inputs.
+    /// Test DAG with always one input one output, but output may be connected
+    /// to multiple inputs.
     ///
     /// There are furthermore two disjoint lines.
     ///
@@ -808,6 +837,44 @@ mod tests {
             };
 
             assert_eq!(nodes_in_intervals.collect_vec(), nodes_sorted);
+        }
+    }
+
+    #[test]
+    fn test_lines_at_port() {
+        let (g, nodes) = super::super::tests::graph();
+        let checker = LineConvexChecker::new(g.clone());
+
+        for n in nodes {
+            let lines = checker.get_lines(n);
+            for dir in Direction::BOTH {
+                for (i, p) in g.ports(n, dir).enumerate() {
+                    let &line_at_port = checker.lines_at_port(p).iter().exactly_one().unwrap();
+                    assert_eq!(line_at_port, lines[i]);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_lines_at_port_multigraph() {
+        const NUM_LINKS: usize = 3;
+
+        let mut g: MultiPortGraph = MultiPortGraph::new();
+        let out = g.add_node(0, 1);
+        let in_ = g.add_node(1, 0);
+        for _ in 0..NUM_LINKS {
+            g.link_nodes(out, 0, in_, 0).unwrap();
+        }
+
+        let checker = LineConvexChecker::new(g.clone());
+
+        for n in [out, in_] {
+            let lines = checker.get_lines(n);
+            assert_eq!(lines.len(), NUM_LINKS);
+            let p = g.all_ports(n).exactly_one().ok().unwrap();
+            let lines_at_port = checker.lines_at_port(p);
+            assert_eq!(lines_at_port, lines);
         }
     }
 }

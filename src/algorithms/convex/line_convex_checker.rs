@@ -657,7 +657,9 @@ impl<G: LinkView> CreateConvexChecker<G> for LineConvexChecker<G> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{boundary::HasBoundary, view::Subgraph, LinkMut, MultiPortGraph, PortMut};
+    use crate::{
+        boundary::HasBoundary, view::Subgraph, LinkMut, MultiPortGraph, PortMut, PortView,
+    };
 
     use super::*;
 
@@ -835,6 +837,44 @@ mod tests {
             };
 
             assert_eq!(nodes_in_intervals.collect_vec(), nodes_sorted);
+        }
+    }
+
+    #[test]
+    fn test_lines_at_port() {
+        let (g, nodes) = super::super::tests::graph();
+        let checker = LineConvexChecker::new(g.clone());
+
+        for n in nodes {
+            let lines = checker.get_lines(n);
+            for dir in Direction::BOTH {
+                for (i, p) in g.ports(n, dir).enumerate() {
+                    let &line_at_port = checker.lines_at_port(p).iter().exactly_one().unwrap();
+                    assert_eq!(line_at_port, lines[i]);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_lines_at_port_multigraph() {
+        const NUM_LINKS: usize = 3;
+
+        let mut g: MultiPortGraph = MultiPortGraph::new();
+        let out = g.add_node(0, 1);
+        let in_ = g.add_node(1, 0);
+        for _ in 0..NUM_LINKS {
+            g.link_nodes(out, 0, in_, 0).unwrap();
+        }
+
+        let checker = LineConvexChecker::new(g.clone());
+
+        for n in [out, in_] {
+            let lines = checker.get_lines(n);
+            assert_eq!(lines.len(), NUM_LINKS);
+            let p = g.all_ports(n).exactly_one().ok().unwrap();
+            let lines_at_port = checker.lines_at_port(p);
+            assert_eq!(lines_at_port, lines);
         }
     }
 }

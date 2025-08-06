@@ -1,7 +1,21 @@
+# Automatic changelog generation for rust projects
+
 [workspace]
+# Open the release PR as a draft
 pr_draft = true
 
+# Only create releases / push to crates.io after merging a release-please PR.
+# This lets merge new crates to `main` without worrying about accidentally creating
+# github releases.
+#
+# To trigger a release manually, merge a PR from a branch starting with `release-plz-`.
+release_always = false
+
 [changelog]
+
+header = """# Changelog
+
+"""
 sort_commits = "oldest"
 protect_breaking_commits = true
 

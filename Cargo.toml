@@ -30,7 +30,7 @@ delegate = "0.13.4"
 itertools = "0.14.0"
 # There can only be one `pyo3` dependency in the whole workspace, so we use a
 # loose version constraint to prevent breaking changes in dependent crates where possible.
-pyo3 = { version = ">= 0.23, < 0.26", optional = true, features = [
+pyo3 = { version = ">= 0.23, < 0.27", optional = true, features = [
     "multiple-pymethods",
 ] }
 num-traits = "0.2.19"
@@ -43,10 +43,10 @@ proptest = ["dep:proptest", "dep:rand"]
 petgraph = ["dep:petgraph"]
 
 [dev-dependencies]
-criterion = { version = ">= 0.5.1, < 0.7.0", features = ["html_reports"] }
+criterion = { version = ">= 0.5.1, < 0.8.0", features = ["html_reports"] }
 iai-callgrind = "0.16.0"
 rmp-serde = "1.1.1"
-rstest = "0.25.0"
+rstest = "0.26.1"
 itertools = "0.14.0"
 insta = "1.43.0"
 serde_json = "1.0.141"

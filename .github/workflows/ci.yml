@@ -79,6 +79,7 @@ jobs:
         with:
           token: ${{ secrets.CODSPEED_TOKEN }}
           run: "cargo codspeed run criterion_benches"
+          mode: "instrumentation"
 
   tests:
     runs-on: ubuntu-latest

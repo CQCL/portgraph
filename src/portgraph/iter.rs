@@ -87,7 +87,7 @@ impl<PO: Unsigned> PortGraph<u32, u32, PO> {
 
     /// Iterates over the nodes in the port graph.
     #[inline]
-    pub(crate) fn _nodes_iter(&self) -> Nodes {
+    pub(crate) fn _nodes_iter(&self) -> Nodes<'_> {
         Nodes {
             iter: self.node_meta.iter().enumerate(),
             len: self.node_count,
@@ -96,7 +96,7 @@ impl<PO: Unsigned> PortGraph<u32, u32, PO> {
 
     /// Iterates over the ports in the port graph.
     #[inline]
-    pub(crate) fn _ports_iter(&self) -> Ports {
+    pub(crate) fn _ports_iter(&self) -> Ports<'_> {
         Ports {
             iter: self.port_meta.iter().enumerate(),
             len: self.port_count,
@@ -106,13 +106,17 @@ impl<PO: Unsigned> PortGraph<u32, u32, PO> {
     /// Returns an iterator over every pair of matching ports connecting `from`
     /// with `to`.
     #[inline]
-    pub(crate) fn _get_connections(&self, from: NodeIndex, to: NodeIndex) -> NodeConnections<PO> {
+    pub(crate) fn _get_connections(
+        &self,
+        from: NodeIndex,
+        to: NodeIndex,
+    ) -> NodeConnections<'_, PO> {
         NodeConnections::new(self, to, self._links(from, Direction::Outgoing))
     }
 
     /// Iterates over the connected links of the `node` in the given
     /// `direction`.
-    pub(crate) fn _links(&self, node: NodeIndex, direction: Direction) -> NodeLinks {
+    pub(crate) fn _links(&self, node: NodeIndex, direction: Direction) -> NodeLinks<'_> {
         let Some(node_meta) = self.node_meta_valid(node) else {
             return NodeLinks::new(self._ports(node, direction), &[], 0..0);
         };
@@ -121,7 +125,7 @@ impl<PO: Unsigned> PortGraph<u32, u32, PO> {
     }
 
     /// Iterates over the connected input and output links of the `node` in sequence.
-    pub(crate) fn _all_links(&self, node: NodeIndex) -> NodeLinks {
+    pub(crate) fn _all_links(&self, node: NodeIndex) -> NodeLinks<'_> {
         let Some(node_meta) = self.node_meta_valid(node) else {
             return NodeLinks::new(self._all_ports(node), &[], 0..0);
         };
@@ -138,13 +142,13 @@ impl<PO: Unsigned> PortGraph<u32, u32, PO> {
     /// Iterates over neighbour nodes in the given `direction`.
     /// May contain duplicates if the graph has multiple links between nodes.
     #[inline]
-    pub(crate) fn _neighbours(&self, node: NodeIndex, direction: Direction) -> Neighbours<PO> {
+    pub(crate) fn _neighbours(&self, node: NodeIndex, direction: Direction) -> Neighbours<'_, PO> {
         Neighbours::from_node_links(self, self._links(node, direction))
     }
 
     /// Iterates over the input and output neighbours of the `node` in sequence.
     #[inline]
-    pub(crate) fn _all_neighbours(&self, node: NodeIndex) -> Neighbours<PO> {
+    pub(crate) fn _all_neighbours(&self, node: NodeIndex) -> Neighbours<'_, PO> {
         Neighbours::from_node_links(self, self._all_links(node))
     }
 }

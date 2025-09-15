@@ -53,7 +53,7 @@ pub fn postorder(
     graph: &PortGraph,
     source: impl IntoIterator<Item = NodeIndex>,
     direction: Direction,
-) -> PostOrder {
+) -> PostOrder<'_> {
     PostOrder::new(graph, source, direction, None, None)
 }
 

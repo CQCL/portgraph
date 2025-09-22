@@ -22,8 +22,8 @@ path = "src/lib.rs"
 [dependencies]
 thiserror = "2.0.16"
 bitvec = "1.0.1"
-serde = { version = "1.0.226", features = ["derive"], optional = true }
-proptest = { version = "1.6.0", optional = true }
+serde = { version = "1.0.223", features = ["derive"], optional = true }
+proptest = { version = "1.8.0", optional = true }
 rand = { version = "0.9.2", optional = true }
 petgraph = { version = "0.8.1", optional = true }
 delegate = "0.13.4"

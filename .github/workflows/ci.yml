@@ -149,6 +149,7 @@ jobs:
           rm Cargo.lock
           cargo add -p portgraph half@=2.4.1
           cargo add -p portgraph rayon-core@=1.12.1
+          cargo add -p portgraph toml_datetime@=0.7.1
       - name: Build with no features
         run: cargo minimal-versions --direct test --verbose  --no-default-features --no-run
       - name: Tests with no features
